@@ -2,12 +2,27 @@
 
 Kusama Shield User interface
 
+### Clone: 
+```shell
+git clone https://codeberg.org/KusamaShield/Interface && cd Interface/
+```
 
 ### Install:
+
+#### Build wasm packages: 
 ```shell
-git clone <LINK> && cd Interface/
-npm install -f 
+cargo install wasm-pack
+wasm-pack build --target web
+rm -rf public/pkg/
+cp -r pkg/ public/
 ```
+
+#### Install node packages:
+```shell
+npm install -f
+```
+
+
 
 ### Run:  
 ```shell
