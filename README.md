@@ -21,3 +21,9 @@ npm run dev
 
 ## Tested on:  
 Linux + Google Chrome + Talisman Browser Wallet
+
+
+### Supported Chains:   
+-  [x] 
+-  [x] 
+-  [x] 
