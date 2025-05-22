@@ -1,0 +1,759 @@
+import './App.css'
+import { useState, useEffect } from 'react'
+import { WalletSelect } from '@talismn/connect-components'
+import { shieldTokens, fakeshield } from './transactions/shield'
+import SHIELD_CONTRACT_ADDRESS from './transactions/shield'
+import fakeerc20asset from './transactions/shield'
+import { make_deposit_tx, gen_tx_no_sig } from "./transactions/txgen"
+import { unshieldTokens, fetchKzgParams } from './transactions/unshield'
+import { ToastContainer, toast } from 'react-toastify';
+//import { ApiPromise, WsProvider } from '@polkadot/api';
+import { Transaction, parseEther, parseUnits } from 'ethers';
+//import init, { generate_commitment, test_console, test_proofo, generate_proof_data } from '../pkg/generate_zk_wasm'; // adjust path as needed
+import * as Comlink from 'comlink';
+import { wrap } from 'comlink';
+
+import {
+  AlephZeroWallet,
+  EnkryptWallet,
+  FearlessWallet,
+  MantaWallet,
+  NovaWallet,
+  PolkadotjsWallet,
+  PolkaGate,
+  SubWallet,
+  TalismanWallet,
+} from '@talismn/connect-wallets'
+import { ethers, Network } from 'ethers'
+
+// Add TypeScript declaration for window.ethereum
+declare global {
+  interface Window {
+    ethereum?: {
+      request: (args: { method: string }) => Promise<string[]>
+    }
+  }
+}
+
+// Networks: name, endpoint, native asset
+const NETWORKS = {
+  moonbase: {
+    name: 'Moonbase Testnet',
+    wsEndpoint: 'wss://moonbase-alpha.public.blastapi.io',
+    rpcEndpoint: 'https://moonbase.public.curie.radiumblock.co/http',
+    asset: 'DEV',
+    chain_id: 1287,
+    block_explorer: 'https://moonbase.moonscan.io'
+  },
+  shibuya: {
+    name: 'Shibuya (parachain testnet)',
+    rpcEndpoint: "https://evm.shibuya.astar.network",
+    asset: "SBY",
+    chain_id: 81,
+    faucet: "https://portal.astar.network/shibuya-testnet/assets",
+    block_explorer: "https://shibuya.subscan.io/",
+    vk_address: "0x66021DF8Ce2b63f99ea9C501497Ce70ec49f5724",
+    shield_address: ""
+  },
+  westend_assethub: {
+    name: 'Westend Assethub',
+    wsEndpoint: 'wss://westend-asset-hub-rpc.polkadot.io',
+    rpcEndpoint: 'https://westend-asset-hub-eth-rpc.polkadot.io',
+    asset: "WND",
+    chain_id: 420420421,
+    block_explorer: "https://blockscout-asset-hub.parity-chains-scw.parity.io",
+    faucet: "https://faucet.polkadot.io/westend?parachain=1000"
+  },
+  paseo_hydration: {
+    name: "Paseo Hydration",
+    asset: "PAS",
+    wsEndpoint: "wss://paseo-rpc.play.hydration.cloud",
+    rpcEndpoint: "",
+    faucet: "https://faucet.polkadot.io/?parachain=2034",
+    block_explorer: "https://assethub-paseo.subscan.io/"
+  }
+}
+
+const MOONBASE_CHAIN_ID = 1287;
+
+const DAPP_NAME = 'KSMSHIELD';
+const MOONBASE_RPC_URL = NETWORKS.moonbase.wsEndpoint;
+const MOONBASE_CURRENCY = {
+  name: 'DEV',
+  symbol: 'DEV',
+  decimals: 18
+};
+
+export function App() {
+  const [isWalletConnected, setIsWalletConnected] = useState(false)
+  const [selectedWallet, setSelectedWallet] = useState<any>(null); // Consider using proper type instead of any
+  const [selectedWalletEVM, setSelectedWalletEVM] = useState<any>(null); 
+  const [evmAddress, setEvmAddress] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<'shield' | 'unshield'>('shield')
+  const [secret, setSecret] = useState('')
+  const [amount, setAmount] = useState('')
+  const [selectedToken, setSelectedToken] = useState<any>(null);//('KSM')
+  const [selectedNetwork, setSelectedNetwork] = useState<keyof typeof NETWORKS>('moonbase')
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const [isWasmLoaded, setIsWasmLoaded] = useState(false);
+  const [ProofWorker, setProofWorker] = useState<any>(null); 
+
+  useEffect(() => {
+
+   if (!isWasmLoaded) {
+    const loadWasm = async () => {
+      try {
+        
+        console.log(`loading wasmm`);
+        const wasmPackage = await import('../pkg/generate_zk_wasm');
+        await wasmPackage.default();
+        await wasmPackage.init();
+        console.log(`workerApi ok`);
+        console.log(`workerApi calling init`);
+        console.log(`set worker!`);
+        // Store the worker functions in state or ref for later use
+        setProofWorker(wasmPackage);
+        
+        setIsWasmLoaded(true);
+
+      } catch (err) {
+        setError('Failed to load WASM module');
+        console.error('WASM Error:', err);
+      }
+    };
+
+    loadWasm();
+
+
+  }
+  }, []);
+
+
+  const handleWalletSelected = async (wallet: any) => {
+
+    try {
+//      window.talismanEth.enable()
+const talismanEth = (window as any).talismanEth;
+if (!talismanEth) {
+  throw new Error('Talisman Ethereum provider not detected');
+}
+console.log('got talisman eth');
+
+const currentChainId = await talismanEth.request({ method: 'eth_chainId' });
+console.log(`current chain is: `, currentChainId);
+const provider3 = new ethers.BrowserProvider(talismanEth);
+const provider44 = new ethers.BrowserProvider(
+  talismanEth,
+  1287 // Moonbase chainId
+);
+setSelectedWalletEVM(provider3);
+console.log(`provider3 ok`);
+await wallet.enable('KSMSHIELD');
+      setSelectedWallet(wallet);
+      const accounts = await wallet.getAccounts();
+      if (accounts.length > 0) {
+        const address = accounts[0].address;
+        setEvmAddress(address);
+        setIsWalletConnected(true);
+      } else {
+        throw new Error('No accounts found');
+      }
+    } catch (err) {
+      setError('Failed to connect wallet');
+    }
+  };
+
+  const handleShield = async () => {
+
+
+    
+    console.log(`handleshield 1`);
+    if (!isWalletConnected || !amount || !selectedToken || !secret || !selectedWallet) return;
+    
+    const ethwall = selectedWalletEVM;
+    const ETHsigner = await ethwall.getSigner();
+
+    console.log(`got eth signer`)
+    setIsLoading(true);
+    setError('');
+    console.log(`handle shield 22`);
+    try {
+      console.log(`sign sign`);
+//      const signer = selectedWallet.signer;
+    //  const wsProvider = new WsProvider(NETWORKS.moonbeam.wsEndpoint);
+   //   const api = await ApiPromise.create({ provider: wsProvider });
+   //   console.log(`calling api tx`);
+     // const tx = api.tx.system.remark("0xdeadbeef");
+      const accounts = await selectedWallet.getAccounts();
+      const account = accounts[0];
+      console.log(`account: `, account.address);
+/*    
+if (parseInt(currentChainId, 16) !== MOONBASE_CHAIN_ID) {
+await (window as any).talismanEth.request({
+  method: 'wallet_addEthereumChain',
+  params: [{
+    chainId: `0x507`,
+    chainName: 'Moonbase Alpha',
+    nativeCurrency: MOONBASE_CURRENCY,
+    rpcUrls: [MOONBASE_RPC_URL],
+    blockExplorerUrls: ['https://moonbase.moonscan.io/']
+  }]
+});
+console.log(`added moonbase alpha network to wallet`);
+}
+console.log(`added network`);
+*/
+      const transaction66 = {
+        to: SHIELD_CONTRACT_ADDRESS.SHIELD_CONTRACT_ADDRESS, // Replace with actual address
+        value: ethers.parseEther(amount), // 0.1 DEV
+        chainId: MOONBASE_CHAIN_ID,
+        gasLimit: 21000, // Standard ETH transfer gas
+        gasPrice: 300000,
+      };
+      console.log(`transaction66: `, transaction66);
+      //      const txdata = await gen_tx_no_sig(Number(amount), fakeerc20asset, account.address);
+//      console.log(`got tx data: `, txdata);
+      console.log(`signer caller`);
+      const signer = selectedWallet.signer;
+      console.log(`signo`)
+
+      console.log(`signed tx`);
+      const shieldedContract = new ethers.Contract(
+        SHIELD_CONTRACT_ADDRESS.SHIELD_CONTRACT_ADDRESS, // Using the fake ERC-20 address from your constants
+        SHIELD_CONTRACT_ADDRESS.shielderAbi,
+        ETHsigner
+      );
+      // move to seperate functions
+      if (NETWORKS[selectedNetwork].asset == selectedToken){
+        console.log(`native token!`);
+      } else {
+     // console.log(`token set to: `, )
+     // console.log(`network token: ${}`);
+      // Create contract instance
+      const tokenContract = new ethers.Contract(
+        fakeerc20asset.fakeerc20asset, // Using the fake ERC-20 address from your constants
+        fakeerc20asset.erc20Abi,
+        ETHsigner
+      );
+
+      const spenderAddress = SHIELD_CONTRACT_ADDRESS; // changeme
+      toast(`Step 1 out of 2, approving token for Shielding`, {
+        position: "top-right",
+        autoClose: 5000,
+        hideProgressBar: false,
+        closeOnClick: false,
+        pauseOnHover: true,
+        draggable: true,
+        progress: undefined,
+        theme: "dark",
+        });
+
+      const txResponse = await tokenContract.approve(
+        SHIELD_CONTRACT_ADDRESS.SHIELD_CONTRACT_ADDRESS,
+        ethers.parseEther(amount) // should get the decimals, but for m1 should be okay
+      );
+
+     // const txResponse = await ETHsigner.sendTransaction(transaction66);
+     // console.log('Transaction hash:', txResponse.hash);
+  
+      toast(`Transaction hash: ${txResponse.hash}`, {
+        position: "top-right",
+        autoClose: 4000,
+        hideProgressBar: false,
+        closeOnClick: false,
+        pauseOnHover: true,
+        draggable: true,
+        progress: undefined,
+        theme: "dark",
+        });
+      // 8. Wait for confirmation
+      const receipt = await txResponse.wait();
+
+      toast(`Transaction confirmed in block: ${receipt.blockNumber}`, {
+        position: "top-right",
+        autoClose: 6000,
+        hideProgressBar: false,
+        closeOnClick: false,
+        pauseOnHover: true,
+        draggable: true,
+        progress: undefined,
+        theme: "dark",
+        });
+
+      console.log(`serialize`);
+
+  
+    }
+
+
+      toast(`Shielding Tokens`, {
+        position: "top-right",
+        autoClose: 5000,
+        hideProgressBar: false,
+        closeOnClick: false,
+        pauseOnHover: true,
+        draggable: true,
+        progress: undefined,
+        theme: "dark",
+        });
+        const x =  ProofWorker.generate_commitment(secret);
+    //  const x = "0x"+ generate_commitment("12345");
+      console.log(`making tx with commitment: `, x);
+      var txResponse2;
+      if (NETWORKS[selectedNetwork].asset == selectedToken){ 
+        console.log(`datan: `, ethers.ZeroAddress);
+        txResponse2 = await shieldedContract.deposit(
+          ethers.ZeroAddress,
+          ethers.parseEther(amount),
+          x,
+             {    value: ethers.parseEther(amount),
+           } )
+      } else {
+      txResponse2 = await shieldedContract.deposit(
+        SHIELD_CONTRACT_ADDRESS.fakeerc20asset,
+        ethers.parseEther(amount),
+        x
+      );}
+
+      toast(`Transaction hash: ${txResponse2.hash}`, {
+        position: "top-right",
+        autoClose: 4000,
+        hideProgressBar: false,
+        closeOnClick: false,
+        pauseOnHover: true,
+        draggable: true,
+        progress: undefined,
+        theme: "dark",
+        });
+      // 8. Wait for confirmation
+      const receipt2 = await txResponse2.wait();
+
+      toast(`Transaction confirmed in block: ${receipt2.blockNumber}`, {
+        position: "top-right",
+        autoClose: 6000,
+        hideProgressBar: false,
+        closeOnClick: false,
+        pauseOnHover: true,
+        draggable: true,
+        progress: undefined,
+        theme: "dark",
+        });
+
+      if (!account) throw new Error('No accounts found');
+  /*
+      );
+ */
+  //    await fakeshield(amount, selectedToken, secret);
+  setAmount('');
+  setSecret('');
+      toast('🐦 Tokens shielded!', {
+        position: "top-right",
+        autoClose: 7000,
+        hideProgressBar: false,
+        closeOnClick: false,
+        pauseOnHover: true,
+        draggable: true,
+        progress: undefined,
+        theme: "dark",
+        });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+
+  const setNetwork = async (networkKey: keyof typeof NETWORKS) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      // Display loading toast
+      toast.info(`Switching to ${NETWORKS[networkKey].name}...`, {
+        position: "top-right",
+        autoClose: 5000,
+        hideProgressBar: false,
+        closeOnClick: false,
+        pauseOnHover: true,
+        draggable: true,
+        progress: undefined,
+        theme: "dark",
+      });
+  
+      // Check if Talisman Ethereum provider is available
+      const talismanEth = (window as any).talismanEth;
+      if (!talismanEth) {
+        throw new Error('Talisman Ethereum provider not detected');
+      }
+  
+      // Get current chain ID
+      const currentChainId = await talismanEth.request({ method: 'eth_chainId' });
+      // target chain id
+      const targetChainId = NETWORKS[networkKey].chain_id ? `0x${NETWORKS[networkKey].chain_id?.toString(16)}` : undefined;
+      if (targetChainId) {
+        try {
+          // Try to switch the network
+      //    console.log(`wallet_switchEthereumChain: `, targetChainId);
+          await talismanEth.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: targetChainId }],
+          });
+        } catch (switchError) {
+          // This error code indicates that the chain has not been added to the wallet
+          console.log(`switch error!`)
+          if (switchError.code === 4902) {
+            // Add the network to the wallet
+       //     console.log(`4902 wallet_addEthereumChain:`, NETWORKS[networkKey].rpcEndpoint);
+            // send request to wallet to switch to the selected chain
+            await talismanEth.request({
+              method: 'wallet_addEthereumChain',
+              params: [{
+                nativeCurrency: {
+                  name: NETWORKS[networkKey].asset,
+                  symbol: NETWORKS[networkKey].asset,
+                  decimals: 18
+                },
+                chainId: targetChainId,
+                chainName: NETWORKS[networkKey].name,
+                rpcUrls: [NETWORKS[networkKey].rpcEndpoint],
+                blockExplorerUrls: NETWORKS[networkKey].block_explorer ? [NETWORKS[networkKey].block_explorer] : []
+              }]
+            });
+          } else {
+            throw switchError;
+          }
+        }
+      }
+  
+      // Update the selected network in state
+      setSelectedNetwork(networkKey);
+  
+      // Display success toast
+      toast.success(`Successfully switched to ${NETWORKS[networkKey].name}`, {
+        position: "top-right",
+        autoClose: 5000,
+        hideProgressBar: false,
+        closeOnClick: false,
+        pauseOnHover: true,
+        draggable: true,
+        progress: undefined,
+        theme: "dark",
+      });
+  
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to switch network';
+      setError(errorMessage);
+      
+      // Display error toast
+      toast.error(`Error switching network: ${errorMessage}`, {
+        position: "top-right",
+        autoClose: 5000,
+        hideProgressBar: false,
+        closeOnClick: false,
+        pauseOnHover: true,
+        draggable: true,
+        progress: undefined,
+        theme: "dark",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+
+
+
+  const handleUnshield = async () => {
+    if (!isWalletConnected || !selectedToken || !secret) return;
+    console.log(`handleUnshield beep boop`);
+    setIsLoading(true);
+    setError('');
+    toast(`Unshielding tokens`, {
+      position: "top-right",
+      autoClose: 6000,
+      hideProgressBar: false,
+      closeOnClick: false,
+      pauseOnHover: true,
+      draggable: true,
+      progress: undefined,
+      theme: "dark",
+      });
+
+
+    
+    try {
+
+      const ethwall = selectedWalletEVM;
+      const ETHsigner = await ethwall.getSigner();
+
+      console.log(`fetching params`);
+      toast(`🔓	 Generating proof locally...`, {
+        position: "top-right",
+        autoClose: 3000,
+        hideProgressBar: false,
+        closeOnClick: false,
+        pauseOnHover: true,
+        draggable: true,
+        progress: undefined,
+        theme: "dark",
+        });
+      const p = await fetchKzgParams("http://localhost:5173/proofs/hermez-raw-8") //params8.bin
+      console.log(`params fetched ok`);
+      console.log("Params length:", p.length);
+
+      console.log(`generating proof`);
+      try {
+        console.log(`generating proofo`);
+        // if we manage to load the 
+        if (ProofWorker) {
+            const proofBytes = await ProofWorker.generate_proof_data(secret, p);
+      //    console.log('generating proof for secret:', secret);
+          const proofData = "0x" + proofBytes;
+          console.log("outputed ui proof length:", proofBytes.length);
+          toast(`🔐 ZK proof generated!`, {
+            position: "top-right",
+            autoClose: 5000,
+            hideProgressBar: false,
+            closeOnClick: false,
+            pauseOnHover: true,
+            draggable: true,
+            progress: undefined,
+            theme: "dark",
+            });
+
+          console.log('Proof generated in worker:', proofData);
+          
+          toast(`🧙 UnShielding assets `, {
+            position: "top-right",
+            autoClose: 6000,
+            hideProgressBar: false,
+            closeOnClick: false,
+            pauseOnHover: true,
+            draggable: true,
+            progress: undefined,
+            theme: "dark",
+            });
+
+
+
+          const shieldedContract = new ethers.Contract(
+            SHIELD_CONTRACT_ADDRESS.SHIELD_CONTRACT_ADDRESS, // Using the fake ERC-20 address from your constants
+            SHIELD_CONTRACT_ADDRESS.shielderAbi,
+            ETHsigner
+          );
+  
+/*
+ withdraw2(bytes calldata proof, address asset, uint256 amount, uint256[] calldata instances)
+*/
+          const nullifier = ProofWorker.generate_commitment(secret);
+
+
+          const tx_debug = {
+            proof: proofData,
+            asset: SHIELD_CONTRACT_ADDRESS.fakeerc20asset,
+            amount: ethers.parseEther(amount),
+            nullifier: [nullifier]
+          };
+          console.log(`calling estimated gas`)
+
+          /*  
+          console.log(`tx_debug:`, tx_debug);
+          const estimatedGas = await shieldedContract.withdraw2.estimateGas(
+            proofData,
+            SHIELD_CONTRACT_ADDRESS.fakeerc20asset,
+            ethers.parseEther('0.1'),
+            [nullifier]
+          );
+          console.log(`estimatedGas: `, estimatedGas);
+          const newo = estimatedGas * 120n / 100n;
+          
+          console.log(`Estimated gas: ${estimatedGas.toString()}`);
+                */   
+          console.log(`tx_debug:`, tx_debug);
+          var myasset;
+          if (NETWORKS[selectedNetwork].asset == selectedToken){
+            myasset = ethers.ZeroAddress;
+            } else {
+              myasset =  SHIELD_CONTRACT_ADDRESS.fakeerc20asset;
+        }
+
+        const txResponse = await shieldedContract.withdraw2(
+          proofData,
+          myasset,
+          ethers.parseEther(amount),
+          [nullifier],
+          {   gasLimit: 518414,//newo, // Standard ETH transfer gas
+            }
+        );
+          toast(`Transaction hash: ${txResponse.hash}`, {
+            position: "top-right",
+            autoClose: 4000,
+            hideProgressBar: false,
+            closeOnClick: false,
+            pauseOnHover: true,
+            draggable: true,
+            progress: undefined,
+            theme: "dark",
+            });
+          // 8. Wait for confirmation
+          const receipt2 = await txResponse.wait();
+    
+          toast(`Transaction confirmed in block: ${receipt2.blockNumber}`, {
+            position: "top-right",
+            autoClose: 6000,
+            hideProgressBar: false,
+            closeOnClick: false,
+            pauseOnHover: true,
+            draggable: true,
+            progress: undefined,
+            theme: "dark",
+            });
+    
+            toast(`Assets unshielded sucessfully `, {
+              position: "top-right",
+              autoClose: 6000,
+              hideProgressBar: false,
+              closeOnClick: false,
+              pauseOnHover: true,
+              draggable: true,
+              progress: undefined,
+              theme: "dark",
+              });
+  
+        } else {
+          toast(`❌ ERROR: Could not load web assembly module`, {
+            position: "top-right",
+            autoClose: 6000,
+            hideProgressBar: false,
+            closeOnClick: false,
+            pauseOnHover: true, 
+            draggable: true,
+            progress: undefined,
+            theme: "dark",
+            });
+        };
+
+        
+        setAmount('');
+        setSecret('');
+        console.log(`unshielded good`);
+      } catch (err) {
+        console.error("Proof generation failed:", err);
+        throw err;
+      }
+  
+  
+      //const proofdata = await generate_proof_data("0x1234562", p);
+     // console.log(`got proof data: `, proofdata);
+      //     await unshieldTokens(selectedToken, secret);
+      setSecret('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="App">
+<ToastContainer />
+      <div className="header">
+        <div className="header-controls">
+          <select 
+            className="network-select"
+            value={selectedNetwork}
+            onChange={(e) => setNetwork(e.target.value as keyof typeof NETWORKS)}
+          >
+            <option value="moonbase">🔗 {NETWORKS.moonbase.name}</option>
+      {/*     <option value="hydration">🔗 Paseo Hydration</option> */}
+            <option value="shibuya">🔗 {NETWORKS.shibuya.name} </option>
+            <option value="westend_assethub">🔗 {NETWORKS.westend_assethub.name}</option>
+          </select>
+          <WalletSelect
+            dappName="Talisman"
+            showAccountsList
+            walletList={[
+              new TalismanWallet(),
+              new NovaWallet(),
+              new SubWallet(),
+              new MantaWallet(),
+              new PolkaGate(),
+              new FearlessWallet(),
+              new EnkryptWallet(),
+              new PolkadotjsWallet(),
+              new AlephZeroWallet(),
+            ]}
+            triggerComponent={
+              <button className={`connect-button ${isWalletConnected ? 'connected' : ''}`}>
+                {isWalletConnected ? `Connected: ${evmAddress?.slice(0, 6)}...${evmAddress?.slice(-4)}` : 'Connect EVM Wallet'}
+              </button>
+            }
+            onWalletSelected={handleWalletSelected}
+          />
+        </div>
+      </div>
+
+      <div className="swap-container">
+        <div className="swap-box">
+          <div className="tabs">
+            <button 
+              className={`tab ${activeTab === 'shield' ? 'active' : ''}`}
+              onClick={() => setActiveTab('shield')}
+            >
+              Shield Tokens
+            </button>
+            <button 
+              className={`tab ${activeTab === 'unshield' ? 'active' : ''}`}
+              onClick={() => setActiveTab('unshield')}
+            >
+              Unshield Tokens
+            </button>
+          </div>
+          <div className="input-group">
+            <div className="token-input">
+              <input 
+                type="number" 
+                placeholder="0.0" 
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                required={activeTab === 'shield'}
+              />
+              <select 
+                value={selectedToken}
+                onChange={(e) => setSelectedToken(e.target.value)}
+              >
+               <option title="native Currency">{NETWORKS[selectedNetwork].asset}</option>
+
+                <option>KSM</option>
+                <option>DOT</option>
+                <option>USDT</option>
+              </select>
+            </div>
+            {activeTab === 'shield' && (
+              <div className="balance">Balance: 0.00 {selectedToken}</div>
+            )}
+            <div className="secret-input">
+              <input 
+                type="password" 
+                placeholder={activeTab === 'shield' ? 'Enter deposit secret' : 'Enter withdrawal secret'} 
+                value={secret}
+                onChange={(e) => setSecret(e.target.value)}
+              />
+            </div>
+          </div>
+          {error && <div className="error-message">{error}</div>}
+          <button 
+            className={`swap-button ${isLoading ? 'loading' : ''}`}
+            onClick={activeTab === 'shield' ? handleShield : handleUnshield}
+            disabled={isLoading || !isWalletConnected}
+          >
+            {isLoading ? 'Processing...' : activeTab === 'shield' ? 'Shield' : 'Unshield'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
