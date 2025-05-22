@@ -2,6 +2,10 @@
 
 Kusama Shield User interface
 
+## Documentation:     
+https://codeberg.org/KusamaShield/documentation/    
+
+
 ### Clone: 
 ```shell
 git clone https://codeberg.org/KusamaShield/Interface && cd Interface/
