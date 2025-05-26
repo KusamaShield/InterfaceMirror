@@ -6,12 +6,13 @@ import SHIELD_CONTRACT_ADDRESS from './transactions/shield'
 import fakeerc20asset from './transactions/shield'
 import { make_deposit_tx, gen_tx_no_sig } from "./transactions/txgen"
 import { unshieldTokens, fetchKzgParams } from './transactions/unshield'
+import { westend_pool, generateCommitment } from './transactions/zkg16'
 import { ToastContainer, toast } from 'react-toastify';
 //import { ApiPromise, WsProvider } from '@polkadot/api';
 import { Transaction, parseEther, parseUnits } from 'ethers';
 //import init, { generate_commitment, test_console, test_proofo, generate_proof_data } from '../pkg/generate_zk_wasm'; // adjust path as needed
-import * as Comlink from 'comlink';
-import { wrap } from 'comlink';
+//import * as Comlink from 'comlink';
+//import { wrap } from 'comlink';
 
 import {
   AlephZeroWallet,
@@ -42,6 +43,7 @@ const NETWORKS = {
     wsEndpoint: 'wss://moonbase-alpha.public.blastapi.io',
     rpcEndpoint: 'https://moonbase.public.curie.radiumblock.co/http',
     asset: 'DEV',
+    faucet: 'https://faucet.moonbeam.network/',
     chain_id: 1287,
     block_explorer: 'https://moonbase.moonscan.io'
   },
@@ -99,6 +101,8 @@ export function App() {
 
   const [isWasmLoaded, setIsWasmLoaded] = useState(false);
   const [ProofWorker, setProofWorker] = useState<any>(null); 
+  const [isGeneratingSecret, setIsGeneratingSecret] = useState(false);
+  const [generatedSecret, setGeneratedSecret] = useState<string>('');
 
   useEffect(() => {
 
@@ -115,7 +119,7 @@ export function App() {
         console.log(`set worker!`);
         // Store the worker functions in state or ref for later use
         setProofWorker(wasmPackage);
-        
+        setNetwork("westend_assethub");
         setIsWasmLoaded(true);
 
       } catch (err) {
@@ -144,10 +148,7 @@ console.log('got talisman eth');
 const currentChainId = await talismanEth.request({ method: 'eth_chainId' });
 console.log(`current chain is: `, currentChainId);
 const provider3 = new ethers.BrowserProvider(talismanEth);
-const provider44 = new ethers.BrowserProvider(
-  talismanEth,
-  1287 // Moonbase chainId
-);
+
 setSelectedWalletEVM(provider3);
 console.log(`provider3 ok`);
 await wallet.enable('KSMSHIELD');
@@ -165,46 +166,53 @@ await wallet.enable('KSMSHIELD');
     }
   };
 
-  const handleShield = async () => {
 
 
+
+  const generateRandomSecret = () => {
     
-    console.log(`handleshield 1`);
-    if (!isWalletConnected || !amount || !selectedToken || !secret || !selectedWallet) return;
+   const bits = 128;
+  const bytes = bits / 8;
+  const randomBuffer = new Uint8Array(bytes);
+  window.crypto.getRandomValues(randomBuffer);
+  
+  // Convert to hex string then to BigInt
+  const hexString = Array.from(randomBuffer)
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+  
+  const secretStr =  BigInt('0x' + hexString).toString();
+    
+    
+   
+    setSecret(secretStr);
+    setGeneratedSecret(secretStr);
+    return secretStr;
+  };
+
+  const handleShield = async () => {
+    if (!isWalletConnected || !amount || !selectedToken || !selectedWallet) return;
+    
+    setIsGeneratingSecret(true);
+    const generatedSecret = generateRandomSecret();
     
     const ethwall = selectedWalletEVM;
     const ETHsigner = await ethwall.getSigner();
 
-    console.log(`got eth signer`)
     setIsLoading(true);
     setError('');
-    console.log(`handle shield 22`);
+    
     try {
+      console.log(`handleshield 1`);
+      console.log(isWalletConnected, amount, selectedToken, generatedSecret,  selectedWallet)
+      if (!isWalletConnected || !amount || !selectedToken || !selectedWallet) return;
+      
       console.log(`sign sign`);
-//      const signer = selectedWallet.signer;
-    //  const wsProvider = new WsProvider(NETWORKS.moonbeam.wsEndpoint);
-   //   const api = await ApiPromise.create({ provider: wsProvider });
-   //   console.log(`calling api tx`);
-     // const tx = api.tx.system.remark("0xdeadbeef");
+
       const accounts = await selectedWallet.getAccounts();
       const account = accounts[0];
       console.log(`account: `, account.address);
-/*    
-if (parseInt(currentChainId, 16) !== MOONBASE_CHAIN_ID) {
-await (window as any).talismanEth.request({
-  method: 'wallet_addEthereumChain',
-  params: [{
-    chainId: `0x507`,
-    chainName: 'Moonbase Alpha',
-    nativeCurrency: MOONBASE_CURRENCY,
-    rpcUrls: [MOONBASE_RPC_URL],
-    blockExplorerUrls: ['https://moonbase.moonscan.io/']
-  }]
-});
-console.log(`added moonbase alpha network to wallet`);
-}
-console.log(`added network`);
-*/
+      const secret = generatedSecret;
       const transaction66 = {
         to: SHIELD_CONTRACT_ADDRESS.SHIELD_CONTRACT_ADDRESS, // Replace with actual address
         value: ethers.parseEther(amount), // 0.1 DEV
@@ -220,11 +228,25 @@ console.log(`added network`);
       console.log(`signo`)
 
       console.log(`signed tx`);
-      const shieldedContract = new ethers.Contract(
+      console.log(`westend pool:`, westend_pool);
+      var shieldedContract;
+      if (selectedNetwork == "moonbase") {
+      shieldedContract = new ethers.Contract(
         SHIELD_CONTRACT_ADDRESS.SHIELD_CONTRACT_ADDRESS, // Using the fake ERC-20 address from your constants
         SHIELD_CONTRACT_ADDRESS.shielderAbi,
         ETHsigner
       );
+    } else if (selectedNetwork == "westend_assethub"){
+      console.log(`westend shielded contract`)
+      shieldedContract = new ethers.Contract(
+        westend_pool, // Using the fake ERC-20 address from your constants
+        ["function deposit(address,uint256,bytes32) payable"],
+        ETHsigner
+      );
+    } else {
+      throw new Error('Only Moonbase and Westend Assethub is currently supported')
+    };
+
       // move to seperate functions
       if (NETWORKS[selectedNetwork].asset == selectedToken){
         console.log(`native token!`);
@@ -238,7 +260,7 @@ console.log(`added network`);
         ETHsigner
       );
 
-      const spenderAddress = SHIELD_CONTRACT_ADDRESS; // changeme
+    
       toast(`Step 1 out of 2, approving token for Shielding`, {
         position: "top-right",
         autoClose: 5000,
@@ -298,19 +320,35 @@ console.log(`added network`);
         progress: undefined,
         theme: "dark",
         });
-        const x =  ProofWorker.generate_commitment(secret);
+        let x;
+        if (selectedNetwork == "westend_assethub"){
+          x = ProofWorker.generate_commitment(secret);//await generateCommitment(secret);
+        } else {
+          x =  ProofWorker.generate_commitment(secret);
+        }
+        
     //  const x = "0x"+ generate_commitment("12345");
       console.log(`making tx with commitment: `, x);
       var txResponse2;
       if (NETWORKS[selectedNetwork].asset == selectedToken){ 
+        var sendamount;
+        if (selectedNetwork == "westend_assethub") {
+          sendamount = ethers.parseUnits(amount, 18)
+          console.log(`westend assethub`);
+        } else {
+          sendamount = ethers.parseEther(amount); 
+        }
         console.log(`datan: `, ethers.ZeroAddress);
+        console.log(`send amount: `,  sendamount);
         txResponse2 = await shieldedContract.deposit(
           ethers.ZeroAddress,
-          ethers.parseEther(amount),
+          sendamount,
           x,
-             {    value: ethers.parseEther(amount),
+             {    value: sendamount,
            } )
+           console.log(`deposit ok`);
       } else {
+        console.log(`merp merp`);
       txResponse2 = await shieldedContract.deposit(
         SHIELD_CONTRACT_ADDRESS.fakeerc20asset,
         ethers.parseEther(amount),
@@ -358,10 +396,23 @@ console.log(`added network`);
         progress: undefined,
         theme: "dark",
         });
+      
+      // Display the secret after successful shielding
+      toast.info(`🔑 Save your secret for later withdrawal`, {
+        position: "top-right",
+        autoClose: 10000,
+        hideProgressBar: false,
+        closeOnClick: false,
+        pauseOnHover: true,
+        draggable: true,
+        progress: undefined,
+        theme: "dark",
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setIsLoading(false);
+      setIsGeneratingSecret(false);
     }
   };
 
@@ -430,7 +481,7 @@ console.log(`added network`);
   
       // Update the selected network in state
       setSelectedNetwork(networkKey);
-  
+      setSelectedToken(NETWORKS[networkKey].asset)
       // Display success toast
       toast.success(`Successfully switched to ${NETWORKS[networkKey].name}`, {
         position: "top-right",
@@ -507,9 +558,16 @@ console.log(`added network`);
       console.log(`generating proof`);
       try {
         console.log(`generating proofo`);
+        
         // if we manage to load the 
         if (ProofWorker) {
-            const proofBytes = await ProofWorker.generate_proof_data(secret, p);
+          var proofBytes;
+          if (selectedNetwork == "westend_assethub"){
+            proofBytes = "not set ";
+          } else {
+            proofBytes = await ProofWorker.generate_proof_data(secret, p);
+          }
+            
       //    console.log('generating proof for secret:', secret);
           const proofData = "0x" + proofBytes;
           console.log("outputed ui proof length:", proofBytes.length);
@@ -537,13 +595,22 @@ console.log(`added network`);
             theme: "dark",
             });
 
-
-
-          const shieldedContract = new ethers.Contract(
-            SHIELD_CONTRACT_ADDRESS.SHIELD_CONTRACT_ADDRESS, // Using the fake ERC-20 address from your constants
-            SHIELD_CONTRACT_ADDRESS.shielderAbi,
-            ETHsigner
-          );
+            var shieldedContract;
+            if (selectedNetwork == "westend_assethub"){
+              console.log(`westend unshiedl`)
+              shieldedContract = new ethers.Contract(
+                westend_pool, // Using the fake ERC-20 address from your constants
+                ["function deposit(address,uint256,bytes32) payable", "function withdraw2(uint256[2],uint256[2][2],uint256[2],uint256[3],address,uint256,bytes32)"],
+                ETHsigner
+              );
+             } else {
+              shieldedContract = new ethers.Contract(
+                SHIELD_CONTRACT_ADDRESS.SHIELD_CONTRACT_ADDRESS, // Using the fake ERC-20 address from your constants
+                SHIELD_CONTRACT_ADDRESS.shielderAbi,
+                ETHsigner
+              );
+             };
+          
   
 /*
  withdraw2(bytes calldata proof, address asset, uint256 amount, uint256[] calldata instances)
@@ -559,19 +626,7 @@ console.log(`added network`);
           };
           console.log(`calling estimated gas`)
 
-          /*  
-          console.log(`tx_debug:`, tx_debug);
-          const estimatedGas = await shieldedContract.withdraw2.estimateGas(
-            proofData,
-            SHIELD_CONTRACT_ADDRESS.fakeerc20asset,
-            ethers.parseEther('0.1'),
-            [nullifier]
-          );
-          console.log(`estimatedGas: `, estimatedGas);
-          const newo = estimatedGas * 120n / 100n;
-          
-          console.log(`Estimated gas: ${estimatedGas.toString()}`);
-                */   
+        
           console.log(`tx_debug:`, tx_debug);
           var myasset;
           if (NETWORKS[selectedNetwork].asset == selectedToken){
@@ -579,15 +634,78 @@ console.log(`added network`);
             } else {
               myasset =  SHIELD_CONTRACT_ADDRESS.fakeerc20asset;
         }
-
-        const txResponse = await shieldedContract.withdraw2(
-          proofData,
-          myasset,
-          ethers.parseEther(amount),
-          [nullifier],
-          {   gasLimit: 518414,//newo, // Standard ETH transfer gas
+        var txResponse;
+        if (selectedNetwork == "westend_assethub")  {
+          //function withdraw2(uint[2], uint[2][2], unit[2], uint[3], uint256, bytes32)
+          const datn = await generateCommitment(secret);
+          console.log(`calling with datn: `, datn);
+          const proof = {
+            a: [
+              '0x0a48ce5832934f3c24e362a3a49063ef507516a4e583c68c6df0af5971878154', 
+              '0x07c93321324ba7803936657654d3d57e69cc4d45bf5996b49a21e62d485cd73a'
+            ],
+            b: [
+              [
+                '0x0c9aff078f7e477489064fc8962cabf878d396b86ddc63440ee0d27d8336cd7c',
+                '0x3057486721f93ff2da1150452ec192db394f9cd8558f730c6f620a663e56f770'
+              ],
+              [
+                '0x1bdf8055740c67ccfba2e8882ab300bfe94bd0e9ae1662ec735e7e1de6ebd6fd',
+                '0x091f18277dee050c0bbe88bc34f4bf17ebaac01032f5864df874182b949e7d45'
+              ]
+            ],
+            c: [
+              '0x05fcf241c0b046f7dea3b59d1cc922710676d32f10d1036ddc7c0b1f15a8be37',
+              '0x16b3f8f6c1918d668aa5b8ecdc48447690615774095618eb31e4875b34a36fa9'
+            ],
+            publicSignals: [
+              '0x1914879b2a4e7f9555f3eb55837243cefb1366a692794a7e5b5b3181fb14b49b',
+              '0x0000000000000000000000000000000000000000000000000000000000003039',
+              '0x0000000000000000000000000000000000000000000000000000000000010932'
+            ]
+          };
+          /*
+          const p1 = ["0x759f88474869b049bd6a4eda77f0a5f3729f0b04e65ebb62a71e5a59f403d17", "0x2b02975cc21383c2878c22068574b633bc08f4aeb379d3fefce21ed1dfd94b6"];
+          const p2 = [["0x1da1093a9b277d7276733e4fc4a463943b9ae6cf6a0a224404c1a40c45cdcb4f", "0x1d11f44122d9fad98ed19f8c10334648c0c2ee49171a97e536d2133ff8095666"],["0x629e67fec8e3c1ae88675e9c601b3f586201e03e176338651b9a84418d85938","0x202f6507b0fbaa3ff2d157724ac76e351fb14a7af36132d6ae2b956b3f6087d4"]];
+          const p3 = ["0x17afd19e8d1cb4579021ed6a876ebbb43f6a6f17b4e2c3d6823fed3fe86e4bea", "0x103213d7d95d4f4f22efa09eab42bfb2d30e3a5c9bf6b5422b1e30f62fb63cf"];
+          const p4 = ["0x1914879b2a4e7f9555f3eb55837243cefb1366a692794a7e5b5b3181fb14b49b", "0x0000000000000000000000000000000000000000000000000000000000003039", "0x0000000000000000000000000000000000000000000000000000000000010932"];
+          console.log(`p1: `, p1);
+          console.log(`p2: `, p2);
+          console.log(`p3: `, p3);
+          console.log(`p4: `, p4);
+           p1,
+            p2,
+            p3,
+            p4,
+          */
+            console.log(` datn[0]: `,  datn[0]);
+            console.log(` datn[1]: `,  datn[1]);
+            console.log(` datn[2]: `,  datn[2]);
+            //console.log(`p4: `, p4);
+         
+          console.log(`nullifier: `, nullifier);
+          txResponse = await shieldedContract.withdraw2(
+            datn[0],
+            datn[1],
+            datn[2],
+            datn[3],//proof.publicSignals, 
+            myasset,
+            ethers.parseEther(amount),
+            nullifier,    {   gasLimit: 558414,//newo, // Standard ETH transfer gas
             }
-        );
+          );
+        } else {
+
+          txResponse = await shieldedContract.withdraw2(
+            proofData,
+            myasset,
+            ethers.parseEther(amount),
+            [nullifier],
+            {   gasLimit: 518414,//newo, // Standard ETH transfer gas
+              }
+          );
+        }
+
           toast(`Transaction hash: ${txResponse.hash}`, {
             position: "top-right",
             autoClose: 4000,
@@ -661,6 +779,8 @@ console.log(`added network`);
     <div className="App">
 <ToastContainer />
       <div className="header">
+      <script src="/snarkjs.min.js">   </script>
+
         <div className="header-controls">
           <select 
             className="network-select"
@@ -733,17 +853,38 @@ console.log(`added network`);
               </select>
             </div>
             {activeTab === 'shield' && (
-              <div className="balance">Balance: 0.00 {selectedToken}</div>
+              <div className="balance"><a title="faucet link" target="_blank" href={NETWORKS[selectedNetwork].faucet}>{NETWORKS[selectedNetwork].name} faucet link</a></div>
             )}
+{activeTab === 'shield' && (
             <div className="secret-input">
-              <input 
+              {isGeneratingSecret ? (
+
+                <div className="secret-loading">
+                  <div className="loading-spinner"></div>
+                  <span>Generating shielded transaction...</span>
+                </div>
+              ) : generatedSecret ? (
+                <div className="generated-secret">
+                  <span>Generated Secret: {generatedSecret}</span>
+                </div>
+              ) : null}
+            </div>
+               ) } 
+
+{activeTab === 'unshield' && (
+            <div className="secret-input">
+                 <input 
                 type="password" 
-                placeholder={activeTab === 'shield' ? 'Enter deposit secret' : 'Enter withdrawal secret'} 
+                placeholder='Enter withdrawal secret'
                 value={secret}
                 onChange={(e) => setSecret(e.target.value)}
               />
-            </div>
+              </div>
+              )}
+
+
           </div>
+     
           {error && <div className="error-message">{error}</div>}
           <button 
             className={`swap-button ${isLoading ? 'loading' : ''}`}
