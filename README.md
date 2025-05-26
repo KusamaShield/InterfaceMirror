@@ -2,6 +2,9 @@
 
 Kusama Shield User interface
 
+## Note:
+Use with **Google Chrome and Talisman browser wallet**
+
 ## Documentation:     
 https://codeberg.org/KusamaShield/documentation/    
 
