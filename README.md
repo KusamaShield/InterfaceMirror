@@ -43,6 +43,6 @@ Linux + Google Chrome + Talisman Browser Wallet
 
 
 ### Supported Chains:   
--  [x] 
--  [x] 
--  [x] 
+-  [x] Moonbase Testnet  
+-  [x] Westend Assethub  
+
