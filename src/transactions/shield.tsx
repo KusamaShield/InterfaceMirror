@@ -3,7 +3,7 @@ import { toast } from 'react-toastify'
 
 const MOONBEAM_TESTNET_RPC = 'wss://moonbase-alpha.public.blastapi.io'
 const SHIELD_CONTRACT_ADDRESS = '0xDEB209D0a993A4ce495FB668698c08Eb5ca1F33d' // Replace with actual shield contract address
-const fakeerc20asset = '0x74f65B42E6BcE24285A557cd3f19a84dF132eAC1'
+const fakeerc20asset = '0x2a9173fbad551e719ff442b22d7064cbb4fef7a7';//'0x74f65B42E6BcE24285A557cd3f19a84dF132eAC1'
 
 
 const erc20Abi = [
