@@ -66,13 +66,16 @@ const NETWORKS = {
     block_explorer: "https://blockscout-asset-hub.parity-chains-scw.parity.io",
     faucet: "https://faucet.polkadot.io/westend?parachain=1000"
   },
-  paseo_hydration: {
-    name: "Paseo Hydration",
+  paseo_assethub: {
+    name: "Paseo Assethub",
     asset: "PAS",
-    wsEndpoint: "wss://paseo-rpc.play.hydration.cloud",
-    rpcEndpoint: "",
-    faucet: "https://faucet.polkadot.io/?parachain=2034",
-    block_explorer: "https://assethub-paseo.subscan.io/"
+    chain_id: 420420421,
+    rpcEndpoint: "https://testnet-passet-hub-eth-rpc.polkadot.io",
+    faucet: "https://faucet.polkadot.io/?parachain=1111",
+    block_explorer: "https://blockscout-passet-hub.parity-testnet.parity.io/",
+    vk_address: "0x60cc34b6eaf6d3d13e8d34ec25c6cee15b7fdefc",
+    shield_address: "0xde734db4ab4a8d9ad59d69737e402f54a84d4c17",
+    docs: "https://"
   }
 }
 
@@ -119,7 +122,7 @@ export function App() {
         console.log(`set worker!`);
         // Store the worker functions in state or ref for later use
         setProofWorker(wasmPackage);
-        setNetwork("westend_assethub");
+        setNetwork("paseo_assethub");
         setIsWasmLoaded(true);
 
       } catch (err) {
@@ -219,6 +222,7 @@ await wallet.enable('KSMSHIELD');
         chainId: MOONBASE_CHAIN_ID,
         gasLimit: 21000, // Standard ETH transfer gas
         gasPrice: 300000,
+        nulladdr: ethers.ZeroAddress, 
       };
       console.log(`transaction66: `, transaction66);
       //      const txdata = await gen_tx_no_sig(Number(amount), fakeerc20asset, account.address);
@@ -243,7 +247,17 @@ await wallet.enable('KSMSHIELD');
         ["function deposit(address,uint256,bytes32) payable"],
         ETHsigner
       );
-    } else {
+    } else if (selectedNetwork == "paseo_assethub") {
+      console.log(`paseo assethub: `, NETWORKS["paseo_assethub"].shield_address);
+
+      shieldedContract = new ethers.Contract(
+        NETWORKS["paseo_assethub"].shield_address,
+        ["function deposit(address,uint256,bytes32) payable"],
+        ETHsigner
+      )
+    } 
+    
+    else {
       throw new Error('Only Moonbase and Westend Assethub is currently supported')
     };
 
@@ -335,16 +349,44 @@ await wallet.enable('KSMSHIELD');
         if (selectedNetwork == "westend_assethub") {
           sendamount = ethers.parseUnits(amount, 18)
           console.log(`westend assethub`);
+        } else if (selectedNetwork == "paseo_assethub"){
+          console.log(`paseo assethub amount`);
+          sendamount = ethers.parseUnits(amount, 18);
         } else {
           sendamount = ethers.parseEther(amount); 
         }
-        console.log(`datan: `, ethers.ZeroAddress);
+/*
+        try {
+          const gasEstimate = await shieldedContract.deposit.estimateGas(
+            ethers.ZeroAddress,
+            "1000000000000000000",
+            x,
+            { value: "1000000000000000000" }
+          );
+          console.log("Gas estimate:", gasEstimate);
+        } catch (e) {
+          console.error("Estimation failed:", e);
+        }
+
+*/
+        console.log(`ZeroAddress: `, ethers.ZeroAddress);
         console.log(`send amount: `,  sendamount);
-        txResponse2 = await shieldedContract.deposit(
+        console.log(`x: `, x);
+        const contractpase = new ethers.Contract(     
+          "0xde734db4ab4a8d9ad59d69737e402f54a84d4c17",               
+          ["function deposit(address,uint256,bytes32) payable"],
+          ETHsigner,
+        );
+        console.log(`sending paseo deposit`);
+        txResponse2 = await contractpase.deposit(
           ethers.ZeroAddress,
-          sendamount,
+          "1000000000000000000",
           x,
-             {    value: sendamount,
+             {    
+              value: "1000000000000000000",
+//              gasLimit: 300000,
+//              gasPrice: 1000,
+//              type: 0, 
            } )
            console.log(`deposit ok`);
       } else {
@@ -447,7 +489,7 @@ await wallet.enable('KSMSHIELD');
       if (targetChainId) {
         try {
           // Try to switch the network
-      //    console.log(`wallet_switchEthereumChain: `, targetChainId);
+          console.log(`wallet_switchEthereumChain: `, targetChainId);
           await talismanEth.request({
             method: 'wallet_switchEthereumChain',
             params: [{ chainId: targetChainId }],
@@ -457,7 +499,7 @@ await wallet.enable('KSMSHIELD');
           console.log(`switch error!`)
           if (switchError.code === 4902) {
             // Add the network to the wallet
-       //     console.log(`4902 wallet_addEthereumChain:`, NETWORKS[networkKey].rpcEndpoint);
+            console.log(`4902 wallet_addEthereumChain:`, NETWORKS[networkKey].rpcEndpoint);
             // send request to wallet to switch to the selected chain
             await talismanEth.request({
               method: 'wallet_addEthereumChain',
@@ -599,10 +641,17 @@ await wallet.enable('KSMSHIELD');
             if (selectedNetwork == "westend_assethub"){
               console.log(`westend unshiedl`)
               shieldedContract = new ethers.Contract(
-                westend_pool, // Using the fake ERC-20 address from your constants
+                westend_pool,
                 ["function deposit(address,uint256,bytes32) payable", "function withdraw2(uint256[2],uint256[2][2],uint256[2],uint256[3],address,uint256,bytes32)"],
                 ETHsigner
               );
+             } else if (selectedNetwork == "paseo_assethub") {
+              shieldedContract = new ethers.Contract(
+                NETWORKS['paseo_assethub'].shield_address, 
+                ["function deposit(address,uint256,bytes32) payable", "function withdraw2(uint256[2],uint256[2][2],uint256[2],uint256[3],address,uint256,bytes32)"],
+                ETHsigner
+              );
+
              } else {
               shieldedContract = new ethers.Contract(
                 SHIELD_CONTRACT_ADDRESS.SHIELD_CONTRACT_ADDRESS, // Using the fake ERC-20 address from your constants
@@ -635,49 +684,11 @@ await wallet.enable('KSMSHIELD');
               myasset =  SHIELD_CONTRACT_ADDRESS.fakeerc20asset;
         }
         var txResponse;
-        if (selectedNetwork == "westend_assethub")  {
+        if (selectedNetwork == "westend_assethub" || selectedNetwork === "paseo_assethub")  {
           //function withdraw2(uint[2], uint[2][2], unit[2], uint[3], uint256, bytes32)
           const datn = await generateCommitment(secret);
           console.log(`calling with datn: `, datn);
-          const proof = {
-            a: [
-              '0x0a48ce5832934f3c24e362a3a49063ef507516a4e583c68c6df0af5971878154', 
-              '0x07c93321324ba7803936657654d3d57e69cc4d45bf5996b49a21e62d485cd73a'
-            ],
-            b: [
-              [
-                '0x0c9aff078f7e477489064fc8962cabf878d396b86ddc63440ee0d27d8336cd7c',
-                '0x3057486721f93ff2da1150452ec192db394f9cd8558f730c6f620a663e56f770'
-              ],
-              [
-                '0x1bdf8055740c67ccfba2e8882ab300bfe94bd0e9ae1662ec735e7e1de6ebd6fd',
-                '0x091f18277dee050c0bbe88bc34f4bf17ebaac01032f5864df874182b949e7d45'
-              ]
-            ],
-            c: [
-              '0x05fcf241c0b046f7dea3b59d1cc922710676d32f10d1036ddc7c0b1f15a8be37',
-              '0x16b3f8f6c1918d668aa5b8ecdc48447690615774095618eb31e4875b34a36fa9'
-            ],
-            publicSignals: [
-              '0x1914879b2a4e7f9555f3eb55837243cefb1366a692794a7e5b5b3181fb14b49b',
-              '0x0000000000000000000000000000000000000000000000000000000000003039',
-              '0x0000000000000000000000000000000000000000000000000000000000010932'
-            ]
-          };
-          /*
-          const p1 = ["0x759f88474869b049bd6a4eda77f0a5f3729f0b04e65ebb62a71e5a59f403d17", "0x2b02975cc21383c2878c22068574b633bc08f4aeb379d3fefce21ed1dfd94b6"];
-          const p2 = [["0x1da1093a9b277d7276733e4fc4a463943b9ae6cf6a0a224404c1a40c45cdcb4f", "0x1d11f44122d9fad98ed19f8c10334648c0c2ee49171a97e536d2133ff8095666"],["0x629e67fec8e3c1ae88675e9c601b3f586201e03e176338651b9a84418d85938","0x202f6507b0fbaa3ff2d157724ac76e351fb14a7af36132d6ae2b956b3f6087d4"]];
-          const p3 = ["0x17afd19e8d1cb4579021ed6a876ebbb43f6a6f17b4e2c3d6823fed3fe86e4bea", "0x103213d7d95d4f4f22efa09eab42bfb2d30e3a5c9bf6b5422b1e30f62fb63cf"];
-          const p4 = ["0x1914879b2a4e7f9555f3eb55837243cefb1366a692794a7e5b5b3181fb14b49b", "0x0000000000000000000000000000000000000000000000000000000000003039", "0x0000000000000000000000000000000000000000000000000000000000010932"];
-          console.log(`p1: `, p1);
-          console.log(`p2: `, p2);
-          console.log(`p3: `, p3);
-          console.log(`p4: `, p4);
-           p1,
-            p2,
-            p3,
-            p4,
-          */
+      
             console.log(` datn[0]: `,  datn[0]);
             console.log(` datn[1]: `,  datn[1]);
             console.log(` datn[2]: `,  datn[2]);
@@ -789,7 +800,7 @@ await wallet.enable('KSMSHIELD');
           >
             <option value="moonbase">🔗 {NETWORKS.moonbase.name}</option>
       {/*     <option value="hydration">🔗 Paseo Hydration</option> */}
-            <option value="shibuya">🔗 {NETWORKS.shibuya.name} </option>
+            <option value="paseo_assethub">🔗 {NETWORKS.paseo_assethub.name} </option>
             <option value="westend_assethub">🔗 {NETWORKS.westend_assethub.name}</option>
           </select>
           <WalletSelect
@@ -838,6 +849,7 @@ await wallet.enable('KSMSHIELD');
                 type="number" 
                 placeholder="0.0" 
                 value={amount}
+                min="0"
                 onChange={(e) => setAmount(e.target.value)}
                 required={activeTab === 'shield'}
               />
