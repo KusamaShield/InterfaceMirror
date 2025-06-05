@@ -6,8 +6,7 @@ Kusama Shield User interface
 Use with **Google Chrome and Talisman browser wallet**
 
 ## Documentation:     
-https://codeberg.org/KusamaShield/documentation/    
-
+https://kusamashield.codeberg.page/intro.html
 
 ### Clone: 
 ```shell
@@ -48,4 +47,10 @@ Linux + Google Chrome + Talisman Browser Wallet
 ### Supported Chains:   
 -  [x] Moonbase Testnet  
 -  [x] Westend Assethub  
+-  [x] Paseo hub
+
+
+## Project supported by:   
+![](./kusama-logo.png)      
+
 
