@@ -584,3 +584,137 @@ body {
 .generated-secret span {
   color: rgba(255, 255, 255, 0.9);
 }
+
+.help-button {
+  margin-top: 20px;
+  padding: 8px 16px;
+  background-color: #2a2a2a;
+  color: rgba(255, 255, 255, 0.9);
+  border: 1px solid #3a3a3a;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.3s ease;
+  width: 100%;
+  text-align: center;
+  font-weight: 500;
+}
+
+.help-button:hover {
+  background-color: #3a3a3a;
+  border-color: #4a4a4a;
+  color: white;
+}
+
+.help-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  backdrop-filter: blur(5px);
+}
+
+.help-modal-content {
+  background: linear-gradient(145deg, #1a1a2e, #16213e);
+  padding: 35px;
+  border-radius: 16px;
+  max-width: 600px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+  color: white;
+  position: relative;
+  border: 1px solid rgba(138, 43, 226, 0.2);
+  box-shadow: 0 8px 32px rgba(138, 43, 226, 0.1);
+}
+
+.help-modal-content h2 {
+  color: #8a2be2;
+  font-size: 24px;
+  margin-bottom: 25px;
+  text-align: center;
+  font-weight: 600;
+}
+
+.help-section {
+  margin-bottom: 25px;
+  padding: 20px;
+  background: rgba(138, 43, 226, 0.05);
+  border-radius: 12px;
+  border: 1px solid rgba(138, 43, 226, 0.1);
+}
+
+.help-section h3 {
+  color: #9d4edd;
+  margin-bottom: 15px;
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.help-section p {
+  margin: 10px 0;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 15px;
+}
+
+.close-help-button {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background-color: rgba(138, 43, 226, 0.1);
+  border: 1px solid rgba(138, 43, 226, 0.2);
+  color: #9d4edd;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 8px 16px;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.close-help-button:hover {
+  background-color: rgba(138, 43, 226, 0.2);
+  color: white;
+  border-color: rgba(138, 43, 226, 0.3);
+}
+
+/* Custom scrollbar for the modal */
+.help-modal-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.help-modal-content::-webkit-scrollbar-track {
+  background: rgba(138, 43, 226, 0.05);
+  border-radius: 4px;
+}
+
+.help-modal-content::-webkit-scrollbar-thumb {
+  background: rgba(138, 43, 226, 0.2);
+  border-radius: 4px;
+}
+
+.help-modal-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(138, 43, 226, 0.3);
+}
+
+.terms-button {
+  background: transparent;
+  border: none;
+  color: #666;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 8px 16px;
+  font-size: 14px;
+  transition: color 0.3s ease;
+}
+
+.terms-button:hover {
+  color: #333;
+}
