@@ -45,7 +45,8 @@ const NETWORKS = {
     asset: 'DEV',
     faucet: 'https://faucet.moonbeam.network/',
     chain_id: 1287,
-    block_explorer: 'https://moonbase.moonscan.io'
+    block_explorer: 'https://moonbase.moonscan.io',
+    docs: "https://kusamashield.codeberg.page/networks/moonbase.html"
   },
   shibuya: {
     name: 'Shibuya (parachain testnet)',
@@ -64,7 +65,8 @@ const NETWORKS = {
     asset: "WND",
     chain_id: 420420421,
     block_explorer: "https://blockscout-asset-hub.parity-chains-scw.parity.io",
-    faucet: "https://faucet.polkadot.io/westend?parachain=1000"
+    faucet: "https://faucet.polkadot.io/westend?parachain=1000",
+    docs: "https://kusamashield.codeberg.page/networks/WestendAH.html"
   },
   paseo_assethub: {
     name: "Paseo Assethub",
@@ -75,7 +77,7 @@ const NETWORKS = {
     block_explorer: "https://blockscout-passet-hub.parity-testnet.parity.io/",
     vk_address: "0x60cc34b6eaf6d3d13e8d34ec25c6cee15b7fdefc",
     shield_address: "0xde734db4ab4a8d9ad59d69737e402f54a84d4c17",
-    docs: "https://"
+    docs: "https://kusamashield.codeberg.page/networks/PaseoAH.html"
   }
 }
 
@@ -101,6 +103,8 @@ export function App() {
   const [selectedNetwork, setSelectedNetwork] = useState<keyof typeof NETWORKS>('moonbase')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showHelp, setShowHelp] = useState(false)
+  const [showTerms, setShowTerms] = useState(false)
 
   const [isWasmLoaded, setIsWasmLoaded] = useState(false);
   const [ProofWorker, setProofWorker] = useState<any>(null); 
@@ -788,10 +792,9 @@ await wallet.enable('KSMSHIELD');
 
   return (
     <div className="App">
-<ToastContainer />
+      <ToastContainer />
       <div className="header">
-      <script src="/snarkjs.min.js">   </script>
-
+        <script src="/snarkjs.min.js"></script>
         <div className="header-controls">
           <select 
             className="network-select"
@@ -799,7 +802,6 @@ await wallet.enable('KSMSHIELD');
             onChange={(e) => setNetwork(e.target.value as keyof typeof NETWORKS)}
           >
             <option value="moonbase">🔗 {NETWORKS.moonbase.name}</option>
-      {/*     <option value="hydration">🔗 Paseo Hydration</option> */}
             <option value="paseo_assethub">🔗 {NETWORKS.paseo_assethub.name} </option>
             <option value="westend_assethub">🔗 {NETWORKS.westend_assethub.name}</option>
           </select>
@@ -857,46 +859,48 @@ await wallet.enable('KSMSHIELD');
                 value={selectedToken}
                 onChange={(e) => setSelectedToken(e.target.value)}
               >
-               <option title="native Currency">{NETWORKS[selectedNetwork].asset}</option>
-
+                <option title="native Currency">{NETWORKS[selectedNetwork].asset}</option>
                 <option>KSM</option>
                 <option>DOT</option>
                 <option>USDT</option>
               </select>
             </div>
             {activeTab === 'shield' && (
-              <div className="balance"><a title="faucet link" target="_blank" href={NETWORKS[selectedNetwork].faucet}>{NETWORKS[selectedNetwork].name} faucet link</a></div>
-            )}
-{activeTab === 'shield' && (
-            <div className="secret-input">
-              {isGeneratingSecret ? (
-
-                <div className="secret-loading">
-                  <div className="loading-spinner"></div>
-                  <span>Generating shielded transaction...</span>
-                </div>
-              ) : generatedSecret ? (
-                <div className="generated-secret">
-                  <span>Generated Secret: {generatedSecret}</span>
-                </div>
-              ) : null}
-            </div>
-               ) } 
-
-{activeTab === 'unshield' && (
-            <div className="secret-input">
-                 <input 
-                type="password" 
-                placeholder='Enter withdrawal secret'
-                value={secret}
-                onChange={(e) => setSecret(e.target.value)}
-              />
+              <div className="balance">
+                <a title="faucet link" target="_blank" href={NETWORKS[selectedNetwork].faucet}>
+                {NETWORKS[selectedNetwork].name} faucet link
+                </a>
+                <br/>
+                <a title="Documentation link" target="_blank" href={NETWORKS[selectedNetwork].docs}>
+                  {NETWORKS[selectedNetwork].name} Documentation
+                </a>
               </div>
-              )}
-
-
+            )}
+            {activeTab === 'shield' && (
+              <div className="secret-input">
+                {isGeneratingSecret ? (
+                  <div className="secret-loading">
+                    <div className="loading-spinner"></div>
+                    <span>Generating shielded transaction...</span>
+                  </div>
+                ) : generatedSecret ? (
+                  <div className="generated-secret">
+                    <span>Generated Secret: {generatedSecret}</span>
+                  </div>
+                ) : null}
+              </div>
+            )}
+            {activeTab === 'unshield' && (
+              <div className="secret-input">
+                <input 
+                  type="password" 
+                  placeholder='Enter withdrawal secret'
+                  value={secret}
+                  onChange={(e) => setSecret(e.target.value)}
+                />
+              </div>
+            )}
           </div>
-     
           {error && <div className="error-message">{error}</div>}
           <button 
             className={`swap-button ${isLoading ? 'loading' : ''}`}
@@ -906,6 +910,143 @@ await wallet.enable('KSMSHIELD');
             {isLoading ? 'Processing...' : activeTab === 'shield' ? 'Shield' : 'Unshield'}
           </button>
         </div>
+        
+        <button 
+          className="help-button"
+          onClick={() => setShowHelp(true)}
+        >
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="16" height="16" style={{marginRight: '8px'}}>
+    <path d="M256 512A256 256 0 1 0 256 0a256 256 0 1 0 0 512zM216 336l24 0 0-64-24 0c-13.3 0-24-10.7-24-24s10.7-24 24-24l48 0c13.3 0 24 10.7 24 24l0 88 8 0c13.3 0 24 10.7 24 24s-10.7 24-24 24l-80 0c-13.3 0-24-10.7-24-24s10.7-24 24-24zm40-208a32 32 0 1 1 0 64 32 32 0 1 1 0-64z" fill="currentColor"/>
+  </svg>
+          Need Help? Click Here
+        </button>
+
+        <button 
+          className="terms-button"
+          onClick={() => setShowTerms(true)}
+        >
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="16" height="16" style={{marginRight: '8px'}}>
+    <path d="M256 512A256 256 0 1 0 256 0a256 256 0 1 0 0 512zM216 336h24V272H216c-13.3 0-24-10.7-24-24s10.7-24 24-24h48c13.3 0 24 10.7 24 24v88h8c13.3 0 24 10.7 24 24s-10.7 24-24 24h-80c-13.3 0-24-10.7-24-24s10.7-24 24-24zm40-208a32 32 0 1 1 0 64 32 32 0 1 1 0-64z" fill="currentColor"/>
+  </svg>
+          By using this website you agree to the Terms of Service
+        </button>
+
+        {showHelp && (
+          <div className="help-modal">
+            <div className="help-modal-content">
+              <h2>General information</h2>
+              <div className="help-section">
+                <h3>Need more information?</h3>
+                <p>Check out the public documentation: </p>
+                <p><a href="https://kusamashield.codeberg.page/intro.html" title="Kusama Shield Public documentation" target="_blank">https://kusamashield.codeberg.page/intro.html</a></p>
+              </div>
+              <div className="help-section">
+                <h3>Found a bug?</h3>
+                <p>1. Document the bug(take screenshots)</p>
+                <p>2. <a href="https://codeberg.org/KusamaShield/Interface/issues/new" title="Kusama Shield Code Repository" target="_blank">File an issue on the public repo</a></p>
+              </div>
+              <h2>How to use Kusama Shield</h2>
+              <div className="help-section">
+                <h3>Shielding Tokens</h3>
+                <p>1. Connect your wallet using the button above</p>
+                <p>2. Select the network you want to use</p>
+                <p>3. Enter the amount you want to shield</p>
+                <p>4. Click "Shield" to start the process</p>
+                <p>5. Save your secret key - you'll need it to unshield later!</p>
+              </div>
+              <div className="help-section">
+                <h3>Unshielding Tokens</h3>
+                <p>1. Make sure you have your secret key from when you shielded</p>
+                <p>2. Enter the amount you want to unshield</p>
+                <p>3. Enter your secret key</p>
+                <p>4. Click "Unshield" to retrieve your tokens</p>
+              </div>
+              <div className="help-section">
+                <h3>Important Notes</h3>
+                <p>• Always keep your secret key safe - if you lose it, you won't be able to unshield your tokens</p>
+                <p>• Make sure you're on the correct network before shielding/unshielding</p>
+                <p>• You can get test tokens from the faucet link provided</p>
+              </div>
+              <button 
+                className="close-help-button"
+                onClick={() => setShowHelp(false)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        )}
+
+        {showTerms && (
+          <div className="help-modal">
+            <div className="help-modal-content">
+              <h2>Terms of Service</h2>
+              <div className="help-section">
+                <h3>1. Acceptance of Terms</h3>
+                <p>By accessing and using Kusama Shield, you agree to be bound by these Terms of Service and all applicable laws and regulations.</p>
+              </div>
+              <div className="help-section">
+                <h3>2. Service Description</h3>
+                <p>Kusama Shield provides a privacy-focused Zero Knowledge token shielding <b>User Interface</b> that allows users to shield and unshield tokens on supported decentralized networks.</p>
+              </div>
+              <div className="help-section">
+                <h3>3. User Responsibilities</h3>
+                <p>• You are responsible for maintaining the security of your wallet and secret keys</p>
+                <p>• You must ensure you have sufficient funds for transactions</p>
+                <p>• Developers and Operators of this website are not liable for any type of Regulatory actions or legal consequences arising from the use of the Platform.</p>
+                <p>• You are responsible for verifying transaction details before confirming</p>
+              </div>
+              <div className="help-section">
+                <h3>4. Risk Disclosure</h3>
+                <p>• Kusama Shield Comes with No warranty </p>
+                <p>• Cryptocurrency transactions are irreversible</p>
+                <p>• Kusama Shield is early stage open source software and may contain bugs</p>
+                <p>• You acknowledge the risks associated with blockchain technology</p>
+                <p>• The service is provided "as is" without warranties</p>
+              </div>
+              <div className="help-section">
+                <h3>5. Privacy</h3>
+                <p>• We do not store your private keys or transaction secrets</p>
+                <p>• This platform does not guarantee anonymity</p>
+                <p>• All transactions are processed by decentralized blockchain networks without any middlemen</p>
+                <p>• We do not process transactions or hold any private keys</p>
+                <p>• The Pool utilizes zero-knowledge proofs to verify transactions and asset holdings without revealing underlying data.</p>
+                <p>• As a host of this website, I do not select the material transmitted through this website that I run, and I have no practical means of either identifying the source of such material or preventing its transmission. </p>
+              </div>
+              <div className="help-section">
+                <h3>6. Prohibited Use</h3>
+                <p>Users must not:</p>
+                <p>• Use the Platform for illegal activities (e.g., money laundering, terrorism financing).</p>
+                <p>• Exploit vulnerabilities, disrupt hosting or engage in attacks against the Platform.</p>
+                <p>• Misrepresent affiliation with the Platform’s developers or operators.</p>
+                <p>• Violate applicable laws in their jurisdiction.</p>
+              </div>
+              <div className="help-section">
+                <h3>7. Limitation of Liability</h3>
+                <p>We are not liable for any losses, including but not limited to: </p>
+                <p>• Lost or stolen secret keys</p>
+                <p>• Network issues or blockchain congestion</p>
+                <p>• Incorrect transaction parameters</p>
+                <p> Developers and maintainers are <b>not</b> financial advisors or custodians of user funds.</p>
+              </div>
+              <div className="help-section">
+                <h3> Acceptance of Terms</h3>
+                <p>By using the Platform, you confirm that you:</p>
+                <p>• Understand the risks of decentralized networks and privacy tools.</p>
+                <p>• Assume full responsibility for your interactions with the Platform.</p>
+                <p>• Release all maintainers, operators, and developers from liability.</p>
+              <b> This document is not legal advice. Consult a qualified attorney for compliance matters.</b>
+              </div>
+
+              <button 
+                className="close-help-button"
+                onClick={() => setShowTerms(false)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
