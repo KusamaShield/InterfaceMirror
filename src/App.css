@@ -718,3 +718,83 @@ body {
 .terms-button:hover {
   color: #333;
 }
+
+.chain-selection {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.chain-input {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.chain-input label {
+  color: #9333ea;
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-align: left;
+}
+
+.chain-input select {
+  background: rgba(147, 51, 234, 0.1);
+  border: 1px solid rgba(147, 51, 234, 0.2);
+  color: white;
+  padding: 0.8rem 2.5rem 0.8rem 1rem;
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%239333ea' d='M6 8.825L1.175 4 2.238 2.938 6 6.7l3.763-3.763L10.825 4z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 1rem center;
+  transition: all 0.3s ease;
+  width: 100%;
+  box-shadow: 0 0 10px rgba(147, 51, 234, 0.1);
+}
+
+.chain-input select:hover {
+  background-color: rgba(147, 51, 234, 0.15);
+  border-color: rgba(147, 51, 234, 0.3);
+  box-shadow: 0 0 15px rgba(147, 51, 234, 0.2);
+}
+
+.chain-input select:focus {
+  outline: none;
+  border-color: #9333ea;
+  box-shadow: 0 0 0 2px rgba(147, 51, 234, 0.2);
+}
+
+.chain-input select option {
+  background: #1a0b2e;
+  color: white;
+  padding: 0.5rem;
+}
+
+.chain-input select:focus option:checked {
+  background: linear-gradient(90deg, #9333ea, #7e22ce);
+}
+
+.chain-input select::-webkit-scrollbar {
+  width: 8px;
+}
+
+.chain-input select::-webkit-scrollbar-track {
+  background: rgba(147, 51, 234, 0.1);
+  border-radius: 4px;
+}
+
+.chain-input select::-webkit-scrollbar-thumb {
+  background: rgba(147, 51, 234, 0.3);
+  border-radius: 4px;
+}
+
+.chain-input select::-webkit-scrollbar-thumb:hover {
+  background: rgba(147, 51, 234, 0.5);
+}
