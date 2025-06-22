@@ -6,10 +6,10 @@ import SHIELD_CONTRACT_ADDRESS from "./transactions/shield";
 import fakeerc20asset from "./transactions/shield";
 import { make_deposit_tx, gen_tx_no_sig } from "./transactions/txgen";
 import { unshieldTokens, fetchKzgParams } from "./transactions/unshield";
-import { generate_tx, generate_tx2, xcm_chains } from "./transactions/xcm";
+import { generate_tx2, xcm_chains } from "./transactions/xcm";
 import { westend_pool, generateCommitment } from "./transactions/zkg16";
 import { ToastContainer, toast } from "react-toastify";
-import { ApiPromise, WsProvider } from '@polkadot/api';
+import { ApiPromise, WsProvider } from "@polkadot/api";
 import { Transaction, parseEther, parseUnits } from "ethers";
 //import init, { generate_commitment, test_console, test_proofo, generate_proof_data } from '../pkg/generate_zk_wasm'; // adjust path as needed
 
@@ -71,7 +71,7 @@ const NETWORKS = {
     name: "Paseo hub",
     asset: "PAS",
     chain_id: 420420422,
-    rpcEndpoint: "http://eth-pas-hub.laissez-faire.trade:8545",//"https://testnet-passet-hub-eth-rpc.polkadot.io",
+    rpcEndpoint: "http://eth-pas-hub.laissez-faire.trade:8545", //"https://testnet-passet-hub-eth-rpc.polkadot.io",
     faucet: "https://faucet.polkadot.io/?parachain=1111",
     block_explorer: "https://blockscout-passet-hub.parity-testnet.parity.io/",
     vk_address: "0x60cc34b6eaf6d3d13e8d34ec25c6cee15b7fdefc",
@@ -142,38 +142,41 @@ export function App() {
 
   const handleWalletSelected = async (wallet: any) => {
     try {
-      console.log(`handle wallet selected called`)
+      console.log(`handle wallet selected called`);
       console.log(`gotten wal: `, wallet);
       //await wallet.enable("KUSAMA SHIELD");
+      setSelectedWallet(wallet);
       await wallet.enable(DAPP_NAME);
-              const unsubscribe = await wallet.subscribeAccounts((accounts: WalletAccount[]) => {
-                console.log(`accounts:`, accounts);
-                // Save accounts...
-                // Also save the selected wallet name as well...
-              });
+      const unsubscribe = await wallet.subscribeAccounts(
+        (accounts: WalletAccount[]) => {
+          console.log(`accounts:`, accounts);
+          // Save accounts...
+          // Also save the selected wallet name as well...
+        },
+      );
       //     window.talismanEth.enable()
-  //     const wl = (window as any);
-   //    console.log(`try it: `, wl);
+      //     const wl = (window as any);
+      //    console.log(`try it: `, wl);
       const talismanEth = (window as any).talismanEth;
       const provider3 = new ethers.BrowserProvider(talismanEth);
-      console.log(`selected wallet:`, talismanEth.selectedAddress)
+      console.log(`selected wallet:`, talismanEth.selectedAddress);
       if (!talismanEth) {
         throw new Error("Talisman Ethereum provider not detected");
       }
       console.log("got talisman eth");
 
-  //    const currentChainId = await talismanEth.request({
-//        method: "eth_chainId",
+      //    const currentChainId = await talismanEth.request({
+      //        method: "eth_chainId",
       //});
-//      console.log(`current chain is: `, currentChainId);
-  
+      //      console.log(`current chain is: `, currentChainId);
+
       setSelectedWalletEVM(provider3);
       console.log(`provider3 ok`);
-      await wallet.enable("KSMSHIELD");
-      setSelectedWallet(wallet);
+      //   await wallet.enable("KSMSHIELD");
+
       const accounts = await wallet.getAccounts();
-         const substrateAddress = accounts[0]?.address || null;
-         console.log(`substrate address: `, substrateAddress);
+      const substrateAddress = accounts[0]?.address || null;
+      console.log(`substrate address: `, substrateAddress);
       if (accounts.length > 0) {
         const address = accounts[0].address;
         setEvmAddress(address);
@@ -204,17 +207,14 @@ export function App() {
     return secretStr;
   };
 
-
-
-
-function uint8ArrayToHex(uint8Array: Uint8Array): string {
-  return Array.from(uint8Array)
-    .map(byte => byte.toString(16).padStart(2, '0'))
-    .join('');
-}
+  function uint8ArrayToHex(uint8Array: Uint8Array): string {
+    return Array.from(uint8Array)
+      .map((byte) => byte.toString(16).padStart(2, "0"))
+      .join("");
+  }
 
   const handleShield = async () => {
-    if (!isWalletConnected || !amount || !selectedToken || !selectedWallet){
+    if (!isWalletConnected || !amount || !selectedToken || !selectedWallet) {
       toast(`❌ ERROR: Connect wallet and select token`, {
         position: "top-right",
         autoClose: 6000,
@@ -398,7 +398,7 @@ function uint8ArrayToHex(uint8Array: Uint8Array): string {
         }
 
 */
- /*
+        /*
         console.log(`ZeroAddress: `, ethers.ZeroAddress);
         console.log(`send amount: `, sendamount);
         console.log(`x: `, x);
@@ -439,14 +439,14 @@ const paddedCommitment = ethers.zeroPadValue(x, 32);
           console.error("Estimation failed:", e);
         }
 */
-/**/
+        /**/
 
-//console.log(`pol: `, pol);
-//const gasPrice = await provider3.getGasPrice();
-//console.log("Chain ID:", (await provider3.getNetwork()).chainId);
-//const xx = uint8ArrayToHex(ethers.randomBytes(32));
-//const xxx = ethers.hexlify(ethers.randomBytes(32));
-/* 
+        //console.log(`pol: `, pol);
+        //const gasPrice = await provider3.getGasPrice();
+        //console.log("Chain ID:", (await provider3.getNetwork()).chainId);
+        //const xx = uint8ArrayToHex(ethers.randomBytes(32));
+        //const xxx = ethers.hexlify(ethers.randomBytes(32));
+        /* 
 console.log(`paddedCommitment:`, paddedCommitment);
 const txData = contractpase.interface.encodeFunctionData("deposit", [
   ethers.ZeroAddress,
@@ -486,10 +486,10 @@ const txHash = await (window as any).talismanEth.request({
 
     */
 
-//const signedTx = await ETHsigner.signRaw(tx);
-//const receipt = await provider3.sendTransaction(signedTx);
+        //const signedTx = await ETHsigner.signRaw(tx);
+        //const receipt = await provider3.sendTransaction(signedTx);
         console.log(`x:`, x);
-     /*
+        /*
         const provider65 = new ethers.JsonRpcProvider(
       "http://eth-pas-hub.laissez-faire.trade:8545",
       {
@@ -529,21 +529,20 @@ const txHash = await (window as any).talismanEth.request({
     });
     console.log(`txhash: `, txHash);
      */
-    console.log(`calling txResponse2`);
+        console.log(`calling txResponse2`);
         txResponse2 = await shieldedContract.deposit(
           ethers.ZeroAddress,
-          ethers.parseEther(amount),//1000000000000000000n,
-         x,
-        {
-             value: ethers.parseEther(amount),//1000000000000000000n,   
-         //    maxFeePerGas: gasEstimate.
-        //    gasPrice: ethers.parseUnits("1000", "wei"),
-         //      type: 0,
-         //      gasLimit: 16317587311833n,
-          },  
+          ethers.parseEther(amount), //1000000000000000000n,
+          x,
+          {
+            value: ethers.parseEther(amount), //1000000000000000000n,
+            //    maxFeePerGas: gasEstimate.
+            //    gasPrice: ethers.parseUnits("1000", "wei"),
+            //      type: 0,
+            //      gasLimit: 16317587311833n,
+          },
         );
 
- 
         console.log(`deposit ok`);
       } else {
         console.log(`merp merp`);
@@ -639,9 +638,9 @@ const txHash = await (window as any).talismanEth.request({
       }
 
       // Get current chain ID
- //     const currentChainId = await talismanEth.request({
- //       method: "eth_chainId",
-  //    });
+      //     const currentChainId = await talismanEth.request({
+      //       method: "eth_chainId",
+      //    });
       // target chain id
       const targetChainId = NETWORKS[networkKey].chain_id
         ? `0x${NETWORKS[networkKey].chain_id?.toString(16)}`
@@ -873,8 +872,8 @@ const txHash = await (window as any).talismanEth.request({
               ethers.parseEther(amount),
               nullifier,
               //{
-             //   gasLimit: 558414, //newo, // Standard ETH transfer gas
-            //  },
+              //   gasLimit: 558414, //newo, // Standard ETH transfer gas
+              //  },
             );
           } else {
             txResponse = await shieldedContract.withdraw2(
@@ -966,7 +965,8 @@ const txHash = await (window as any).talismanEth.request({
         progress: undefined,
         theme: "dark",
       });
-      return;}
+      return;
+    }
     console.log(`handle bridge called`);
     // Implementation of handleBridge function
     setIsLoading(true);
@@ -984,24 +984,84 @@ const txHash = await (window as any).talismanEth.request({
       theme: "dark",
     });
     const to_chain = toNetwork;
-    const from_chain = fromNetwork; 
+    const from_chain = fromNetwork;
     const wallet = selectedWallet;
-    const accounts = await wallet.getAccounts();
-    var dest_address;  
-    if (accounts.length > 0) {
-      console.log(`all acocunts:`, accounts)
-dest_address = accounts[0].address;
-      }
     console.log(`cached account:`, evmAddress);
-    console.log(`dest account:`, dest_address);
-    const from_wsendpoint = xcm_chains.find((item) => item.name === from_chain)?.wsendpoint;
+
+    const from_wsendpoint = xcm_chains.find(
+      (item) => item.name === from_chain,
+    )?.wsendpoint;
     const wsProvider = new WsProvider(from_wsendpoint);
     const tapi = await ApiPromise.create({ provider: wsProvider });
-    console.log(`from_chain, to_chain, dest_address, amount`,from_wsendpoint, from_chain, to_chain, dest_address, amount);
-    const transacto = await generate_tx2(tapi, from_chain, to_chain, dest_address, amount);
-    await tapi.disconnect();
-      setIsLoading(false);
-    console.log(`generated transaction: `, transacto.toHex())
+    console.log(
+      `from_chain, to_chain, dest_address, amount`,
+      from_wsendpoint,
+      from_chain,
+      to_chain,
+      evmAddress,
+      amount,
+    );
+    const transacto = await generate_tx2(
+      tapi,
+      from_chain,
+      to_chain,
+      evmAddress,
+      amount,
+    );
+    console.log(`got transaction object back`);
+    const signer = wallet.signer;
+    const fromaddress = "5GC2UC5dvbv81beE44zzvRfZzMR5bnm8S2c3d2kaefRDeHR9";
+
+    /*
+      const unsub = await transacto.signAndSend(fromaddress, { signer }, ({ status, dispatchError }) => {
+  if (status.isInBlock) {
+    console.log(`Transaction included at blockHash ${status.asInBlock}`);
+    unsub(); // stop listening once included
+  } else if (status.isFinalized) {
+    console.log(`Transaction finalized at blockHash ${status.asFinalized}`);
+  }
+
+  */
+    console.log(`going for the tx`);
+    const unsub = await transacto.signAndSend(
+      fromaddress,
+      { signer },
+      ({ status, events, dispatchError }) => {
+        if (status.isInBlock) {
+          console.log(`Transaction included in block: ${status.asInBlock}`);
+          toast.info(`Transaction included in block: ${status.asInBlock}`, {
+            position: "top-right",
+            autoClose: 6000,
+            hideProgressBar: false,
+            closeOnClick: false,
+            pauseOnHover: true,
+            draggable: true,
+            progress: undefined,
+            theme: "dark",
+          });
+        }
+
+        if (status.isFinalized) {
+          console.log(`Transaction finalized: ${status.asFinalized}`);
+          toast.success(`Transaction finalized: ${status.asFinalized}`, {
+            position: "top-right",
+            autoClose: 8000,
+            hideProgressBar: false,
+            closeOnClick: false,
+            pauseOnHover: true,
+            draggable: true,
+            progress: undefined,
+            theme: "dark",
+          });
+          unsub(); // Unsubscribe from updates
+          setIsLoading(false);
+        }
+      },
+    );
+
+    setIsLoading(false);
+    setAmount("");
+    // console.log(`generated transaction: `, transacto.toHex())
   };
 
   return (
@@ -1048,6 +1108,17 @@ dest_address = accounts[0].address;
                   : "Connect EVM Wallet"}
               </button>
             }
+            onAccountSelected={(account) => {
+              // Handle the selected account
+              console.log("Selected account:", account.address);
+              setEvmAddress(account.address);
+              const talismanEth = (window as any).talismanEth;
+              if (talismanEth) {
+                const provider = new ethers.BrowserProvider(talismanEth);
+                setSelectedWalletEVM(provider);
+              }
+              setIsWalletConnected(true);
+            }}
             onWalletSelected={handleWalletSelected}
           />
         </div>
