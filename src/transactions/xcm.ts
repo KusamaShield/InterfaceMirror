@@ -204,8 +204,48 @@ export async function generate_tx2(
       );
 
     case "Paseo Hub":
-      // Different tx structure for Hydration
       console.log(`from Paseo Hub`);
+      if (to_chain == "Paseo Relaychain") {
+        const asset = {
+          fun: {
+            Fungible: adjustedAmount,
+          },
+          id: {
+            Concrete: {
+              interior: {
+                Here: null,
+              },
+              parents: 1,
+            },
+          },
+        };
+        console.log(`bene, asset:`, bene, asset);
+        return api.tx.polkadotXcm.teleportAssets(
+          {
+            V3: {
+              interior: {
+                Here: null,
+              },
+              parents: 1,
+            },
+          },
+          {
+            V3: {
+              interior: {
+                X1: {
+                  AccountId32: {
+                    id: getaccounid32(destination_address), //0x02ca485f8a1c8b532f7ea5121723588f6a25aae0eeeeeeeeeeeeeeeeeeeeeeee
+                    network: null,
+                  },
+                },
+              },
+              parents: 0,
+            },
+          },
+          { V3: [asset] },
+          0,
+        );
+      }
       return api.tx.polkadotXcm.limitedReserveTransferAssets(
         { V3: destination },
         { V3: bene },
