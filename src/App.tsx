@@ -26,6 +26,9 @@ import {
 } from "@talismn/connect-wallets";
 import { ethers, Network } from "ethers";
 
+// input token amounts
+const amountOptions = [1, 5, 10, 100, 500, 1000, 10000];
+
 // Add TypeScript declaration for window.ethereum
 declare global {
   interface Window {
@@ -402,43 +405,46 @@ export function App() {
         console.log(`ZeroAddress: `, ethers.ZeroAddress);
         console.log(`send amount: `, sendamount);
         console.log(`x: `, x);
-            const talismanEth = (window as any).talismanEth;
-      const provider3 = new ethers.BrowserProvider(talismanEth);
-         const ethwall = provider3;
-    const passigner = await ethwall.getSigner();
-const ABI66  = ["function deposit(address,uint256,bytes32) payable", 
-           "function withdraw2(uint256[2],uint256[2][2],uint256[2],uint256[3],address,uint256,bytes32)",
-          ];
+
+        const talismanEth = (window as any).talismanEth;
+        const provider3 = new ethers.BrowserProvider(talismanEth);
+        const ethwall = provider3;
+        const passigner = await ethwall.getSigner();
+            */
+        const ABI66 = [
+          "function deposit(address,uint256,bytes32) payable",
+          "function withdraw2(uint256[2],uint256[2][2],uint256[2],uint256[3],address,uint256,bytes32)",
+        ];
         const contractpase = new ethers.Contract(
           "0xde734db4ab4a8d9ad59d69737e402f54a84d4c17",
-          ABI66,//["function deposit(address,uint256,bytes32) payable"],
+          ABI66, //["function deposit(address,uint256,bytes32) payable"],
           ETHsigner,
         );
         console.log(`sending paseo deposit`);
         const myamount = ethers.parseUnits(amount, 18);
-           console.log("Sending with params:", {
-      token: ethers.ZeroAddress,
-      amount: myamount.toString(),
-      x,
-      value: myamount.toString()
-    });
+        console.log("Sending with params:", {
+          token: ethers.ZeroAddress,
+          amount: myamount.toString(),
+          x,
+          value: myamount.toString(),
+        });
+
         console.log(`x, myamount:`, x, myamount);
-const paddedCommitment = ethers.zeroPadValue(x, 32);
+        const paddedCommitment = ethers.zeroPadValue(x, 32);
         var gasEstimate;
 
         try {
-  
-           gasEstimate = await contractpase.deposit.estimateGas(
+          gasEstimate = await contractpase.deposit.estimateGas(
             ethers.ZeroAddress,
             1000000000000000000n,
             paddedCommitment, //x,  uint8ArrayToHex(ethers.randomBytes(32))
-            { value: 1000000000000000000n }
+            { value: 1000000000000000000n },
           );
           console.log("Gas estimate:", gasEstimate);
         } catch (e) {
           console.error("Estimation failed:", e);
         }
-*/
+
         /**/
 
         //console.log(`pol: `, pol);
@@ -446,7 +452,7 @@ const paddedCommitment = ethers.zeroPadValue(x, 32);
         //console.log("Chain ID:", (await provider3.getNetwork()).chainId);
         //const xx = uint8ArrayToHex(ethers.randomBytes(32));
         //const xxx = ethers.hexlify(ethers.randomBytes(32));
-        /* 
+        /*
 console.log(`paddedCommitment:`, paddedCommitment);
 const txData = contractpase.interface.encodeFunctionData("deposit", [
   ethers.ZeroAddress,
@@ -529,16 +535,17 @@ const txHash = await (window as any).talismanEth.request({
     });
     console.log(`txhash: `, txHash);
      */
+
         console.log(`calling txResponse2`);
         txResponse2 = await shieldedContract.deposit(
           ethers.ZeroAddress,
-          ethers.parseEther(amount), //1000000000000000000n,
+          ethers.parseEther(amount), //,
           x,
           {
             value: ethers.parseEther(amount), //1000000000000000000n,
-            //    maxFeePerGas: gasEstimate.
-            //    gasPrice: ethers.parseUnits("1000", "wei"),
-            //      type: 0,
+            maxFeePerGas: gasEstimate,
+            gasPrice: ethers.parseUnits("1000", "wei"),
+            type: 0,
             //      gasLimit: 16317587311833n,
           },
         );
@@ -1190,14 +1197,36 @@ const txHash = await (window as any).talismanEth.request({
             )}
 
             <div className="token-input">
-              <input
-                type="number"
-                placeholder="0.0"
-                value={amount}
-                min="0"
-                onChange={(e) => setAmount(e.target.value)}
-                required={activeTab === "shield"}
-              />
+              <div className="amount-slider-container">
+                <label>
+                  Amount: {amount} {NETWORKS[selectedNetwork].asset}
+                </label>
+                <div className="amount-slider">
+                  <input
+                    type="range"
+                    min="0"
+                    max="6"
+                    value={amountOptions.indexOf(parseInt(amount))}
+                    onChange={(e) =>
+                      setAmount(
+                        amountOptions[parseInt(e.target.value)].toString(),
+                      )
+                    }
+                    className="amount-range-slider"
+                  />
+                  <div className="amount-labels">
+                    {amountOptions.map((option, index) => (
+                      <span
+                        key={option}
+                        className={`amount-label ${amount === option.toString() ? "active" : ""}`}
+                        onClick={() => setAmount(option.toString())}
+                      >
+                        {option}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
               <select
                 value={selectedToken}
                 onChange={(e) => setSelectedToken(e.target.value)}
@@ -1308,6 +1337,22 @@ const txHash = await (window as any).talismanEth.request({
           </svg>
           By using this website you agree to the Terms of Service
         </button>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "center",
+            marginTop: "10px",
+          }}
+        >
+          <a
+            href="https://kusama.network/"
+            target="_blank"
+            title="Kusama Network"
+            className="terms-button"
+          >
+            🐦 Funded by Kusama Network 🐦
+          </a>
+        </div>
 
         {showHelp && (
           <div className="help-modal">
