@@ -2,6 +2,7 @@ import "./App.css";
 import { useState, useEffect } from "react";
 import { WalletSelect } from "@talismn/connect-components";
 import { shieldTokens, fakeshield } from "./transactions/shield";
+import { isEvmAddress } from "./transactions/adresses";
 import SHIELD_CONTRACT_ADDRESS from "./transactions/shield";
 import fakeerc20asset from "./transactions/shield";
 import { make_deposit_tx, gen_tx_no_sig } from "./transactions/txgen";
@@ -868,6 +869,21 @@ const txHash = await (window as any).talismanEth.request({
             console.log(` datn[1]: `, datn[1]);
             console.log(` datn[2]: `, datn[2]);
             //console.log(`p4: `, p4);
+            var gasestimate;
+            try {
+              gasestimate = await shieldedContract.withdraw2.estimateGas(
+                datn[0],
+                datn[1],
+                datn[2],
+                datn[3], //proof.publicSignals,
+                myasset,
+                ethers.parseEther(amount),
+                nullifier,
+              );
+              console.log(`got gasestimate: `, gasestimate);
+            } catch (e) {
+              console.error(`got estimate error:`, e);
+            }
 
             console.log(`nullifier: `, nullifier);
             txResponse = await shieldedContract.withdraw2(
@@ -878,9 +894,11 @@ const txHash = await (window as any).talismanEth.request({
               myasset,
               ethers.parseEther(amount),
               nullifier,
-              //{
-              //   gasLimit: 558414, //newo, // Standard ETH transfer gas
-              //  },
+              {
+                maxFeePerGas: gasestimate,
+                gasPrice: ethers.parseUnits("1000", "wei"),
+                type: 0,
+              },
             );
           } else {
             txResponse = await shieldedContract.withdraw2(
@@ -961,6 +979,19 @@ const txHash = await (window as any).talismanEth.request({
   };
 
   const handleBridge = async () => {
+    if (isEvmAddress(evmAddress)) {
+      toast(`ERROR: select a polkadot address not ethereum address`, {
+        position: "top-right",
+        autoClose: 6000,
+        hideProgressBar: false,
+        closeOnClick: false,
+        pauseOnHover: true,
+        draggable: true,
+        progress: undefined,
+        theme: "dark",
+      });
+      return;
+    }
     if (!fromNetwork || !toNetwork) {
       toast(`❌ ERROR: Set to and from Network`, {
         position: "top-right",
@@ -1008,13 +1039,32 @@ const txHash = await (window as any).talismanEth.request({
       evmAddress,
       amount,
     );
-    const transacto = await generate_tx2(
-      tapi,
-      from_chain,
-      to_chain,
-      evmAddress,
-      amount,
-    );
+    var transacto;
+    try {
+      transacto = await generate_tx2(
+        tapi,
+        from_chain,
+        to_chain,
+        evmAddress,
+        amount,
+      );
+
+      // Proceed with transaction signing...
+    } catch (error) {
+      toast(` ${error}`, {
+        position: "top-right",
+        autoClose: 6000,
+        hideProgressBar: false,
+        closeOnClick: false,
+        pauseOnHover: true,
+        draggable: true,
+        progress: undefined,
+        theme: "dark",
+      });
+
+      return;
+    }
+
     console.log(`got transaction object back`);
     const signer = wallet.signer;
     const fromaddress = "5GC2UC5dvbv81beE44zzvRfZzMR5bnm8S2c3d2kaefRDeHR9";
