@@ -9,6 +9,16 @@ export const xcm_routes = [
   },
 ];
 
+// supported XCM routes for open HRMP channels
+const supportedRoutes = [
+  { from: "Paseo Relaychain", to: "Paseo Assethub" },
+  { from: "Paseo Relaychain", to: "Paseo Hub" },
+  { from: "Paseo Assethub", to: "Paseo Relaychain" },
+  { from: "Paseo Assethub", to: "Paseo Hydration" },
+  { from: "Paseo Assethub", to: "Paseo Pop" },
+  { from: "Paseo Hub", to: "Paseo Relaychain" },
+];
+
 export async function generate_tx2(
   api: any,
   from_chain: string,
@@ -16,6 +26,16 @@ export async function generate_tx2(
   destination_address: string,
   amount: string,
 ) {
+  const isRouteSupported = supportedRoutes.some(
+    (route) => route.from === from_chain && route.to === to_chain,
+  );
+
+  if (!isRouteSupported) {
+    throw new Error(
+      `UNSUPPORTED ROUTE: ${from_chain} → ${to_chain}. ` +
+        `Check supported routes at https://kusamashield.codeberg.page/xcm.html`,
+    );
+  }
   const paraid = xcm_chains.find((item) => item.name === to_chain)?.paraid;
   console.log(`inside generate_tx2`);
   console.log(
@@ -130,7 +150,7 @@ export async function generate_tx2(
           interior: {
             X1: {
               AccountId32: {
-                id: "0x2a3c9fcdc01b1e9c640398dd84437f1a46f4d0797f09192189ef5f0e3f915c38",
+                id: getaccounid32(destination_address), //"0x2a3c9fcdc01b1e9c640398dd84437f1a46f4d0797f09192189ef5f0e3f915c38",
                 network: null,
               },
             },
