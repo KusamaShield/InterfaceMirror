@@ -8,12 +8,23 @@ import fakeerc20asset from "./transactions/shield";
 import { make_deposit_tx, gen_tx_no_sig } from "./transactions/txgen";
 import { unshieldTokens, fetchKzgParams } from "./transactions/unshield";
 import { generate_tx2, xcm_chains } from "./transactions/xcm";
-import { westend_pool, generateCommitment } from "./transactions/zkg16";
+import { ZKPService } from "./transactions/zklib";
+import {
+  westend_pool,
+  generateCommitment,
+  zkDeposit,
+  zkWithdraw,
+} from "./transactions/zkg16";
 import { ToastContainer, toast } from "react-toastify";
 import { ApiPromise, WsProvider } from "@polkadot/api";
 import { Transaction, parseEther, parseUnits } from "ethers";
 //import init, { generate_commitment, test_console, test_proofo, generate_proof_data } from '../pkg/generate_zk_wasm'; // adjust path as needed
+import { Buffer } from 'buffer';
 
+// Polyfill for the global Buffer object
+if (typeof window !== 'undefined') {
+  (window as any).Buffer = Buffer;
+}
 import {
   AlephZeroWallet,
   EnkryptWallet,
@@ -71,6 +82,28 @@ const NETWORKS = {
     faucet: "https://faucet.polkadot.io/westend?parachain=1000",
     docs: "https://kusamashield.codeberg.page/networks/WestendAH.html",
   },
+
+  paseo_assethub2: {
+    name: "Paseo hub v2",
+    asset: "PAS",
+    chain_id: 420420422,
+    rpcEndpoint: "http://eth-pas-hub.laissez-faire.trade:8545", //"https://testnet-passet-hub-eth-rpc.polkadot.io",
+    faucet: "https://faucet.polkadot.io/?parachain=1111",
+    block_explorer: "https://blockscout-passet-hub.parity-testnet.parity.io/",
+    vk_address: "0xF3A0c5DaE0Cb99f9e4ED56D77BAC094517a05166",
+    shield_address: "0xa1Ab66CB2634007a5450643F0a240f8E8062178C",//"0xA3d1E0e2AAEFAf6E8a20144E433e123BC0cC5ef8",
+    abi: [
+  "function deposit3(address asset, uint256 amount, bytes32 commitment) external payable",
+  "function withdrawETH(uint256[2] calldata a, uint256[2][2] calldata b, uint256[2] calldata c, uint256[6] calldata pubSignals) external",
+  "function withdrawWithAsset(uint256[2] calldata a, uint256[2][2] calldata b, uint256[2] calldata c, uint256[6] calldata pubSignals, address asset) external",
+  "function currentRoot() external view returns (uint256)",
+  "function nullifiers(bytes32) external view returns (address asset, uint256 amount, bytes32 commitment, bool isUsed)",
+  "function escrow(address) external view returns (uint256)",
+  "function isNullifierUsed(uint256 nullifier) external view returns (bool)",
+  "function getNullifierInfo(uint256 nullifier) external view returns (address asset, uint256 amount, bytes32 commitment, bool isUsed)"
+],
+    docs: "https://kusamashield.codeberg.page/networks/PaseoAH.html",
+  },
   paseo_assethub: {
     name: "Paseo hub",
     asset: "PAS",
@@ -81,6 +114,28 @@ const NETWORKS = {
     vk_address: "0x60cc34b6eaf6d3d13e8d34ec25c6cee15b7fdefc",
     shield_address: "0xde734db4ab4a8d9ad59d69737e402f54a84d4c17",
     docs: "https://kusamashield.codeberg.page/networks/PaseoAH.html",
+  },
+  kusama: {
+    name: "Kusama Assethub Mainnet",
+    type: "mainnet",
+    wsEndpoint: "wss://statemine-rpc-tn.dwellir.com",
+    rpcEndpoint: "http://eth-pas-hub.laissez-faire.trade:8545",
+    asset: "KSM",
+    chain_id: 420420418,
+    shield_address: "0xDC80565357D63eCa67F3f020b6DD1CE1fD0E1Ed8",
+    abi: [
+  "function deposit3(address asset, uint256 amount, bytes32 commitment) external payable",
+  "function withdrawETH(uint256[2] calldata a, uint256[2][2] calldata b, uint256[2] calldata c, uint256[6] calldata pubSignals) external",
+  "function withdrawWithAsset(uint256[2] calldata a, uint256[2][2] calldata b, uint256[2] calldata c, uint256[6] calldata pubSignals, address asset) external",
+  "function currentRoot() external view returns (uint256)",
+  "function nullifiers(bytes32) external view returns (address asset, uint256 amount, bytes32 commitment, bool isUsed)",
+  "function escrow(address) external view returns (uint256)",
+  "function isNullifierUsed(uint256 nullifier) external view returns (bool)",
+  "function getNullifierInfo(uint256 nullifier) external view returns (address asset, uint256 amount, bytes32 commitment, bool isUsed)"
+],
+    block_explorer:
+      "https://blockscout-kusama-asset-hub.parity-chains-scw.parity.io/",
+    docs: "https://kusamashield.codeberg.page/networks/kusama.html",
   },
 };
 
@@ -94,14 +149,19 @@ const MOONBASE_CURRENCY = {
   decimals: 18,
 };
 
+function toHex(number) {
+  const hex = BigInt(number).toString(16);
+  return "0x" + hex.padStart(64, "0");
+}
+
 export function App() {
   const [isWalletConnected, setIsWalletConnected] = useState(false);
   const [selectedWallet, setSelectedWallet] = useState<any>(null); // Consider using proper type instead of any
   const [selectedWalletEVM, setSelectedWalletEVM] = useState<any>(null);
   const [evmAddress, setEvmAddress] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"shield" | "unshield" | "bridge">(
-    "shield",
-  );
+  const [activeTab, setActiveTab] = useState<
+    "shield" | "unshield" | "bridge" | "crosschainbridge"
+  >("shield");
   const [secret, setSecret] = useState("");
   const [amount, setAmount] = useState("");
   const [selectedToken, setSelectedToken] = useState<any>(null); //('KSM')
@@ -124,7 +184,7 @@ export function App() {
       const loadWasm = async () => {
         try {
           //    console.log(`loading wasmm`);
-          const wasmPackage = await import("../pkg/generate_zk_wasm");
+          const wasmPackage = await import("./pkg/generate_zk_wasm");
           await wasmPackage.default();
           await wasmPackage.init();
           //        console.log(`workerApi ok`);
@@ -132,7 +192,7 @@ export function App() {
           //   console.log(`set worker!`);
           // Store the worker functions in state or ref for later use
           setProofWorker(wasmPackage);
-          setNetwork("paseo_assethub");
+          setNetwork("kusama");
           setIsWasmLoaded(true);
         } catch (err) {
           setError("Failed to load WASM module");
@@ -266,14 +326,36 @@ export function App() {
       console.log(`signo`);
 
       console.log(`signed tx`);
-      console.log(`westend pool:`, westend_pool);
+      //  console.log(`westend pool:`, westend_pool);
       var shieldedContract;
       if (selectedNetwork == "moonbase") {
+        console.log(`moonbase`);
         shieldedContract = new ethers.Contract(
           SHIELD_CONTRACT_ADDRESS.SHIELD_CONTRACT_ADDRESS, // Using the fake ERC-20 address from your constants
           SHIELD_CONTRACT_ADDRESS.shielderAbi,
           ETHsigner,
         );
+      } else if (selectedNetwork == "kusama"){
+        shieldedContract = new ethers.Contract(
+          NETWORKS[selectedNetwork].shield_address,
+          NETWORKS[selectedNetwork].abi, //["function deposit(address,uint256,bytes32) payable"],
+          ETHsigner,
+        );
+      } 
+      else if (selectedNetwork == "paseo_assethub2") {
+        //	NETWORKS["paseo_assethub"].shield_address,
+
+        console.log(
+          `paseo assethub v2: `,
+          NETWORKS[selectedNetwork].shield_address,
+        );
+
+        shieldedContract = new ethers.Contract(
+          NETWORKS[selectedNetwork].shield_address,
+          NETWORKS[selectedNetwork].abi, //["function deposit(address,uint256,bytes32) payable"],
+          ETHsigner,
+        );
+        console.log(`contract v2 initilized`);
       } else if (selectedNetwork == "westend_assethub") {
         console.log(`westend shielded contract`);
         shieldedContract = new ethers.Contract(
@@ -305,6 +387,7 @@ export function App() {
         // console.log(`token set to: `, )
         // console.log(`network token: ${}`);
         // Create contract instance
+        console.log(`redefining tokenContract`);
         const tokenContract = new ethers.Contract(
           fakeerc20asset.fakeerc20asset, // Using the fake ERC-20 address from your constants
           fakeerc20asset.erc20Abi,
@@ -412,144 +495,124 @@ export function App() {
         const ethwall = provider3;
         const passigner = await ethwall.getSigner();
             */
-        const ABI66 = [
-          "function deposit(address,uint256,bytes32) payable",
-          "function withdraw2(uint256[2],uint256[2][2],uint256[2],uint256[3],address,uint256,bytes32)",
-        ];
-        const contractpase = new ethers.Contract(
-          "0xde734db4ab4a8d9ad59d69737e402f54a84d4c17",
-          ABI66, //["function deposit(address,uint256,bytes32) payable"],
-          ETHsigner,
-        );
+        console.log(`calling abi66`);
         console.log(`sending paseo deposit`);
-        const myamount = ethers.parseUnits(amount, 18);
-        console.log("Sending with params:", {
-          token: ethers.ZeroAddress,
-          amount: myamount.toString(),
-          x,
-          value: myamount.toString(),
-        });
+        if (selectedNetwork == "paseo_assethub") {
+          const ABI66 = [
+            "function deposit(address,uint256,bytes32) payable",
+            "function withdraw2(uint256[2],uint256[2][2],uint256[2],uint256[3],address,uint256,bytes32)",
+          ];
+          console.log(`calling contract paseo invalid`);
 
-        console.log(`x, myamount:`, x, myamount);
-        const paddedCommitment = ethers.zeroPadValue(x, 32);
-        var gasEstimate;
-
-        try {
-          gasEstimate = await contractpase.deposit.estimateGas(
-            ethers.ZeroAddress,
-            1000000000000000000n,
-            paddedCommitment, //x,  uint8ArrayToHex(ethers.randomBytes(32))
-            { value: 1000000000000000000n },
+          const contractpase = new ethers.Contract(
+            "0xde734db4ab4a8d9ad59d69737e402f54a84d4c17",
+            ABI66, //["function deposit(address,uint256,bytes32) payable"],
+            ETHsigner,
           );
-          console.log("Gas estimate:", gasEstimate);
-        } catch (e) {
-          console.error("Estimation failed:", e);
+
+          const myamount = ethers.parseUnits(amount, 18);
+          console.log("Sending with params:", {
+            token: ethers.ZeroAddress,
+            amount: myamount.toString(),
+            x,
+            value: myamount.toString(),
+          });
+
+          console.log(`x, myamount:`, x, myamount);
+          const paddedCommitment = ethers.zeroPadValue(x, 32);
+          var gasEstimate;
+
+          try {
+            console.log(`running gasEstimate`);
+            gasEstimate = await contractpase.deposit.estimateGas(
+              ethers.ZeroAddress,
+              1000000000000000000n,
+              paddedCommitment, //x,  uint8ArrayToHex(ethers.randomBytes(32))
+              { value: 1000000000000000000n },
+            );
+            console.log("Gas estimate:", gasEstimate);
+          } catch (e) {
+            console.error("Estimation failed:", e);
+          }
+
+          console.log(`x:`, x);
+          console.log(`calling txResponse2`);
+          txResponse2 = await shieldedContract.deposit(
+            ethers.ZeroAddress,
+            ethers.parseEther(amount), //,
+            x,
+            {
+              value: ethers.parseEther(amount), //1000000000000000000n,
+              maxFeePerGas: gasEstimate,
+              gasPrice: ethers.parseUnits("1000", "wei"),
+              type: 0,
+              //      gasLimit: 16317587311833n,
+            },
+          );
+        } else if (selectedNetwork == "paseo_assethub2"|| selectedNetwork == "kusama") {
+          console.log(`paseo v2 called`);
+          const contractpase = new ethers.Contract(
+            NETWORKS[selectedNetwork].shield_address,
+            NETWORKS[selectedNetwork].abi, //["function deposit(address,uint256,bytes32) payable"],
+            ETHsigner,
+          );
+            toast(`Generating ZK data`, {
+        position: "top-right",
+        autoClose: 4000,
+        hideProgressBar: false,
+        closeOnClick: false,
+        pauseOnHover: true,
+        draggable: true,
+        progress: undefined,
+        theme: "dark",
+      });
+          
+         const zkpService = new ZKPService();
+          const payloaden = zkpService.generateDepositPayload(secret, ethers.ZeroAddress, BigInt(ethers.parseEther(amount).toString()));
+
+          /*
+          const { commitment, nullifier } = await zkDeposit(
+            secret,
+            ethers.ZeroAddress,
+            ethers.parseEther(amount).toString(),
+          );
+*/
+         const gasEstimate = await contractpase.deposit3.estimateGas(
+            ethers.ZeroAddress,
+            ethers.parseEther(amount),
+            payloaden.commitment,
+            {
+              value: ethers.parseEther(amount),
+            },
+          );
+          console.log(`gas estimate is: `, gasEstimate);
+
+          //console.log(`raw n and c: `, nul)
+          console.log(
+            `full input: `,
+            ethers.ZeroAddress,
+            ethers.parseEther(amount),
+             payloaden.commitment,
+            {
+              value: ethers.parseEther(amount),
+       //       maxFeePerGas: gasEstimate,
+       //       gasPrice: ethers.parseUnits("1000", "wei"),
+              //      type: 0,
+            },
+          );
+          console.log(`paseo v2 txresp`)
+          txResponse2 = await contractpase.deposit3(
+            ethers.ZeroAddress,
+            ethers.parseEther(amount),
+            payloaden.commitment,
+            {
+              value: ethers.parseEther(amount),
+         //     maxFeePerGas: gasEstimate,
+         //     gasPrice: ethers.parseUnits("1000", "wei"),
+              //    type: 0,
+            },
+          );
         }
-
-        /**/
-
-        //console.log(`pol: `, pol);
-        //const gasPrice = await provider3.getGasPrice();
-        //console.log("Chain ID:", (await provider3.getNetwork()).chainId);
-        //const xx = uint8ArrayToHex(ethers.randomBytes(32));
-        //const xxx = ethers.hexlify(ethers.randomBytes(32));
-        /*
-console.log(`paddedCommitment:`, paddedCommitment);
-const txData = contractpase.interface.encodeFunctionData("deposit", [
-  ethers.ZeroAddress,
-  "1000000000000000000",
-  paddedCommitment
-]);
-const iface = new ethers.Interface(["function deposit(address,uint256,bytes32)"]);
-const txdatan = iface.encodeFunctionData("deposit", [ethers.ZeroAddress, "1000000000000000000", paddedCommitment]);
-console.log(`react data:`, txdatan);
-
-console.log("React TX Data:", {
-  to: contractpase.target,
-  value: "1000000000000000000",
-  data: txData,
-  gasLimit: "300000",
-  chainId: NETWORKS.paseo_assethub.chain_id
-});
-
-const feeData = await provider3.getFeeData();
-const rawTx = {
-  to: "0xde734db4ab4a8d9ad59d69737e402f54a84d4c17",
-  value: 1000000000000000000n,
-    gasPrice: feeData.gasPrice,
-  maxFeePerGas: feeData.maxFeePerGas,
-  maxPriorityFeePerGas: feeData.maxPriorityFeePerGas,
- // nonce: await provider3.getTransactionCount("0x25A26A3cDb5c14D0F779888bB851F1293ec1d01D"),
-  data: txdatan,
-  chainId: 420420422,
- // type: "0x0"
-};
-console.log(`feeData:`, feeData);
-const txHash = await (window as any).talismanEth.request({
-      method: "eth_sendTransaction",
-      params: [rawTx]
-    });
-    console.log("Successful TX hash:", txHash);
-
-    */
-
-        //const signedTx = await ETHsigner.signRaw(tx);
-        //const receipt = await provider3.sendTransaction(signedTx);
-        console.log(`x:`, x);
-        /*
-        const provider65 = new ethers.JsonRpcProvider(
-      "http://eth-pas-hub.laissez-faire.trade:8545",
-      {
-        chainId: NETWORKS.paseo_assethub.chain_id,
-        name: NETWORKS.paseo_assethub.name,
-      }
-    );
-
-
-    const commitment = ethers.hexlify(ethers.randomBytes(32));
-
-      const iface = new ethers.Interface([
-      "function deposit(address,uint256,bytes32)"
-    ]);
-    const txData = iface.encodeFunctionData("deposit", [
-      ethers.ZeroAddress,
-      "1000000000000000000",  // Amount as string
-      x
-    ]);
-
-    // 5. Format transaction parameters (convert BigInt to hex strings)
-    const txParams = {
-      from: "0x0Db2EF8BB34C9bb42f3E670354075E855d695d8C",
-      to: "0xde734db4ab4a8d9ad59d69737e402f54a84d4c17",
-      value: ethers.toQuantity(1000000000000000000n), // Convert to hex string
-      data: txData,
-      chainId: ethers.toQuantity(NETWORKS.paseo_assethub.chain_id),
-      gasLimit: ethers.toQuantity(300000n), // Convert to hex string
-      type: "0x0",
-    };
-     console.log("Formatted TX Params:", JSON.stringify(txParams, null, 2));
-
-    // 6. Send transaction through Talisman
-  const txHash = await (window as any).talismanEth.request({
-      method: "eth_sendTransaction",
-      params: [txParams]
-    });
-    console.log(`txhash: `, txHash);
-     */
-
-        console.log(`calling txResponse2`);
-        txResponse2 = await shieldedContract.deposit(
-          ethers.ZeroAddress,
-          ethers.parseEther(amount), //,
-          x,
-          {
-            value: ethers.parseEther(amount), //1000000000000000000n,
-            maxFeePerGas: gasEstimate,
-            gasPrice: ethers.parseUnits("1000", "wei"),
-            type: 0,
-            //      gasLimit: 16317587311833n,
-          },
-        );
 
         console.log(`deposit ok`);
       } else {
@@ -623,6 +686,7 @@ const txHash = await (window as any).talismanEth.request({
   };
 
   const setNetwork = async (networkKey: keyof typeof NETWORKS) => {
+    console.log(`setNework called, input:`, networkKey);
     try {
       setIsLoading(true);
       setError(null);
@@ -761,22 +825,24 @@ const txHash = await (window as any).talismanEth.request({
         progress: undefined,
         theme: "dark",
       });
-      const p = await fetchKzgParams(
-        "http://localhost:5173/proofs/hermez-raw-8",
-      ); //params8.bin
-      console.log(`params fetched ok`);
-      console.log("Params length:", p.length);
 
-      console.log(`generating proof`);
       try {
         console.log(`generating proofo`);
 
         // if we manage to load the
         if (ProofWorker) {
           var proofBytes;
-          if (selectedNetwork == "westend_assethub") {
+          if (selectedNetwork == "westend_assethub" || selectedNetwork == "paseo_assethub2" || selectedNetwork == "kusama" || selectedNetwork == "paseo_assethub") {
             proofBytes = "not set ";
           } else {
+      const p = await fetchKzgParams(
+        "http://kusamashield.laissez-faire.trade/proofs/hermez-raw-8",
+      ); //params8.bin
+      console.log(`params fetched ok`);
+      console.log("Params length:", p.length);
+
+      console.log(`generating proof`);
+      
             proofBytes = await ProofWorker.generate_proof_data(secret, p);
           }
 
@@ -828,7 +894,17 @@ const txHash = await (window as any).talismanEth.request({
               ],
               ETHsigner,
             );
-          } else {
+          } else if (selectedNetwork == "paseo_assethub2" || selectedNetwork == "kusama") {
+              shieldedContract = new ethers.Contract(
+                NETWORKS[selectedNetwork].shield_address,
+                NETWORKS[selectedNetwork].abi,
+                ETHsigner,
+              )
+          }         
+          
+          else {
+
+            console.log(`else contract init`)
             shieldedContract = new ethers.Contract(
               SHIELD_CONTRACT_ADDRESS.SHIELD_CONTRACT_ADDRESS, // Using the fake ERC-20 address from your constants
               SHIELD_CONTRACT_ADDRESS.shielderAbi,
@@ -900,7 +976,44 @@ const txHash = await (window as any).talismanEth.request({
                 type: 0,
               },
             );
-          } else {
+          } else if (selectedNetwork == "paseo_assethub2" || selectedNetwork == "kusama") {
+              
+           
+                     const zkpService = new ZKPService();
+       //   const payloaden = zkpService.generateDepositPayload(secret, ethers.ZeroAddress, BigInt(ethers.parseEther(amount).toString()));
+            console.log(`amount is:`, ethers.parseEther(amount))
+    const mockCommitment = zkpService.generateCommitment(secret, ethers.ZeroAddress, BigInt(ethers.parseEther(amount).toString()));
+                
+                // Store the deposit info first (in real app this would be done during deposit)
+                const depositPayload = zkpService.generateDepositPayload(secret, ethers.ZeroAddress, BigInt(ethers.parseEther(amount).toString()));
+                toast("builind zk payload");
+                console.log(`evm address:`, evmAddress);
+                const withdrawalPayload = await zkpService.generateWithdrawalPayload(
+                  mockCommitment,
+                  evmAddress, // selected browser wallet address
+                  "asset.wasm", // circuit WASM path
+                  "asset_0001.zkey", // circuit zkey path
+                  ethers.ZeroAddress // asset
+                );
+                console.log(`got throw`)
+
+         /*
+                    const gasEstimate = await shieldedContract.withdrawETH.estimateGas(
+                    withdrawalPayload.a,
+                    withdrawalPayload.b,
+                    withdrawalPayload.c,
+                    withdrawalPayload.publicSignals
+                  );
+                  console.log('Gas estimate for withdrawal:', gasEstimate);
+          */
+
+                  txResponse = await shieldedContract.withdrawETH(
+                    withdrawalPayload.a,
+                    withdrawalPayload.b,
+                    withdrawalPayload.c,
+                    withdrawalPayload.publicSignals
+                  );
+          }   else {
             txResponse = await shieldedContract.withdraw2(
               proofData,
               myasset,
@@ -1134,14 +1247,28 @@ const txHash = await (window as any).talismanEth.request({
               setNetwork(e.target.value as keyof typeof NETWORKS)
             }
           >
-            <option value="moonbase">🔗 {NETWORKS.moonbase.name}</option>
-            <option value="paseo_assethub">
-              🔗 {NETWORKS.paseo_assethub.name}{" "}
+            <option value="" disabled className="group-header testnet-header">
+              🧪 Testnet Networks
             </option>
+            <option value="moonbase">🔗 {NETWORKS.moonbase.name}</option>
+
+            <option value="paseo_assethub">
+              🔗 {NETWORKS.paseo_assethub.name}
+            </option>
+
+            <option value="paseo_assethub2">
+              🔗 {NETWORKS.paseo_assethub2.name}
+            </option>
+
             <option value="westend_assethub">
               🔗 {NETWORKS.westend_assethub.name}
             </option>
+            <option value="" disabled className="group-header mainnet-header">
+              🌐 Mainnet Networks (👇Live now👇)
+            </option>
+            <option value="kusama">🐦 Kusama Assethub Mainnet</option>
           </select>
+
           <WalletSelect
             dappName="Talisman"
             showAccountsList
@@ -1203,159 +1330,226 @@ const txHash = await (window as any).talismanEth.request({
               Bridge
             </button>
           </div>
-          <div className="input-group">
-            {activeTab === "bridge" && (
-              <div className="chain-selection">
-                <div className="chain-input">
-                  <label>From Chain:</label>
-                  <select
-                    value={fromNetwork}
-                    onChange={(e) =>
-                      setfromNetwork(e.target.value as keyof typeof NETWORKS)
-                    }
-                  >
-                    {Object.entries(xcm_chains).map(([key, network]) => (
-                      <option key={network.name} value={network.name}>
-                        {network.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="chain-input">
-                  <label>To Chain:</label>
-                  <select
-                    value={toNetwork}
-                    onChange={(e) =>
-                      settoNetwork(e.target.value as keyof typeof NETWORKS)
-                    }
-                  >
-                    {Object.entries(xcm_chains).map(([key, network]) => (
-                      <option key={network.name} value={network.name}>
-                        {network.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <a
-                  href="https://kusamashield.codeberg.page/xcm.html"
-                  target="_blank"
-                  title="XCM transfer how-to link"
-                >
-                  Documentation link
-                </a>
-              </div>
-            )}
-
-            <div className="token-input">
-              <div className="amount-slider-container">
-                <label>
-                  Amount: {amount} {NETWORKS[selectedNetwork].asset}
-                </label>
-                <div className="amount-slider">
-                  <input
-                    type="range"
-                    min="0"
-                    max="6"
-                    value={amountOptions.indexOf(parseInt(amount))}
-                    onChange={(e) =>
-                      setAmount(
-                        amountOptions[parseInt(e.target.value)].toString(),
-                      )
-                    }
-                    className="amount-range-slider"
-                  />
-                  <div className="amount-labels">
-                    {amountOptions.map((option, index) => (
-                      <span
-                        key={option}
-                        className={`amount-label ${amount === option.toString() ? "active" : ""}`}
-                        onClick={() => setAmount(option.toString())}
-                      >
-                        {option}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </div>
-              <select
-                value={selectedToken}
-                onChange={(e) => setSelectedToken(e.target.value)}
+          {/* Tab content */}
+          {activeTab === "crosschainbridge" ? (
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                minHeight: "200px",
+              }}
+            >
+              <button
+                className="swap-button"
+                style={{
+                  maxWidth: 220,
+                  margin: "2rem auto",
+                  fontSize: "1.2rem",
+                  opacity: 0.7,
+                  cursor: "not-allowed",
+                }}
+                disabled
               >
-                <option title="native Currency">
-                  {NETWORKS[selectedNetwork].asset}
-                </option>
-                <option>KSM</option>
-                <option>DOT</option>
-                <option>USDT</option>
-              </select>
+                🚧 Coming Soon 🚧
+              </button>
             </div>
-            {activeTab === "shield" && (
-              <div className="balance">
-                <a
-                  title="faucet link"
-                  target="_blank"
-                  href={NETWORKS[selectedNetwork].faucet}
-                >
-                  {NETWORKS[selectedNetwork].name} faucet link
-                </a>
-                <br />
-                <a
-                  title="Documentation link"
-                  target="_blank"
-                  href={NETWORKS[selectedNetwork].docs}
-                >
-                  {NETWORKS[selectedNetwork].name} Documentation
-                </a>
-              </div>
-            )}
-            {activeTab === "shield" && (
-              <div className="secret-input">
-                {isGeneratingSecret ? (
-                  <div className="secret-loading">
-                    <div className="loading-spinner"></div>
-                    <span>Generating shielded transaction...</span>
+          ) : (
+            <>
+              <div className="input-group">
+                {activeTab === "bridge" && (
+                  <div className="chain-selection">
+                    <div className="chain-input">
+                      <label>From Chain:</label>
+                      <select
+                        value={fromNetwork}
+                        onChange={(e) =>
+                          setfromNetwork(
+                            e.target.value as keyof typeof NETWORKS,
+                          )
+                        }
+                      >
+                        {Object.entries(xcm_chains).map(([key, network]) => (
+                          <option key={network.name} value={network.name}>
+                            {network.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="chain-input">
+                      <label>To Chain:</label>
+                      <select
+                        value={toNetwork}
+                        onChange={(e) =>
+                          settoNetwork(e.target.value as keyof typeof NETWORKS)
+                        }
+                      >
+                        {Object.entries(xcm_chains).map(([key, network]) => (
+                          <option key={network.name} value={network.name}>
+                            {network.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <a
+                      href="https://kusamashield.codeberg.page/xcm.html"
+                      target="_blank"
+                      title="XCM transfer how-to link"
+                    >
+                      Documentation link
+                    </a>
                   </div>
-                ) : generatedSecret ? (
-                  <div className="generated-secret">
-                    <span>Generated Secret: {generatedSecret}</span>
+                )}
+
+                <div className="token-input">
+                  <div className="amount-slider-container">
+                    <label>
+                      Amount: {amount} {NETWORKS[selectedNetwork].asset}
+                    </label>
+                    <div className="amount-slider">
+                      <input
+                        type="range"
+                        min="0"
+                        max="6"
+                        value={amountOptions.indexOf(parseInt(amount))}
+                        onChange={(e) =>
+                          setAmount(
+                            amountOptions[parseInt(e.target.value)].toString(),
+                          )
+                        }
+                        className="amount-range-slider"
+                      />
+                      <div className="amount-labels">
+                        {amountOptions.map((option, index) => (
+                          <span
+                            key={option}
+                            className={`amount-label ${amount === option.toString() ? "active" : ""}`}
+                            onClick={() => setAmount(option.toString())}
+                          >
+                            {option}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
                   </div>
-                ) : null}
-              </div>
-            )}
+                  <select
+                    value={selectedToken}
+                    onChange={(e) => setSelectedToken(e.target.value)}
+                  >
+                    <option title="native Currency">
+                      {NETWORKS[selectedNetwork].asset}
+                    </option>
 
-            {activeTab === "unshield" && (
-              <div className="secret-input">
-                <input
-                  type="password"
-                  placeholder="Enter withdrawal secret"
-                  value={secret}
-                  onChange={(e) => setSecret(e.target.value)}
-                />
-              </div>
-            )}
-          </div>
-          {error && <div className="error-message">{error}</div>}
-          <button
-            className={`swap-button ${isLoading ? "loading" : ""}`}
-            onClick={
-              activeTab === "shield"
-                ? handleShield
-                : activeTab === "unshield"
-                  ? handleUnshield
-                  : handleBridge
-            }
-            disabled={isLoading || !isWalletConnected}
-          >
-            {isLoading
-              ? "Processing..."
-              : activeTab === "shield"
-                ? "Shield"
-                : activeTab === "unshield"
-                  ? "Unshield"
-                  : "Bridge"}
-          </button>
-        </div>
+                    {/* Alternative assets */}
+                    {NETWORKS[selectedNetwork].alternative_assets?.map(
+                      (token) => (
+                        <option
+                          key={token.name}
+                          title={`${token.name} (${token.address})`}
+                          value={token.name}
+                        >
+                          {token.name}
+                        </option>
+                      ),
+                    )}
+                  </select>
+                </div>
 
+                {activeTab === "shield" && NETWORKS[selectedNetwork].faucet && (
+                  <div className="balance">
+                    <a
+                      title="faucet link"
+                      target="_blank"
+                      href={NETWORKS[selectedNetwork].faucet}
+                    >
+                      {NETWORKS[selectedNetwork].name} faucet link
+                    </a>
+                  </div>
+                )}
+
+                {activeTab === "shield" && (
+                  <div className="balance">
+                    <a
+                      title="Documentation link"
+                      target="_blank"
+                      href={NETWORKS[selectedNetwork].docs}
+                    >
+                      {NETWORKS[selectedNetwork].name} Documentation
+                    </a>
+                  </div>
+                )}
+
+                {activeTab === "shield" && (
+                  <div className="secret-input">
+                    {isGeneratingSecret ? (
+                      <div className="secret-loading">
+                        <div className="loading-spinner"></div>
+                        <span>Generating shielded transaction...</span>
+                      </div>
+                    ) : generatedSecret ? (
+                      <div className="generated-secret">
+                        <span>Generated Secret: {generatedSecret}</span>
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+
+                {activeTab === "unshield" && (
+                  <div className="secret-input">
+                    <input
+                      type="password"
+                      placeholder="Enter withdrawal secret"
+                      value={secret}
+                      onChange={(e) => setSecret(e.target.value)}
+                    />
+                  </div>
+                )}
+              </div>
+              {error && <div className="error-message">{error}</div>}
+              <button
+                className={`swap-button ${isLoading ? "loading" : ""}`}
+                onClick={
+                  activeTab === "shield"
+                    ? handleShield
+                    : activeTab === "unshield"
+                      ? handleUnshield
+                      : activeTab === "bridge"
+                        ? handleBridge
+                        : () => {}
+                }
+                disabled={isLoading || !isWalletConnected}
+              >
+                {isLoading
+                  ? "Processing..."
+                  : activeTab === "shield"
+                    ? "Shield"
+                    : activeTab === "unshield"
+                      ? "Unshield"
+                      : activeTab === "bridge"
+                        ? "Bridge"
+                        : "Action"}
+              </button>
+              {/* Bottom tab bar */}
+              <div
+                className="tabs bottom-tabs"
+                style={{
+                  marginTop: "2rem",
+                  borderTop: "1px solid rgba(147, 51, 234, 0.2)",
+                  justifyContent: "center",
+                }}
+              >
+                <button
+                  className={`tab ${activeTab === "crosschainbridge" ? "active" : ""}`}
+                  onClick={() => setActiveTab("crosschainbridge")}
+                >
+                  Cross-Chain Bridge
+                </button>
+              </div>
+            </>
+          )}
+        </div>{" "}
+        {/* Close swap-box */}
         <button className="help-button" onClick={() => setShowHelp(true)}>
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -1371,7 +1565,6 @@ const txHash = await (window as any).talismanEth.request({
           </svg>
           Need Help? Click Here
         </button>
-
         <button className="terms-button" onClick={() => setShowTerms(true)}>
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -1403,7 +1596,6 @@ const txHash = await (window as any).talismanEth.request({
             🐦 Funded by Kusama Network 🐦
           </a>
         </div>
-
         {showHelp && (
           <div className="help-modal">
             <div className="help-modal-content">
@@ -1476,7 +1668,6 @@ const txHash = await (window as any).talismanEth.request({
             </div>
           </div>
         )}
-
         {showTerms && (
           <div className="help-modal">
             <div className="help-modal-content">
