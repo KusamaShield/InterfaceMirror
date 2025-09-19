@@ -18,6 +18,8 @@ import {
 import { ToastContainer, toast } from "react-toastify";
 import { ApiPromise, WsProvider } from "@polkadot/api";
 import { Transaction, parseEther, parseUnits } from "ethers";
+import { WalletAccount } from "@talismn/connect-wallets";
+import QRCode from "qrcode";
 //import init, { generate_commitment, test_console, test_proofo, generate_proof_data } from '../pkg/generate_zk_wasm'; // adjust path as needed
 import { Buffer } from 'buffer';
 
@@ -178,6 +180,224 @@ export function App() {
   const [ProofWorker, setProofWorker] = useState<any>(null);
   const [isGeneratingSecret, setIsGeneratingSecret] = useState(false);
   const [generatedSecret, setGeneratedSecret] = useState<string>("");
+
+  // Swap state variables
+  const [fromCurrency, setFromCurrency] = useState<string>("BTC");
+  const [toCurrency, setToCurrency] = useState<string>("DOT");
+  const [swapAmount, setSwapAmount] = useState<string>("");
+  const [exchangeRate, setExchangeRate] = useState<any>(null);
+  const [availablePairs, setAvailablePairs] = useState<any[]>([]);
+  const [swapStage, setSwapStage] = useState<"input" | "deposit" | "processing" | "completed">("input");
+  const [currentTrade, setCurrentTrade] = useState<any>(null);
+  const [qrCodeData, setQrCodeData] = useState<string>("");
+  const [userBalance, setUserBalance] = useState<string>("0");
+
+  // Available currencies - only currencies that can be swapped TO DOT
+  const availableCurrencies = [
+    { symbol: "DOT", name: "Polkadot", logo: "/coin_logos/images/dot.svg" },
+    { symbol: "AAVEETH", name: "AAVE (Ethereum)", logo: "/coin_logos/images/aaveeth.svg" },
+    { symbol: "ADA", name: "Cardano", logo: "/coin_logos/images/ada_dark.svg" },
+    { symbol: "APT", name: "Aptos", logo: "/coin_logos/images/apt_dark.svg" },
+    { symbol: "ARB", name: "Arbitrum", logo: "/coin_logos/images/arb.svg" },
+    { symbol: "ATOM", name: "Cosmos", logo: "/coin_logos/images/atom_dark.svg" },
+    { symbol: "AVAX", name: "Avalanche", logo: "/coin_logos/images/avax.svg" },
+    { symbol: "BAT", name: "Basic Attention Token", logo: "/coin_logos/images/bat.svg" },
+    { symbol: "BCH", name: "Bitcoin Cash", logo: "/coin_logos/images/bch.svg" },
+    { symbol: "BNBOPBNB", name: "BNB (OpBNB)", logo: "/coin_logos/images/wbnbopbnb.svg" },
+    { symbol: "BSC", name: "Binance Smart Chain", logo: "/coin_logos/images/bsc.svg" },
+    { symbol: "BTC", name: "Bitcoin", logo: "/coin_logos/images/btc.svg" },
+    { symbol: "BTCBSC", name: "Bitcoin (BSC)", logo: "/coin_logos/images/btcbsc.svg" },
+    { symbol: "BTT", name: "BitTorrent", logo: "/coin_logos/images/btt_dark.svg" },
+    { symbol: "CAKE", name: "PancakeSwap", logo: "/coin_logos/images/cake.svg" },
+    { symbol: "DAIBSC", name: "DAI (BSC)", logo: "/coin_logos/images/daibsc.svg" },
+    { symbol: "DAIETH", name: "DAI (Ethereum)", logo: "/coin_logos/images/daieth.svg" },
+    { symbol: "DAIMATIC", name: "DAI (Polygon)", logo: "/coin_logos/images/daimatic.svg" },
+    { symbol: "DASH", name: "Dash", logo: "/coin_logos/images/dash.svg" },
+    { symbol: "DOGE", name: "Dogecoin", logo: "/coin_logos/images/doge.svg" },
+    { symbol: "ETC", name: "Ethereum Classic", logo: "/coin_logos/images/etc.svg" },
+    { symbol: "ETH", name: "Ethereum", logo: "/coin_logos/images/eth_dark.svg" },
+    { symbol: "ETHARBITRUM", name: "Ethereum (Arbitrum)", logo: "/coin_logos/images/etharbitrum_dark.svg" },
+    { symbol: "ETHBASE", name: "Ethereum (Base)", logo: "/coin_logos/images/ethbase_dark.svg" },
+    { symbol: "ETHBSC", name: "Ethereum (BSC)", logo: "/coin_logos/images/ethbsc_dark.svg" },
+    { symbol: "ETHOP", name: "Ethereum (Optimism)", logo: "/coin_logos/images/ethop_dark.svg" },
+    { symbol: "ETHZKSYNC", name: "Ethereum (zkSync)", logo: "/coin_logos/images/ethzksync_dark.svg" },
+    { symbol: "KCS", name: "KuCoin Token", logo: "/coin_logos/images/kcs.svg" },
+    { symbol: "LINK", name: "Chainlink", logo: "/coin_logos/images/link.svg" },
+    { symbol: "LTC", name: "Litecoin", logo: "/coin_logos/images/ltc.svg" },
+    { symbol: "MANAETH", name: "MANA (Ethereum)", logo: "/coin_logos/images/manaeth.svg" },
+    { symbol: "PAXGETH", name: "PAX Gold (Ethereum)", logo: "/coin_logos/images/paxgeth.svg" },
+    { symbol: "PEPEETH", name: "PEPE (Ethereum)", logo: "/coin_logos/images/pepeeth.svg" },
+    { symbol: "POL", name: "Polygon", logo: "/coin_logos/images/pol.svg" },
+    { symbol: "POLETH", name: "Polygon (Ethereum)", logo: "/coin_logos/images/poleth.svg" },
+    { symbol: "S", name: "S Token", logo: "/coin_logos/images/s.svg" },
+    { symbol: "SHIB", name: "Shiba Inu", logo: "/coin_logos/images/shib.svg" },
+    { symbol: "SOL", name: "Solana", logo: "/coin_logos/images/sol.svg" },
+    { symbol: "TON", name: "Toncoin", logo: "/coin_logos/images/ton.svg" },
+    { symbol: "TRX", name: "TRON", logo: "/coin_logos/images/trx.svg" },
+    { symbol: "TUSD", name: "TrueUSD", logo: "/coin_logos/images/tusd.svg" },
+    { symbol: "TWTBSC", name: "Trust Wallet Token (BSC)", logo: "/coin_logos/images/twtbsc.svg" },
+    { symbol: "USDCARBITRUM", name: "USDC (Arbitrum)", logo: "/coin_logos/images/usdcarbitrum.svg" },
+    { symbol: "USDCETH", name: "USDC (Ethereum)", logo: "/coin_logos/images/usdceth.svg" },
+    { symbol: "USDCSOL", name: "USDC (Solana)", logo: "/coin_logos/images/usdcsol.svg" },
+    { symbol: "USDP", name: "Pax Dollar", logo: "/coin_logos/images/usdp.svg" },
+    { symbol: "USDT", name: "Tether", logo: "/coin_logos/images/usdt.svg" },
+    { symbol: "USDTARBITRUM", name: "USDT (Arbitrum)", logo: "/coin_logos/images/usdtarbitrum.svg" },
+    { symbol: "USDTBSC", name: "USDT (BSC)", logo: "/coin_logos/images/usdtbsc.svg" },
+    { symbol: "USDTMATIC", name: "USDT (Polygon)", logo: "/coin_logos/images/usdtmatic.svg" },
+    { symbol: "USDTSOL", name: "USDT (Solana)", logo: "/coin_logos/images/usdtsol.svg" },
+    { symbol: "USDTTRC", name: "USDT (TRON)", logo: "/coin_logos/images/usdttrc.svg" },
+    { symbol: "VET", name: "VeChain", logo: "/coin_logos/images/vet.svg" },
+    { symbol: "WBNBBSC", name: "Wrapped BNB (BSC)", logo: "/coin_logos/images/wbnbbsc.svg" },
+    { symbol: "WETHARBITRUM", name: "Wrapped ETH (Arbitrum)", logo: "/coin_logos/images/wetharbitrum.svg" },
+    { symbol: "WETHBASE", name: "Wrapped ETH (Base)", logo: "/coin_logos/images/wethbase_dark.svg" },
+    { symbol: "WETHETH", name: "Wrapped ETH (Ethereum)", logo: "/coin_logos/images/wetheth_dark.svg" },
+    { symbol: "WSOL", name: "Wrapped SOL", logo: "/coin_logos/images/wsol.svg" },
+    { symbol: "XLM", name: "Stellar", logo: "/coin_logos/images/xlm_dark.svg" },
+    { symbol: "XMR", name: "Monero", logo: "/coin_logos/images/xmr.svg" },
+    { symbol: "XRP", name: "Ripple", logo: "/coin_logos/images/xrp.svg" },
+    { symbol: "XTZ", name: "Tezos", logo: "/coin_logos/images/xtz.svg" },
+    { symbol: "ZEC", name: "Zcash", logo: "/coin_logos/images/zec.svg" },
+    { symbol: "ZRX", name: "0x Protocol", logo: "/coin_logos/images/zrx_dark.svg" }
+  ];
+
+  // Network-specific configurations
+  const getNetworkType = (networkKey: string) => {
+    if (networkKey === "kusama") return "mainnet";
+    return "testnet";
+  };
+
+  const isMainnet = (networkKey: string) => getNetworkType(networkKey) === "mainnet";
+  const isTestnet = (networkKey: string) => getNetworkType(networkKey) === "testnet";
+
+  // Network-specific currency lists
+  const getAvailableCurrencies = (networkKey: string) => {
+    if (isMainnet(networkKey)) {
+      // Kusama AssetHub - all swap currencies
+      return availableCurrencies;
+    } else {
+      // Testnets - only PAS, WND, and DEV routes (no KSM or DOT)
+      return [
+        { symbol: "PAS", name: "Paseo", logo: "/coin_logos/images/pas.svg" },
+        { symbol: "WND", name: "Westend", logo: "/coin_logos/images/wnd.svg" },
+        { symbol: "DEV", name: "Development", logo: "/coin_logos/images/dev.svg" }
+      ];
+    }
+  };
+
+  // Get bridge functionality type
+  const getBridgeType = (networkKey: string) => {
+    return isMainnet(networkKey) ? "swap" : "bridge";
+  };
+
+  // Get bridge title
+  const getBridgeTitle = (networkKey: string) => {
+    return isMainnet(networkKey) ? "Bridge & Swap" : "Bridge";
+  };
+
+  // Function to get the network name for a currency
+  const getNetworkForCurrency = (currency: string) => {
+    // Map specific currencies to their networks
+    const currencyNetworkMap: { [key: string]: string } = {
+      // Ethereum and ERC-20 tokens
+      "ETH": "Ethereum",
+      "USDCETH": "Ethereum",
+      "DAIETH": "Ethereum", 
+      "USDT": "Ethereum", // Default USDT to Ethereum
+      "USDTETH": "Ethereum",
+      "WETHETH": "Ethereum",
+      "AAVEETH": "Ethereum",
+      "MANAETH": "Ethereum",
+      "PAXGETH": "Ethereum",
+      "PEPEETH": "Ethereum",
+      "POLETH": "Ethereum",
+      
+      // Bitcoin
+      "BTC": "Bitcoin",
+      
+      // BSC tokens
+      "ETHBSC": "BNB Smart Chain",
+      "BTCBSC": "BNB Smart Chain", 
+      "DAIBSC": "BNB Smart Chain",
+      "USDTBSC": "BNB Smart Chain",
+      "WBNBBSC": "BNB Smart Chain",
+      "TWTBSC": "BNB Smart Chain",
+      "BSC": "BNB Smart Chain",
+      "CAKE": "BNB Smart Chain",
+      
+      // Arbitrum
+      "ETHARBITRUM": "Arbitrum",
+      "USDCARBITRUM": "Arbitrum",
+      "USDTARBITRUM": "Arbitrum", 
+      "WETHARBITRUM": "Arbitrum",
+      "ARB": "Arbitrum",
+      
+      // Polygon
+      "DAIMATIC": "Polygon",
+      "USDTMATIC": "Polygon",
+      "POL": "Polygon",
+      
+      // Solana
+      "SOL": "Solana",
+      "USDCSOL": "Solana",
+      "USDTSOL": "Solana",
+      "WSOL": "Solana",
+      
+      // Base
+      "ETHBASE": "Base",
+      "WETHBASE": "Base",
+      
+      // Optimism
+      "ETHOP": "Optimism",
+      
+      // zkSync
+      "ETHZKSYNC": "zkSync",
+      
+      // OpBNB
+      "BNBOPBNB": "OpBNB",
+      
+      // TRON
+      "TRX": "TRON",
+      "USDTTRC": "TRON",
+      
+      // Other networks
+      "ATOM": "Cosmos",
+      "AVAX": "Avalanche", 
+      "ADA": "Cardano",
+      "DOGE": "Dogecoin",
+      "LTC": "Litecoin",
+      "XRP": "Ripple",
+      "XLM": "Stellar",
+      "XTZ": "Tezos",
+      "VET": "VeChain",
+      "ETC": "Ethereum Classic",
+      "DASH": "Dash",
+      "ZEC": "Zcash",
+      "XMR": "Monero",
+      "LINK": "Chainlink",
+      "BAT": "Basic Attention Token",
+      "BCH": "Bitcoin Cash",
+      "BTT": "BitTorrent",
+      "KCS": "KuCoin",
+      "TON": "TON",
+      "APT": "Aptos",
+      "SHIB": "Ethereum", // SHIB is on Ethereum
+      "TUSD": "Ethereum", // Assuming TUSD is on Ethereum
+      "USDP": "Ethereum", // Assuming USDP is on Ethereum
+      "ZRX": "Ethereum", // 0x Protocol is on Ethereum
+      "S": "Unknown Network",
+      
+      // Polkadot ecosystem
+      "DOT": "Polkadot",
+      "PAS": "Paseo Testnet",
+      "WND": "Westend Testnet", 
+      "DEV": "Moonbeam Testnet"
+    };
+
+    return currencyNetworkMap[currency] || "Unknown Network";
+  };
+
+  // Swap API base URL - will be deployed to public endpoint
+  const SWAP_API_BASE = "http://localhost:5001";
 
   useEffect(() => {
     if (!isWasmLoaded) {
@@ -1234,6 +1454,175 @@ export function App() {
     // console.log(`generated transaction: `, transacto.toHex())
   };
 
+  // Swap-related functions
+  const fetchExchangeRate = async () => {
+    if (!swapAmount || !fromCurrency || !toCurrency) return;
+    
+    // Prevent DOT to DOT swaps
+    if (fromCurrency === "DOT" && toCurrency === "DOT") {
+      setError("Cannot swap DOT to DOT");
+      return;
+    }
+
+    try {
+      const response = await fetch(`${SWAP_API_BASE}/exchange_rate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          fromCcy: fromCurrency,
+          toCcy: toCurrency,
+          amount: parseFloat(swapAmount),
+        }),
+      });
+
+      const data = await response.json();
+      if (data.status === "good" && data.response) {
+        const apiResponse = data.response;
+        if (apiResponse.code === 0 && apiResponse.msg === "OK") {
+          // Transform the API response to match our UI expectations
+          const transformedRate = {
+            rate: apiResponse.data.to.rate,
+            to_amount: apiResponse.data.to.amount,
+            from_amount: apiResponse.data.from.amount,
+            from_code: apiResponse.data.from.code,
+            to_code: apiResponse.data.to.code,
+            usd_value: apiResponse.data.to.usd
+          };
+          setExchangeRate(transformedRate);
+        } else {
+          setError("Invalid exchange rate response");
+        }
+      } else {
+        setError(data.error || "Failed to fetch exchange rate");
+      }
+    } catch (err) {
+      setError("Failed to fetch exchange rate");
+      console.error("Exchange rate error:", err);
+    }
+  };
+
+  const createSwap = async () => {
+    if (!swapAmount || !fromCurrency || !toCurrency || !evmAddress) {
+      toast.error("Please fill in all required fields");
+      return;
+    }
+
+    // Prevent DOT to DOT swaps
+    if (fromCurrency === "DOT" && toCurrency === "DOT") {
+      toast.error("Cannot swap DOT to DOT - please select different currencies");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const response = await fetch(`${SWAP_API_BASE}/trade`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          fromCcy: fromCurrency,
+          toCcy: toCurrency,
+          amount: parseFloat(swapAmount),
+          destination_addres: evmAddress,
+        }),
+      });
+
+      const data = await response.json();
+      if (data.status === "trade created :)") {
+        setCurrentTrade(data.trade);
+        setSwapStage("deposit");
+        
+        // Generate QR code for deposit address
+        const qrData = await QRCode.toDataURL(data.trade.deposit);
+        setQrCodeData(qrData);
+        
+        toast.success("Swap created successfully!");
+      } else {
+        setError(data.error || "Failed to create swap");
+      }
+    } catch (err) {
+      setError("Failed to create swap");
+      console.error("Swap creation error:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const checkSwapStatus = async () => {
+    if (!currentTrade?.trade_id) return;
+
+    try {
+      const response = await fetch(`${SWAP_API_BASE}/order-status`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          orderid: currentTrade.trade_id,
+        }),
+      });
+
+      const data = await response.json();
+      if (data.msg === "found trade") {
+        setSwapStage("completed");
+        toast.success("Swap completed!");
+      }
+    } catch (err) {
+      console.error("Status check error:", err);
+    }
+  };
+
+  const resetSwap = () => {
+    setSwapStage("input");
+    setCurrentTrade(null);
+    setExchangeRate(null);
+    setQrCodeData("");
+    setSwapAmount("");
+  };
+
+  // Reset currencies when network changes
+  useEffect(() => {
+    const networkCurrencies = getAvailableCurrencies(selectedNetwork);
+    const networkSymbols = networkCurrencies.map(c => c.symbol);
+    
+    // Set specific defaults for Kusama AssetHub mainnet
+    if (selectedNetwork === "kusama") {
+      // For Kusama mainnet, set USDT as default from currency and DOT as default to currency
+      setFromCurrency("USDT");
+      setToCurrency("DOT");
+    } else {
+      // For other networks, reset to valid currencies if current selection is not available
+      if (!networkSymbols.includes(fromCurrency)) {
+        setFromCurrency(networkSymbols[0] || "PAS");
+      }
+      if (!networkSymbols.includes(toCurrency)) {
+        setToCurrency(networkSymbols[1] || networkSymbols[0] || "PAS");
+      }
+    }
+    
+    // Reset exchange rate when network changes
+    setExchangeRate(null);
+  }, [selectedNetwork]);
+
+  // Auto-refresh exchange rate when inputs change (only for mainnet)
+  useEffect(() => {
+    if (activeTab === "bridge" && swapAmount && fromCurrency && toCurrency && isMainnet(selectedNetwork)) {
+      const timer = setTimeout(fetchExchangeRate, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [swapAmount, fromCurrency, toCurrency, activeTab, selectedNetwork]);
+
+  // Auto-refresh swap status during processing
+  useEffect(() => {
+    if (swapStage === "processing" && currentTrade?.trade_id) {
+      const interval = setInterval(checkSwapStatus, 10000); // Check every 10 seconds
+      return () => clearInterval(interval);
+    }
+  }, [swapStage, currentTrade]);
+
   return (
     <div className="App">
       <ToastContainer />
@@ -1327,7 +1716,7 @@ export function App() {
               className={`tab ${activeTab === "bridge" ? "active" : ""}`}
               onClick={() => setActiveTab("bridge")}
             >
-              Bridge
+              {getBridgeTitle(selectedNetwork)}
             </button>
           </div>
           {/* Tab content */}
@@ -1359,51 +1748,192 @@ export function App() {
             <>
               <div className="input-group">
                 {activeTab === "bridge" && (
-                  <div className="chain-selection">
-                    <div className="chain-input">
-                      <label>From Chain:</label>
-                      <select
-                        value={fromNetwork}
-                        onChange={(e) =>
-                          setfromNetwork(
-                            e.target.value as keyof typeof NETWORKS,
-                          )
-                        }
-                      >
-                        {Object.entries(xcm_chains).map(([key, network]) => (
-                          <option key={network.name} value={network.name}>
-                            {network.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="chain-input">
-                      <label>To Chain:</label>
-                      <select
-                        value={toNetwork}
-                        onChange={(e) =>
-                          settoNetwork(e.target.value as keyof typeof NETWORKS)
-                        }
-                      >
-                        {Object.entries(xcm_chains).map(([key, network]) => (
-                          <option key={network.name} value={network.name}>
-                            {network.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <a
-                      href="https://kusamashield.codeberg.page/xcm.html"
-                      target="_blank"
-                      title="XCM transfer how-to link"
-                    >
-                      Documentation link
-                    </a>
+                  <div className="swap-interface">
+                    {swapStage === "input" && (
+                      <>
+                        <div className="currency-selection">
+                          <div className="currency-input">
+                            <label>From:</label>
+                            <select
+                              value={fromCurrency}
+                              onChange={(e) => {
+                                const newFromCurrency = e.target.value;
+                                setFromCurrency(newFromCurrency);
+                                // Prevent same currency to same currency swaps
+                                if (newFromCurrency === toCurrency) {
+                                  const availableCurrencies = getAvailableCurrencies(selectedNetwork);
+                                  const filteredCurrencies = availableCurrencies.filter(c => c.symbol !== newFromCurrency);
+                                  if (filteredCurrencies.length > 0) {
+                                    setToCurrency(filteredCurrencies[0].symbol);
+                                  }
+                                }
+                              }}
+                              className="currency-select"
+                            >
+                              {getAvailableCurrencies(selectedNetwork).map((currency) => (
+                                <option key={currency.symbol} value={currency.symbol}>
+                                  {currency.symbol} - {currency.name}
+                                </option>
+                              ))}
+                            </select>
+                            <img 
+                              src={getAvailableCurrencies(selectedNetwork).find(c => c.symbol === fromCurrency)?.logo} 
+                              alt={fromCurrency}
+                              className="currency-logo"
+                              style={{ width: "24px", height: "24px", marginLeft: "8px" }}
+                            />
+                          </div>
+
+                          <div className="swap-arrow" onClick={() => {
+                            const temp = fromCurrency;
+                            const newFromCurrency = toCurrency;
+                            const newToCurrency = temp;
+                            
+                            // Prevent DOT to DOT swaps
+                            if (newFromCurrency === "DOT" && newToCurrency === "DOT") {
+                              // Don't swap if both would be DOT
+                              return;
+                            }
+                            
+                            setFromCurrency(newFromCurrency);
+                            setToCurrency(newToCurrency);
+                          }}>
+                            ⇄
+                          </div>
+
+                          <div className="currency-input">
+                            <label>To:</label>
+                            <select
+                              value={toCurrency}
+                              onChange={(e) => {
+                                const newToCurrency = e.target.value;
+                                setToCurrency(newToCurrency);
+                              }}
+                              className="currency-select"
+                            >
+                              {getAvailableCurrencies(selectedNetwork)
+                                .filter(currency => currency.symbol !== fromCurrency)
+                                .map((currency) => (
+                                  <option key={currency.symbol} value={currency.symbol}>
+                                    {currency.symbol} - {currency.name}
+                                  </option>
+                                ))}
+                            </select>
+                            <img 
+                              src={getAvailableCurrencies(selectedNetwork).find(c => c.symbol === toCurrency)?.logo} 
+                              alt={toCurrency}
+                              className="currency-logo"
+                              style={{ width: "24px", height: "24px", marginLeft: "8px" }}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="amount-input">
+                          <label>Amount:</label>
+                          <input
+                            type="number"
+                            value={swapAmount}
+                            onChange={(e) => setSwapAmount(e.target.value)}
+                            placeholder={`Enter ${fromCurrency} amount`}
+                            step="0.00000001"
+                          />
+                          <div className="balance-display">
+                            Destination Balance: {userBalance} {toCurrency}
+                          </div>
+                        </div>
+
+                        {isMainnet(selectedNetwork) && exchangeRate && (
+                          <div className="exchange-rate-display">
+                            <div className="rate-info">
+                              <div>Rate: 1 {fromCurrency} = {exchangeRate.rate} {toCurrency}</div>
+                              <div>Source Chain: {getNetworkForCurrency(fromCurrency)}</div>
+                              <div>Destination Chain: {getNetworkForCurrency(toCurrency)}</div>
+                              <div>You will send: ~{exchangeRate.from_amount} {fromCurrency}</div>
+                              <div>You will receive: ~{exchangeRate.to_amount} {toCurrency}</div>
+                              <div className="fee-info">Fee: 0.6% (included in the floating rate)</div>
+                            </div>
+                          </div>
+                        )}
+
+                        {isTestnet(selectedNetwork) && (
+                          <div className="bridge-info">
+                            <div className="network-info">
+                              <div>From: {getNetworkForCurrency(fromCurrency)} ({fromCurrency})</div>
+                              <div>To: {getNetworkForCurrency(toCurrency)} ({toCurrency})</div>
+                            </div>
+                            <div className="info-box">
+                              <h4>XCM Bridge</h4>
+                              <p>Cross-chain transfers between {NETWORKS[selectedNetwork].asset} and other parachains</p>
+                              <p className="note">Exchange rates are determined by the destination network</p>
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {swapStage === "deposit" && currentTrade && (
+                      <div className="deposit-stage">
+                        <h3>Send {fromCurrency} to complete swap</h3>
+                        <div className="deposit-info">
+                          <div className="deposit-address">
+                            <label>Deposit Address:</label>
+                            <div className="address-container">
+                              <code>{currentTrade.deposit}</code>
+                              <button onClick={() => navigator.clipboard.writeText(currentTrade.deposit)}>
+                                📋
+                              </button>
+                            </div>
+                          </div>
+                          
+                          <div className="deposit-amount">
+                            <label>Send exactly:</label>
+                            <div className="amount-display">
+                              {currentTrade.in} {fromCurrency}
+                            </div>
+                          </div>
+
+                          {qrCodeData && (
+                            <div className="qr-code">
+                              <img src={qrCodeData} alt="Deposit Address QR Code" />
+                            </div>
+                          )}
+
+                          <div className="swap-progress">
+                            <button 
+                              onClick={() => setSwapStage("processing")}
+                              className="confirm-deposit-button"
+                            >
+                              I've sent the {fromCurrency}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {swapStage === "processing" && (
+                      <div className="processing-stage">
+                        <h3>Processing Swap...</h3>
+                        <div className="loading-spinner"></div>
+                        <p>Waiting for confirmation and processing your swap</p>
+                        <div className="trade-id">Trade ID: {currentTrade?.trade_id}</div>
+                      </div>
+                    )}
+
+                    {swapStage === "completed" && (
+                      <div className="completed-stage">
+                        <h3>✅ Swap Completed!</h3>
+                        <p>Your {toCurrency} has been sent to your address</p>
+                        <button onClick={resetSwap} className="new-swap-button">
+                          Start New Swap
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
 
-                <div className="token-input">
-                  <div className="amount-slider-container">
+                {activeTab !== "bridge" && (
+                  <div className="token-input">
+                    <div className="amount-slider-container">
                     <label>
                       Amount: {amount} {NETWORKS[selectedNetwork].asset}
                     </label>
@@ -1455,8 +1985,9 @@ export function App() {
                     )}
                   </select>
                 </div>
+                )}
 
-                {activeTab === "shield" && NETWORKS[selectedNetwork].faucet && (
+{activeTab === "shield" && NETWORKS[selectedNetwork].faucet && (
                   <div className="balance">
                     <a
                       title="faucet link"
@@ -1507,6 +2038,7 @@ export function App() {
                 )}
               </div>
               {error && <div className="error-message">{error}</div>}
+              {(activeTab !== "bridge" || swapStage === "input") && (
               <button
                 className={`swap-button ${isLoading ? "loading" : ""}`}
                 onClick={
@@ -1515,7 +2047,7 @@ export function App() {
                     : activeTab === "unshield"
                       ? handleUnshield
                       : activeTab === "bridge"
-                        ? handleBridge
+                        ? (isMainnet(selectedNetwork) ? createSwap : handleBridge)
                         : () => {}
                 }
                 disabled={isLoading || !isWalletConnected}
@@ -1527,25 +2059,12 @@ export function App() {
                     : activeTab === "unshield"
                       ? "Unshield"
                       : activeTab === "bridge"
-                        ? "Bridge"
+                        ? (isMainnet(selectedNetwork) 
+                            ? (swapStage === "input" ? "Create Swap" : "Continue")
+                            : "Bridge Tokens")
                         : "Action"}
               </button>
-              {/* Bottom tab bar */}
-              <div
-                className="tabs bottom-tabs"
-                style={{
-                  marginTop: "2rem",
-                  borderTop: "1px solid rgba(147, 51, 234, 0.2)",
-                  justifyContent: "center",
-                }}
-              >
-                <button
-                  className={`tab ${activeTab === "crosschainbridge" ? "active" : ""}`}
-                  onClick={() => setActiveTab("crosschainbridge")}
-                >
-                  Cross-Chain Bridge
-                </button>
-              </div>
+              )}
             </>
           )}
         </div>{" "}
