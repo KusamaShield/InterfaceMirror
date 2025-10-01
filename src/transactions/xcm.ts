@@ -1,5 +1,5 @@
 import getaccounid32 from "./adresses";
-import isEvmAddress from "./adresses";
+import { isEvmAddress, eth2account32} from "./adresses";
 
 export const xcm_routes = [
   {
@@ -17,7 +17,218 @@ const supportedRoutes = [
   { from: "Paseo Assethub", to: "Paseo Hydration" },
   { from: "Paseo Assethub", to: "Paseo Pop" },
   { from: "Paseo Hub", to: "Paseo Relaychain" },
+  { from: "Kusama Assethub", to: "Polkadot Assethub" },
+  { from: "Polkadot Assethub", to: "Kusama Assethub" },
+  { from: "Polkadot Relay", to: "Polkadot Assethub" },
 ];
+
+interface XcmV3Junction {
+  type: string;
+  value: any;
+}
+
+interface XcmV3Multilocation {
+  parents: number;
+  interior: {
+    type: string;
+    value?: XcmV3Junction[];
+  };
+}
+
+// Mock token IDs for DOT and KSM on Polkadot Asset Hub (pah)
+const DOT_TOKEN_ID = "native::pah";
+const KSM_TOKEN_ID = "foreign-asset::pah::compressed_location";
+
+// Utility function to convert tokens to plancks (smallest units)
+function tokensToPlancks(amount: string, decimals: number): bigint {
+  const [integer, fractional = ""] = amount.split(".");
+  const fractionalPadded = fractional.padEnd(decimals, "0").slice(0, decimals);
+  return BigInt(integer + fractionalPadded);
+}
+
+export function eth2accountid32(ethaddress: string) {
+  return ethaddress + "eeeeeeeeeeeeeeeeeeeeeeee"; //0x02ca485f8a1c8b532f7ea5121723588f6a25aae0eeeeeeeeeeeeeeeeeeeeeeee
+}
+
+// Function to construct the swap call parameters with exact formatting and fee calculation
+function constructSwapCallFormatted(
+  tokenIdIn: string,
+  tokenIdOut: string,
+  amountIn: string,
+  amountOutMin: string,
+) {
+  // Determine decimals based on token type
+  const tokenInDecimals = tokenIdIn === DOT_TOKEN_ID ? 10 : 12; // DOT has 10 decimals, KSM has 12
+  const tokenOutDecimals = tokenIdOut === DOT_TOKEN_ID ? 10 : 12;
+
+  // Convert amounts to plancks
+  const totalInPlancks = tokensToPlancks(amountIn, tokenInDecimals);
+  const expectedOutPlancks = tokensToPlancks(amountOutMin, tokenOutDecimals);
+
+  // Calculate amounts to exactly match web UI output
+  // Web UI shows for 1.8 DOT -> 0.509398 KSM:
+  // amount_in: 17946000000 (after 0.3% fee: 1.8 * 0.997 = 1.7946 DOT)
+  // amount_out_min: 502176511942 (0.509398 KSM with slippage protection)
+
+  // Input: Apply exact 0.3% fee calculation
+  const amountInAfterFee = (totalInPlancks * 997n) / 1000n;
+
+  // Output: Use exact ratio from web UI output
+  // 502176511942 / 509398000000 = 0.985823 (approximately 1.42% slippage)
+  const exactOutputRatio = (502176511942n * 1000000000000n) / 509398000000n;
+  const amountOutMinAfterFee =
+    (expectedOutPlancks * exactOutputRatio) / 1000000000000n;
+
+  // Return the formatted output as requested
+  return {
+    amount_in: {
+      name: "amount_in",
+      type: "U128",
+      value: amountInAfterFee.toString(),
+    },
+    amount_out_min: {
+      name: "amount_out_min",
+      type: "U128",
+      value: amountOutMinAfterFee.toString(),
+    },
+  };
+}
+
+/* 
+	const amountInDOT = "1.4";
+	const amountOutMinKSM = "0.396183";
+  result output: {
+  amount_in: { name: 'amount_in', type: 'U128', value: '13958000000' },
+  amount_out_min: { name: 'amount_out_min', type: 'U128', value: '390566506014
+' }
+}
+
+*/
+function convertdotksmamount(amountInDOT: any, amountOutMinKSM: any) {
+  // Construct the swap call with exact formatting
+  const result = constructSwapCallFormatted(
+    DOT_TOKEN_ID,
+    KSM_TOKEN_ID,
+    amountInDOT,
+    amountOutMinKSM,
+  );
+  return result;
+}
+
+// reference: https://polkadot.js.org/apps/?rpc=wss%3A%2F%2Fasset-hub-polkadot.dotters.network#/extrinsics/decode/0x1f0b040202090300a10f0400010100f621771ddf37d482210b8c59617952eb1c2b40cfec55df47215231365186a05704040201090300076e27f2cd070000000000
+// KSM assethub Pollkadot to Kusama AH transfer
+export async function KSM2ah(
+  api: any,
+  swapamount: any,
+  destamount: any,
+  destination_address: string,
+) {
+  const converted_amount = convertdotksmamount(swapamount, destamount);
+  console.log(
+    `[KSM2ah] called with input:`,
+    converted_amount.amount_out_min.value,
+    destination_address,
+  );
+
+  // convert address
+  var destaddress;
+  if (isEvmAddress(destination_address)) {
+      destaddress = eth2account32(destination_address);
+  } else {
+      destaddress = getaccounid32(destination_address);
+  }
+  console.log(`destination address set as: `, destaddress);
+  const k2 = {
+    V4: {
+      parents: 2, // KSM comes from Kusama (different consensus)
+      interior: {
+        X2: [{ GlobalConsensus: "Kusama" }, { Parachain: 1000 }],
+      },
+    },
+  };
+
+  const beneficiary = {
+    V4: {
+      interior: {
+        X1: [
+          {
+            AccountId32: {
+              id: destaddress, //destination_address, 
+              network: null,
+            },
+          },
+        ],
+      },
+      parents: 0,
+    },
+  };
+
+  const versionedAssets7 = {
+    V4: [
+      {
+        fun: { Fungible: converted_amount.amount_out_min.value },
+        id: {
+          parents: 2,
+          interior: {
+            X1: [{ GlobalConsensus: "Kusama" }],
+          },
+        },
+      },
+    ],
+  };
+
+  console.log(`KSM2ah function output:`, k2, beneficiary, versionedAssets7);
+  return api.tx.polkadotXcm.transferAssets(
+    k2,
+    beneficiary,
+    versionedAssets7,
+    0,
+    { Unlimited: null },
+  );
+}
+
+// generate a dot to ksm swap tx
+export async function generate_dot2ksm(
+  api: any,
+  amountin: any,
+  amountout: any,
+  destination_address: string,
+) {
+  console.log(`[generate_dot2ksm]`, amountin, amountout, destination_address);
+  const converted_amount = convertdotksmamount(amountin, amountout);
+  const ksmMultiLocation = api
+    .createType("StagingXcmV4Location", {
+      parents: 2, // KSM comes from Kusama (different consensus)
+      interior: {
+        X1: [{ GlobalConsensus: "Kusama" }],
+      },
+    })
+    .toU8a();
+
+  const dotMultiLocation = api
+    .createType("StagingXcmV4Location", {
+      parents: 1, // DOT is parent native chain token
+      interior: {
+        here: null,
+      },
+    })
+    .toU8a();
+
+  console.log(
+    `assetConversion.swapExactTokensForTokens: `,
+    [dotMultiLocation, ksmMultiLocation],
+    converted_amount.amount_in.value, // tokens selling
+    converted_amount.amount_out_min.value, //tokens to get
+    destination_address,
+  );
+  return api.tx.assetConversion.swapExactTokensForTokens(
+    [dotMultiLocation, ksmMultiLocation],
+    converted_amount.amount_in.value, // tokens selling
+    converted_amount.amount_out_min.value, //tokens to get
+    destination_address,
+    true,
+  );
+}
 
 export async function generate_tx2(
   api: any,
@@ -100,6 +311,14 @@ export async function generate_tx2(
         { V3: [asset] },
         { fee_asset_item: 0 },
         { Unlimited: null },
+      );
+    //case "Kusama Assethub": // KSM > Polkadot ah
+    case "Polkadot Assethub": // Polkadot Assethub > Kusama Assethub
+      return api.tx.polkadotXcm.transferAssetsUsingTypeAndThen(
+        { V4: {} },
+        { V4: {} },
+        { LocalReserve: null },
+        {},
       );
 
     case "Paseo Assethub":

@@ -10,23 +10,22 @@ function toethhex(inputen: string) {
   return "0x" + BigInt(inputen).toString(16);
 }
 
-
-
 // generateCommitment v2
-export async function g2c(secret: string, 
-    asset: string,
-    amount: string,
-    leafIndex: string,
-    siblings: string[]) {
-
-    const inputs = {
-        secret: secret,
-        asset: asset,
-        amount: amount,
-        leafIndex: leafIndex,
-        siblings: siblings,
-        recipient: "0" // This can be set to 0 for commitment generation as it's public
-    };
+export async function g2c(
+  secret: string,
+  asset: string,
+  amount: string,
+  leafIndex: string,
+  siblings: string[],
+) {
+  const inputs = {
+    secret: secret,
+    asset: asset,
+    amount: amount,
+    leafIndex: leafIndex,
+    siblings: siblings,
+    recipient: "0", // This can be set to 0 for commitment generation as it's public
+  };
 
   const { proof, publicSignals } = await snarkjs.groth16.fullProve(
     {
@@ -36,31 +35,28 @@ export async function g2c(secret: string,
     "asset_0001.zkey",
   );
 
-    const calldata = await snarkjs.groth16.exportSolidityCallData(
-        proof,
-        publicSignals
-    );
+  const calldata = await snarkjs.groth16.exportSolidityCallData(
+    proof,
+    publicSignals,
+  );
 
+  // Format the proof for Ethereum
+  const formattedCall = [
+    [toethhex(proof.pi_a[0]), toethhex(proof.pi_a[1])],
+    [
+      [toethhex(proof.pi_b[0][0]), toethhex(proof.pi_b[0][1])],
+      [toethhex(proof.pi_b[1][0]), toethhex(proof.pi_b[1][1])],
+    ],
+    [toethhex(proof.pi_c[0]), toethhex(proof.pi_c[1])],
+    publicSignals.map((signal) => toethhex(signal)),
+  ];
 
-	    // Format the proof for Ethereum
-    const formattedCall = [
-        [toethhex(proof.pi_a[0]), toethhex(proof.pi_a[1])],
-        [
-            [toethhex(proof.pi_b[0][0]), toethhex(proof.pi_b[0][1])],
-            [toethhex(proof.pi_b[1][0]), toethhex(proof.pi_b[1][1])],
-        ],
-        [toethhex(proof.pi_c[0]), toethhex(proof.pi_c[1])],
-        publicSignals.map((signal) => toethhex(signal)),
-    ];
-
-    return {
-        proof: formattedCall,
-        publicSignals: publicSignals,
-        calldata: JSON.parse("[" + calldata + "]")
-    };
-
+  return {
+    proof: formattedCall,
+    publicSignals: publicSignals,
+    calldata: JSON.parse("[" + calldata + "]"),
+  };
 }
-
 
 // WITHDRAW FUNCTION (generates full zk proof for withdraw)
 export async function zkWithdraw({
@@ -94,10 +90,13 @@ export async function zkWithdraw({
   const { proof, publicSignals } = await snarkjs.groth16.fullProve(
     input,
     "main.wasm",
-    "main_0000.zkey"
+    "main_0000.zkey",
   );
 
-  const calldata = await snarkjs.groth16.exportSolidityCallData(proof, publicSignals);
+  const calldata = await snarkjs.groth16.exportSolidityCallData(
+    proof,
+    publicSignals,
+  );
 
   const formattedProof = [
     [toethhex(proof.pi_a[0]), toethhex(proof.pi_a[1])],
@@ -141,7 +140,7 @@ export async function zkDeposit({
   const { proof, publicSignals } = await snarkjs.groth16.fullProve(
     input,
     "main.wasm",
-    "main_0000.zkey"
+    "main_0000.zkey",
   );
 
   const [root, nullifier, publicAsset, publicAmount, , , ,] = publicSignals;
@@ -154,9 +153,6 @@ export async function zkDeposit({
     publicSignals,
   };
 }
-
-
-
 
 export async function generateCommitment(secret: string) {
   // const poseidon = await circomlibjs.buildPoseidon();

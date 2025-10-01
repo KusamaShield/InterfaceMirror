@@ -1,5 +1,5 @@
 import "./App.css";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { WalletSelect } from "@talismn/connect-components";
 import { shieldTokens, fakeshield } from "./transactions/shield";
 import { isEvmAddress } from "./transactions/adresses";
@@ -7,7 +7,13 @@ import SHIELD_CONTRACT_ADDRESS from "./transactions/shield";
 import fakeerc20asset from "./transactions/shield";
 import { make_deposit_tx, gen_tx_no_sig } from "./transactions/txgen";
 import { unshieldTokens, fetchKzgParams } from "./transactions/unshield";
-import { generate_tx2, xcm_chains } from "./transactions/xcm";
+import {
+  generate_tx2,
+  xcm_chains,
+  KSM2ah,
+  generate_dot2ksm,
+  eth2accountid32,
+} from "./transactions/xcm";
 import { ZKPService } from "./transactions/zklib";
 import {
   westend_pool,
@@ -17,14 +23,15 @@ import {
 } from "./transactions/zkg16";
 import { ToastContainer, toast } from "react-toastify";
 import { ApiPromise, WsProvider } from "@polkadot/api";
+import { u8aToHex } from "@polkadot/util";
 import { Transaction, parseEther, parseUnits } from "ethers";
 import { WalletAccount } from "@talismn/connect-wallets";
 import QRCode from "qrcode";
 //import init, { generate_commitment, test_console, test_proofo, generate_proof_data } from '../pkg/generate_zk_wasm'; // adjust path as needed
-import { Buffer } from 'buffer';
+import { Buffer } from "buffer";
 
 // Polyfill for the global Buffer object
-if (typeof window !== 'undefined') {
+if (typeof window !== "undefined") {
   (window as any).Buffer = Buffer;
 }
 import {
@@ -93,17 +100,17 @@ const NETWORKS = {
     faucet: "https://faucet.polkadot.io/?parachain=1111",
     block_explorer: "https://blockscout-passet-hub.parity-testnet.parity.io/",
     vk_address: "0xF3A0c5DaE0Cb99f9e4ED56D77BAC094517a05166",
-    shield_address: "0xa1Ab66CB2634007a5450643F0a240f8E8062178C",//"0xA3d1E0e2AAEFAf6E8a20144E433e123BC0cC5ef8",
+    shield_address: "0xa1Ab66CB2634007a5450643F0a240f8E8062178C", //"0xA3d1E0e2AAEFAf6E8a20144E433e123BC0cC5ef8",
     abi: [
-  "function deposit3(address asset, uint256 amount, bytes32 commitment) external payable",
-  "function withdrawETH(uint256[2] calldata a, uint256[2][2] calldata b, uint256[2] calldata c, uint256[6] calldata pubSignals) external",
-  "function withdrawWithAsset(uint256[2] calldata a, uint256[2][2] calldata b, uint256[2] calldata c, uint256[6] calldata pubSignals, address asset) external",
-  "function currentRoot() external view returns (uint256)",
-  "function nullifiers(bytes32) external view returns (address asset, uint256 amount, bytes32 commitment, bool isUsed)",
-  "function escrow(address) external view returns (uint256)",
-  "function isNullifierUsed(uint256 nullifier) external view returns (bool)",
-  "function getNullifierInfo(uint256 nullifier) external view returns (address asset, uint256 amount, bytes32 commitment, bool isUsed)"
-],
+      "function deposit3(address asset, uint256 amount, bytes32 commitment) external payable",
+      "function withdrawETH(uint256[2] calldata a, uint256[2][2] calldata b, uint256[2] calldata c, uint256[6] calldata pubSignals) external",
+      "function withdrawWithAsset(uint256[2] calldata a, uint256[2][2] calldata b, uint256[2] calldata c, uint256[6] calldata pubSignals, address asset) external",
+      "function currentRoot() external view returns (uint256)",
+      "function nullifiers(bytes32) external view returns (address asset, uint256 amount, bytes32 commitment, bool isUsed)",
+      "function escrow(address) external view returns (uint256)",
+      "function isNullifierUsed(uint256 nullifier) external view returns (bool)",
+      "function getNullifierInfo(uint256 nullifier) external view returns (address asset, uint256 amount, bytes32 commitment, bool isUsed)",
+    ],
     docs: "https://kusamashield.codeberg.page/networks/PaseoAH.html",
   },
   paseo_assethub: {
@@ -126,34 +133,89 @@ const NETWORKS = {
     chain_id: 420420418,
     shield_address: "0xDC80565357D63eCa67F3f020b6DD1CE1fD0E1Ed8",
     abi: [
-  "function deposit3(address asset, uint256 amount, bytes32 commitment) external payable",
-  "function withdrawETH(uint256[2] calldata a, uint256[2][2] calldata b, uint256[2] calldata c, uint256[6] calldata pubSignals) external",
-  "function withdrawWithAsset(uint256[2] calldata a, uint256[2][2] calldata b, uint256[2] calldata c, uint256[6] calldata pubSignals, address asset) external",
-  "function currentRoot() external view returns (uint256)",
-  "function nullifiers(bytes32) external view returns (address asset, uint256 amount, bytes32 commitment, bool isUsed)",
-  "function escrow(address) external view returns (uint256)",
-  "function isNullifierUsed(uint256 nullifier) external view returns (bool)",
-  "function getNullifierInfo(uint256 nullifier) external view returns (address asset, uint256 amount, bytes32 commitment, bool isUsed)"
-],
+      "function deposit3(address asset, uint256 amount, bytes32 commitment) external payable",
+      "function withdrawETH(uint256[2] calldata a, uint256[2][2] calldata b, uint256[2] calldata c, uint256[6] calldata pubSignals) external",
+      "function withdrawWithAsset(uint256[2] calldata a, uint256[2][2] calldata b, uint256[2] calldata c, uint256[6] calldata pubSignals, address asset) external",
+      "function currentRoot() external view returns (uint256)",
+      "function nullifiers(bytes32) external view returns (address asset, uint256 amount, bytes32 commitment, bool isUsed)",
+      "function escrow(address) external view returns (uint256)",
+      "function isNullifierUsed(uint256 nullifier) external view returns (bool)",
+      "function getNullifierInfo(uint256 nullifier) external view returns (address asset, uint256 amount, bytes32 commitment, bool isUsed)",
+    ],
     block_explorer:
       "https://blockscout-kusama-asset-hub.parity-chains-scw.parity.io/",
     docs: "https://kusamashield.codeberg.page/networks/kusama.html",
   },
 };
 
-const MOONBASE_CHAIN_ID = 1287;
-
 const DAPP_NAME = "KSMSHIELD";
-const MOONBASE_RPC_URL = NETWORKS.moonbase.wsEndpoint;
-const MOONBASE_CURRENCY = {
-  name: "DEV",
-  symbol: "DEV",
-  decimals: 18,
-};
 
-function toHex(number) {
-  const hex = BigInt(number).toString(16);
-  return "0x" + hex.padStart(64, "0");
+function generateDot2KsmInput(dotAmount: any, ksmAmount: any) {
+  const DOT_DECIMALS = 10; // Polkadot has 10 decimal places (10^10)
+  const DOT_BASE_UNIT_FACTOR = 10n ** BigInt(DOT_DECIMALS); // 10000000000n
+
+  // User input: 0.5 DOT
+  const dotInputDecimal = "0.5";
+  // A library like 'bignumber.js' or 'decimal.js' is best for this,
+  // but for simple cases, you can use string manipulation or a helper function.
+
+  // Example using a string/BigInt conversion for 0.5 DOT:
+  // 0.5 * 10^10 = 5,000,000,000 plancks
+  const dotInputBase: bigint =
+    (BigInt(dotInputDecimal.replace(".", "")) * DOT_BASE_UNIT_FACTOR) / 10n; // Simple example
+
+  // estimated tx fees: 0.0022 DOT
+  //const feeDotDecimal = "0.0022";
+  // 0.0022 * 10^10 = 22,000,000 plancks
+  const feeDotBase: bigint = BigInt(22000000); // Pre-calculated or using a helper
+
+  // Pool commission: 0.0015 DOT
+  const poolCommissionBase: bigint = BigInt(15000000);
+
+  // Total Fees/Commission
+  const totalFeesBase: bigint = feeDotBase + poolCommissionBase;
+
+  console.log(`totalFeesBase:`, totalFeesBase);
+  function preciseDotToKsmConversion(dotAmount: number, ksmAmount: number) {
+    // Convert to integer math to avoid floating point precision issues
+    const dotRawTotal = BigInt(Math.round(dotAmount * 1e10)); // 0.5 DOT = 5000000000 | const dotDecimals = 10;
+    const ksmRawExpected = BigInt(Math.round(ksmAmount * 1e12)); // 0.139683975037 KSM = 139683975037 |  const ksmDecimals = 12;
+
+    // Calculate fees in raw units (0.3% total)
+    const totalFeeRaw = (dotRawTotal * 3n) / 1000n; // 0.3% fee
+    const poolFeeRaw = (dotRawTotal * 15n) / 10000n; // 0.15% fee
+
+    // DOT amount after fees
+    const dotRawAfterFee = dotRawTotal - totalFeeRaw;
+
+    return {
+      amount_in: dotRawAfterFee.toString(),
+      amount_out_min: ksmRawExpected.toString(),
+      fees: {
+        total: Number(totalFeeRaw) / 1e10,
+        pool: Number(poolFeeRaw) / 1e10,
+      },
+    };
+  }
+
+  // Test
+  console.log(`calling preciseDotToKsmConversion`, dotAmount, ksmAmount);
+  const preciseResult = preciseDotToKsmConversion(dotAmount, ksmAmount);
+  console.log("Precise DOT raw:", preciseResult.amount_in); // 4985000000
+  console.log("Precise KSM raw:", preciseResult.amount_out_min); // 139683975037
+  console.log("Precise fees:", preciseResult.fees);
+
+  const fee = 0.003; // 0.3% fee
+  const dotAfterFee = dotAmount * (1 - fee);
+
+  // Convert to raw values (using correct decimals)
+  const dotRaw = BigInt(Math.round(dotAfterFee * 1e10)).toString();
+  const ksmRaw = BigInt(Math.round(ksmAmount * 1e12)).toString();
+
+  return {
+    amount_in: dotRaw, // DOT amount after fee in raw
+    amount_out_min: ksmRaw, // Minimum KSM expected in raw
+  };
 }
 
 export function App() {
@@ -187,7 +249,10 @@ export function App() {
   const [swapAmount, setSwapAmount] = useState<string>("");
   const [exchangeRate, setExchangeRate] = useState<any>(null);
   const [availablePairs, setAvailablePairs] = useState<any[]>([]);
-  const [swapStage, setSwapStage] = useState<"input" | "deposit" | "processing" | "completed">("input");
+  const [swapStage, setSwapStage] = useState<
+    "input" | "deposit" | "processing" | "completed"
+  >("input");
+  const [tradedata, setTradeData] = useState<any>(null);
   const [currentTrade, setCurrentTrade] = useState<any>(null);
   const [qrCodeData, setQrCodeData] = useState<string>("");
   const [userBalance, setUserBalance] = useState<string>("0");
@@ -195,69 +260,218 @@ export function App() {
   // Available currencies - only currencies that can be swapped TO DOT
   const availableCurrencies = [
     { symbol: "DOT", name: "Polkadot", logo: "/coin_logos/images/dot.svg" },
-    { symbol: "AAVEETH", name: "AAVE (Ethereum)", logo: "/coin_logos/images/aaveeth.svg" },
+    { symbol: "KSM", name: "Kusama", logo: "/coin_logos/images/kusama.svg" },
+    {
+      symbol: "AAVEETH",
+      name: "AAVE (Ethereum)",
+      logo: "/coin_logos/images/aaveeth.svg",
+    },
     { symbol: "ADA", name: "Cardano", logo: "/coin_logos/images/ada_dark.svg" },
     { symbol: "APT", name: "Aptos", logo: "/coin_logos/images/apt_dark.svg" },
     { symbol: "ARB", name: "Arbitrum", logo: "/coin_logos/images/arb.svg" },
-    { symbol: "ATOM", name: "Cosmos", logo: "/coin_logos/images/atom_dark.svg" },
+    {
+      symbol: "ATOM",
+      name: "Cosmos",
+      logo: "/coin_logos/images/atom_dark.svg",
+    },
     { symbol: "AVAX", name: "Avalanche", logo: "/coin_logos/images/avax.svg" },
-    { symbol: "BAT", name: "Basic Attention Token", logo: "/coin_logos/images/bat.svg" },
+    {
+      symbol: "BAT",
+      name: "Basic Attention Token",
+      logo: "/coin_logos/images/bat.svg",
+    },
     { symbol: "BCH", name: "Bitcoin Cash", logo: "/coin_logos/images/bch.svg" },
-    { symbol: "BNBOPBNB", name: "BNB (OpBNB)", logo: "/coin_logos/images/wbnbopbnb.svg" },
-    { symbol: "BSC", name: "Binance Smart Chain", logo: "/coin_logos/images/bsc.svg" },
+    {
+      symbol: "BNBOPBNB",
+      name: "BNB (OpBNB)",
+      logo: "/coin_logos/images/wbnbopbnb.svg",
+    },
+    {
+      symbol: "BSC",
+      name: "Binance Smart Chain",
+      logo: "/coin_logos/images/bsc.svg",
+    },
     { symbol: "BTC", name: "Bitcoin", logo: "/coin_logos/images/btc.svg" },
-    { symbol: "BTCBSC", name: "Bitcoin (BSC)", logo: "/coin_logos/images/btcbsc.svg" },
-    { symbol: "BTT", name: "BitTorrent", logo: "/coin_logos/images/btt_dark.svg" },
-    { symbol: "CAKE", name: "PancakeSwap", logo: "/coin_logos/images/cake.svg" },
-    { symbol: "DAIBSC", name: "DAI (BSC)", logo: "/coin_logos/images/daibsc.svg" },
-    { symbol: "DAIETH", name: "DAI (Ethereum)", logo: "/coin_logos/images/daieth.svg" },
-    { symbol: "DAIMATIC", name: "DAI (Polygon)", logo: "/coin_logos/images/daimatic.svg" },
+    {
+      symbol: "BTCBSC",
+      name: "Bitcoin (BSC)",
+      logo: "/coin_logos/images/btcbsc.svg",
+    },
+    {
+      symbol: "BTT",
+      name: "BitTorrent",
+      logo: "/coin_logos/images/btt_dark.svg",
+    },
+    {
+      symbol: "CAKE",
+      name: "PancakeSwap",
+      logo: "/coin_logos/images/cake.svg",
+    },
+    {
+      symbol: "DAIBSC",
+      name: "DAI (BSC)",
+      logo: "/coin_logos/images/daibsc.svg",
+    },
+    {
+      symbol: "DAIETH",
+      name: "DAI (Ethereum)",
+      logo: "/coin_logos/images/daieth.svg",
+    },
+    {
+      symbol: "DAIMATIC",
+      name: "DAI (Polygon)",
+      logo: "/coin_logos/images/daimatic.svg",
+    },
     { symbol: "DASH", name: "Dash", logo: "/coin_logos/images/dash.svg" },
     { symbol: "DOGE", name: "Dogecoin", logo: "/coin_logos/images/doge.svg" },
-    { symbol: "ETC", name: "Ethereum Classic", logo: "/coin_logos/images/etc.svg" },
-    { symbol: "ETH", name: "Ethereum", logo: "/coin_logos/images/eth_dark.svg" },
-    { symbol: "ETHARBITRUM", name: "Ethereum (Arbitrum)", logo: "/coin_logos/images/etharbitrum_dark.svg" },
-    { symbol: "ETHBASE", name: "Ethereum (Base)", logo: "/coin_logos/images/ethbase_dark.svg" },
-    { symbol: "ETHBSC", name: "Ethereum (BSC)", logo: "/coin_logos/images/ethbsc_dark.svg" },
-    { symbol: "ETHOP", name: "Ethereum (Optimism)", logo: "/coin_logos/images/ethop_dark.svg" },
-    { symbol: "ETHZKSYNC", name: "Ethereum (zkSync)", logo: "/coin_logos/images/ethzksync_dark.svg" },
+    {
+      symbol: "ETC",
+      name: "Ethereum Classic",
+      logo: "/coin_logos/images/etc.svg",
+    },
+    {
+      symbol: "ETH",
+      name: "Ethereum",
+      logo: "/coin_logos/images/eth_dark.svg",
+    },
+    {
+      symbol: "ETHARBITRUM",
+      name: "Ethereum (Arbitrum)",
+      logo: "/coin_logos/images/etharbitrum_dark.svg",
+    },
+    {
+      symbol: "ETHBASE",
+      name: "Ethereum (Base)",
+      logo: "/coin_logos/images/ethbase_dark.svg",
+    },
+    {
+      symbol: "ETHBSC",
+      name: "Ethereum (BSC)",
+      logo: "/coin_logos/images/ethbsc_dark.svg",
+    },
+    {
+      symbol: "ETHOP",
+      name: "Ethereum (Optimism)",
+      logo: "/coin_logos/images/ethop_dark.svg",
+    },
+    {
+      symbol: "ETHZKSYNC",
+      name: "Ethereum (zkSync)",
+      logo: "/coin_logos/images/ethzksync_dark.svg",
+    },
     { symbol: "KCS", name: "KuCoin Token", logo: "/coin_logos/images/kcs.svg" },
     { symbol: "LINK", name: "Chainlink", logo: "/coin_logos/images/link.svg" },
     { symbol: "LTC", name: "Litecoin", logo: "/coin_logos/images/ltc.svg" },
-    { symbol: "MANAETH", name: "MANA (Ethereum)", logo: "/coin_logos/images/manaeth.svg" },
-    { symbol: "PAXGETH", name: "PAX Gold (Ethereum)", logo: "/coin_logos/images/paxgeth.svg" },
-    { symbol: "PEPEETH", name: "PEPE (Ethereum)", logo: "/coin_logos/images/pepeeth.svg" },
+    {
+      symbol: "MANAETH",
+      name: "MANA (Ethereum)",
+      logo: "/coin_logos/images/manaeth.svg",
+    },
+    {
+      symbol: "PAXGETH",
+      name: "PAX Gold (Ethereum)",
+      logo: "/coin_logos/images/paxgeth.svg",
+    },
+    {
+      symbol: "PEPEETH",
+      name: "PEPE (Ethereum)",
+      logo: "/coin_logos/images/pepeeth.svg",
+    },
     { symbol: "POL", name: "Polygon", logo: "/coin_logos/images/pol.svg" },
-    { symbol: "POLETH", name: "Polygon (Ethereum)", logo: "/coin_logos/images/poleth.svg" },
+    {
+      symbol: "POLETH",
+      name: "Polygon (Ethereum)",
+      logo: "/coin_logos/images/poleth.svg",
+    },
     { symbol: "S", name: "S Token", logo: "/coin_logos/images/s.svg" },
     { symbol: "SHIB", name: "Shiba Inu", logo: "/coin_logos/images/shib.svg" },
     { symbol: "SOL", name: "Solana", logo: "/coin_logos/images/sol.svg" },
     { symbol: "TON", name: "Toncoin", logo: "/coin_logos/images/ton.svg" },
     { symbol: "TRX", name: "TRON", logo: "/coin_logos/images/trx.svg" },
     { symbol: "TUSD", name: "TrueUSD", logo: "/coin_logos/images/tusd.svg" },
-    { symbol: "TWTBSC", name: "Trust Wallet Token (BSC)", logo: "/coin_logos/images/twtbsc.svg" },
-    { symbol: "USDCARBITRUM", name: "USDC (Arbitrum)", logo: "/coin_logos/images/usdcarbitrum.svg" },
-    { symbol: "USDCETH", name: "USDC (Ethereum)", logo: "/coin_logos/images/usdceth.svg" },
-    { symbol: "USDCSOL", name: "USDC (Solana)", logo: "/coin_logos/images/usdcsol.svg" },
+    {
+      symbol: "TWTBSC",
+      name: "Trust Wallet Token (BSC)",
+      logo: "/coin_logos/images/twtbsc.svg",
+    },
+    {
+      symbol: "USDCARBITRUM",
+      name: "USDC (Arbitrum)",
+      logo: "/coin_logos/images/usdcarbitrum.svg",
+    },
+    {
+      symbol: "USDCETH",
+      name: "USDC (Ethereum)",
+      logo: "/coin_logos/images/usdceth.svg",
+    },
+    {
+      symbol: "USDCSOL",
+      name: "USDC (Solana)",
+      logo: "/coin_logos/images/usdcsol.svg",
+    },
     { symbol: "USDP", name: "Pax Dollar", logo: "/coin_logos/images/usdp.svg" },
     { symbol: "USDT", name: "Tether", logo: "/coin_logos/images/usdt.svg" },
-    { symbol: "USDTARBITRUM", name: "USDT (Arbitrum)", logo: "/coin_logos/images/usdtarbitrum.svg" },
-    { symbol: "USDTBSC", name: "USDT (BSC)", logo: "/coin_logos/images/usdtbsc.svg" },
-    { symbol: "USDTMATIC", name: "USDT (Polygon)", logo: "/coin_logos/images/usdtmatic.svg" },
-    { symbol: "USDTSOL", name: "USDT (Solana)", logo: "/coin_logos/images/usdtsol.svg" },
-    { symbol: "USDTTRC", name: "USDT (TRON)", logo: "/coin_logos/images/usdttrc.svg" },
+    {
+      symbol: "USDTARBITRUM",
+      name: "USDT (Arbitrum)",
+      logo: "/coin_logos/images/usdtarbitrum.svg",
+    },
+    {
+      symbol: "USDTBSC",
+      name: "USDT (BSC)",
+      logo: "/coin_logos/images/usdtbsc.svg",
+    },
+    {
+      symbol: "USDTMATIC",
+      name: "USDT (Polygon)",
+      logo: "/coin_logos/images/usdtmatic.svg",
+    },
+    {
+      symbol: "USDTSOL",
+      name: "USDT (Solana)",
+      logo: "/coin_logos/images/usdtsol.svg",
+    },
+    {
+      symbol: "USDTTRC",
+      name: "USDT (TRON)",
+      logo: "/coin_logos/images/usdttrc.svg",
+    },
     { symbol: "VET", name: "VeChain", logo: "/coin_logos/images/vet.svg" },
-    { symbol: "WBNBBSC", name: "Wrapped BNB (BSC)", logo: "/coin_logos/images/wbnbbsc.svg" },
-    { symbol: "WETHARBITRUM", name: "Wrapped ETH (Arbitrum)", logo: "/coin_logos/images/wetharbitrum.svg" },
-    { symbol: "WETHBASE", name: "Wrapped ETH (Base)", logo: "/coin_logos/images/wethbase_dark.svg" },
-    { symbol: "WETHETH", name: "Wrapped ETH (Ethereum)", logo: "/coin_logos/images/wetheth_dark.svg" },
-    { symbol: "WSOL", name: "Wrapped SOL", logo: "/coin_logos/images/wsol.svg" },
+    {
+      symbol: "WBNBBSC",
+      name: "Wrapped BNB (BSC)",
+      logo: "/coin_logos/images/wbnbbsc.svg",
+    },
+    {
+      symbol: "WETHARBITRUM",
+      name: "Wrapped ETH (Arbitrum)",
+      logo: "/coin_logos/images/wetharbitrum.svg",
+    },
+    {
+      symbol: "WETHBASE",
+      name: "Wrapped ETH (Base)",
+      logo: "/coin_logos/images/wethbase_dark.svg",
+    },
+    {
+      symbol: "WETHETH",
+      name: "Wrapped ETH (Ethereum)",
+      logo: "/coin_logos/images/wetheth_dark.svg",
+    },
+    {
+      symbol: "WSOL",
+      name: "Wrapped SOL",
+      logo: "/coin_logos/images/wsol.svg",
+    },
     { symbol: "XLM", name: "Stellar", logo: "/coin_logos/images/xlm_dark.svg" },
     { symbol: "XMR", name: "Monero", logo: "/coin_logos/images/xmr.svg" },
     { symbol: "XRP", name: "Ripple", logo: "/coin_logos/images/xrp.svg" },
     { symbol: "XTZ", name: "Tezos", logo: "/coin_logos/images/xtz.svg" },
     { symbol: "ZEC", name: "Zcash", logo: "/coin_logos/images/zec.svg" },
-    { symbol: "ZRX", name: "0x Protocol", logo: "/coin_logos/images/zrx_dark.svg" }
+    {
+      symbol: "ZRX",
+      name: "0x Protocol",
+      logo: "/coin_logos/images/zrx_dark.svg",
+    },
   ];
 
   // Network-specific configurations
@@ -266,22 +480,43 @@ export function App() {
     return "testnet";
   };
 
-  const isMainnet = (networkKey: string) => getNetworkType(networkKey) === "mainnet";
-  const isTestnet = (networkKey: string) => getNetworkType(networkKey) === "testnet";
+  // Add this ref to track current evmAddress
+  const evmAddressRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    evmAddressRef.current = evmAddress;
+  }, [evmAddress]);
+
+  const isMainnet = (networkKey: string) =>
+    getNetworkType(networkKey) === "mainnet";
+  const isTestnet = (networkKey: string) =>
+    getNetworkType(networkKey) === "testnet";
 
   // Network-specific currency lists
   const getAvailableCurrencies = (networkKey: string) => {
     if (isMainnet(networkKey)) {
-      // Kusama AssetHub - all swap currencies
+      // Kusama AssetHub - all swap currencies including cross-chain DOT→KSM
       return availableCurrencies;
     } else {
       // Testnets - only PAS, WND, and DEV routes (no KSM or DOT)
       return [
         { symbol: "PAS", name: "Paseo", logo: "/coin_logos/images/pas.svg" },
         { symbol: "WND", name: "Westend", logo: "/coin_logos/images/wnd.svg" },
-        { symbol: "DEV", name: "Development", logo: "/coin_logos/images/dev.svg" }
+        {
+          symbol: "DEV",
+          name: "Development",
+          logo: "/coin_logos/images/dev.svg",
+        },
       ];
     }
+  };
+
+  // Check if swap is cross-chain (DOT→KSM)
+  const isCrossChainSwap = (fromCurrency: string, toCurrency: string) => {
+    return (
+      (fromCurrency === "DOT" && toCurrency === "KSM") ||
+      (fromCurrency === "KSM" && toCurrency === "DOT")
+    );
   };
 
   // Get bridge functionality type
@@ -299,105 +534,226 @@ export function App() {
     // Map specific currencies to their networks
     const currencyNetworkMap: { [key: string]: string } = {
       // Ethereum and ERC-20 tokens
-      "ETH": "Ethereum",
-      "USDCETH": "Ethereum",
-      "DAIETH": "Ethereum", 
-      "USDT": "Ethereum", // Default USDT to Ethereum
-      "USDTETH": "Ethereum",
-      "WETHETH": "Ethereum",
-      "AAVEETH": "Ethereum",
-      "MANAETH": "Ethereum",
-      "PAXGETH": "Ethereum",
-      "PEPEETH": "Ethereum",
-      "POLETH": "Ethereum",
-      
+      ETH: "Ethereum",
+      USDCETH: "Ethereum",
+      DAIETH: "Ethereum",
+      USDT: "Ethereum", // Default USDT to Ethereum
+      USDTETH: "Ethereum",
+      WETHETH: "Ethereum",
+      AAVEETH: "Ethereum",
+      MANAETH: "Ethereum",
+      PAXGETH: "Ethereum",
+      PEPEETH: "Ethereum",
+      POLETH: "Ethereum",
+
       // Bitcoin
-      "BTC": "Bitcoin",
-      
+      BTC: "Bitcoin",
+
       // BSC tokens
-      "ETHBSC": "BNB Smart Chain",
-      "BTCBSC": "BNB Smart Chain", 
-      "DAIBSC": "BNB Smart Chain",
-      "USDTBSC": "BNB Smart Chain",
-      "WBNBBSC": "BNB Smart Chain",
-      "TWTBSC": "BNB Smart Chain",
-      "BSC": "BNB Smart Chain",
-      "CAKE": "BNB Smart Chain",
-      
+      ETHBSC: "BNB Smart Chain",
+      BTCBSC: "BNB Smart Chain",
+      DAIBSC: "BNB Smart Chain",
+      USDTBSC: "BNB Smart Chain",
+      WBNBBSC: "BNB Smart Chain",
+      TWTBSC: "BNB Smart Chain",
+      BSC: "BNB Smart Chain",
+      CAKE: "BNB Smart Chain",
+
       // Arbitrum
-      "ETHARBITRUM": "Arbitrum",
-      "USDCARBITRUM": "Arbitrum",
-      "USDTARBITRUM": "Arbitrum", 
-      "WETHARBITRUM": "Arbitrum",
-      "ARB": "Arbitrum",
-      
+      ETHARBITRUM: "Arbitrum",
+      USDCARBITRUM: "Arbitrum",
+      USDTARBITRUM: "Arbitrum",
+      WETHARBITRUM: "Arbitrum",
+      ARB: "Arbitrum",
+
       // Polygon
-      "DAIMATIC": "Polygon",
-      "USDTMATIC": "Polygon",
-      "POL": "Polygon",
-      
+      DAIMATIC: "Polygon",
+      USDTMATIC: "Polygon",
+      POL: "Polygon",
+
       // Solana
-      "SOL": "Solana",
-      "USDCSOL": "Solana",
-      "USDTSOL": "Solana",
-      "WSOL": "Solana",
-      
+      SOL: "Solana",
+      USDCSOL: "Solana",
+      USDTSOL: "Solana",
+      WSOL: "Solana",
+
       // Base
-      "ETHBASE": "Base",
-      "WETHBASE": "Base",
-      
+      ETHBASE: "Base",
+      WETHBASE: "Base",
+
       // Optimism
-      "ETHOP": "Optimism",
-      
+      ETHOP: "Optimism",
+
       // zkSync
-      "ETHZKSYNC": "zkSync",
-      
+      ETHZKSYNC: "zkSync",
+
       // OpBNB
-      "BNBOPBNB": "OpBNB",
-      
+      BNBOPBNB: "OpBNB",
+
       // TRON
-      "TRX": "TRON",
-      "USDTTRC": "TRON",
-      
+      TRX: "TRON",
+      USDTTRC: "TRON",
+
       // Other networks
-      "ATOM": "Cosmos",
-      "AVAX": "Avalanche", 
-      "ADA": "Cardano",
-      "DOGE": "Dogecoin",
-      "LTC": "Litecoin",
-      "XRP": "Ripple",
-      "XLM": "Stellar",
-      "XTZ": "Tezos",
-      "VET": "VeChain",
-      "ETC": "Ethereum Classic",
-      "DASH": "Dash",
-      "ZEC": "Zcash",
-      "XMR": "Monero",
-      "LINK": "Chainlink",
-      "BAT": "Basic Attention Token",
-      "BCH": "Bitcoin Cash",
-      "BTT": "BitTorrent",
-      "KCS": "KuCoin",
-      "TON": "TON",
-      "APT": "Aptos",
-      "SHIB": "Ethereum", // SHIB is on Ethereum
-      "TUSD": "Ethereum", // Assuming TUSD is on Ethereum
-      "USDP": "Ethereum", // Assuming USDP is on Ethereum
-      "ZRX": "Ethereum", // 0x Protocol is on Ethereum
-      "S": "Unknown Network",
-      
+      ATOM: "Cosmos",
+      AVAX: "Avalanche",
+      ADA: "Cardano",
+      DOGE: "Dogecoin",
+      LTC: "Litecoin",
+      XRP: "Ripple",
+      XLM: "Stellar",
+      XTZ: "Tezos",
+      VET: "VeChain",
+      ETC: "Ethereum Classic",
+      DASH: "Dash",
+      ZEC: "Zcash",
+      XMR: "Monero",
+      LINK: "Chainlink",
+      BAT: "Basic Attention Token",
+      BCH: "Bitcoin Cash",
+      BTT: "BitTorrent",
+      KCS: "KuCoin",
+      TON: "TON",
+      APT: "Aptos",
+      SHIB: "Ethereum", // SHIB is on Ethereum
+      TUSD: "Ethereum", // Assuming TUSD is on Ethereum
+      USDP: "Ethereum", // Assuming USDP is on Ethereum
+      ZRX: "Ethereum", // 0x Protocol is on Ethereum
+      S: "Unknown Network",
+
       // Polkadot ecosystem
-      "DOT": "Polkadot",
-      "PAS": "Paseo Testnet",
-      "WND": "Westend Testnet", 
-      "DEV": "Moonbeam Testnet"
+      DOT: "Polkadot",
+      KSM: "Kusama",
+      PAS: "Paseo Testnet",
+      WND: "Westend Testnet",
+      DEV: "Moonbeam Testnet",
     };
 
     return currencyNetworkMap[currency] || "Unknown Network";
   };
 
   // Swap API base URL - will be deployed to public endpoint
-  const SWAP_API_BASE = "http://localhost:5001";
+  const SWAP_API_BASE = "https://proxyswap.laissez-faire.trade";//"http://localhost:5000";
+
+  // DOT/KSM price checker function
+  const getDotToKsmRate = async () => {
+    console.log("Starting DOT to KSM exchange rate query...");
+
+    try {
+      const POLKADOT_RPC = "wss://polkadot-asset-hub-rpc.polkadot.io/";
+      const wsProvider = new WsProvider(POLKADOT_RPC);
+      const api = await ApiPromise.create({
+        provider: wsProvider,
+        noInitWarn: true,
+      });
+      await api.isReady;
+      console.log("✅ Connected to Polkadot Asset Hub");
+
+      // DOT MultiLocation (on Polkadot Asset Hub)
+      const dotMultiLocation = api
+        .createType("StagingXcmV4Location", {
+          parents: 1, // DOT is parent chain token
+          interior: {
+            here: null,
+          },
+        })
+        .toU8a();
+
+      // KSM MultiLocation (as foreign asset from Kusama)
+      const ksmMultiLocation = api
+        .createType("StagingXcmV4Location", {
+          parents: 2, // KSM comes from Kusama (different consensus)
+          interior: {
+            X1: [{ GlobalConsensus: "Kusama" }],
+          },
+        })
+        .toU8a();
+
+      // Try to get price for 1 DOT to KSM (1 DOT = 10^10 Planck)
+      const amount = api.createType("u128", 10000000000).toU8a();
+      const bool = api.createType("bool", false).toU8a();
+
+      // Concatenate Uint8Arrays
+      const encodedInput = new Uint8Array(
+        dotMultiLocation.length +
+          ksmMultiLocation.length +
+          amount.length +
+          bool.length,
+      );
+      encodedInput.set(dotMultiLocation, 0);
+      encodedInput.set(ksmMultiLocation, dotMultiLocation.length);
+      encodedInput.set(
+        amount,
+        dotMultiLocation.length + ksmMultiLocation.length,
+      );
+      encodedInput.set(
+        bool,
+        dotMultiLocation.length + ksmMultiLocation.length + amount.length,
+      );
+
+      const encodedInputHex = u8aToHex(encodedInput);
+
+      console.log("💱 Querying price for 1 DOT to KSM...");
+
+      try {
+        // Try exact tokens for tokens
+        const response = await api.rpc.state.call(
+          "AssetConversionApi_quote_price_exact_tokens_for_tokens",
+          encodedInputHex,
+        );
+        const decodedPrice = api.createType("Option<u128>", response);
+
+        if (decodedPrice.isSome) {
+          const price = decodedPrice.unwrap();
+          const ksmAmount = Number(price) / 1000000000000; // Convert Planck to KSM
+          console.log(
+            `✅ Exchange Rate: 1 DOT = ${price.toString()} KSM Planck`,
+          );
+          console.log(`✅ Exchange Rate: 1 DOT = ${ksmAmount.toFixed(6)} KSM`);
+
+          // Also show the reverse rate
+          if (ksmAmount > 0) {
+            const reverseRate = 1 / ksmAmount;
+            console.log(
+              `✅ Exchange Rate: 1 KSM = ${reverseRate.toFixed(6)} DOT`,
+            );
+
+            await api.disconnect();
+            return {
+              rate: ksmAmount.toFixed(6),
+              to_amount: ksmAmount.toFixed(6),
+              from_amount: "1",
+              from_code: "DOT",
+              to_code: "KSM",
+              usd_value: "0", // Not available from this API
+            };
+          }
+        } else {
+          console.log("❌ No direct DOT→KSM pool found");
+        }
+      } catch (error: any) {
+        console.log("❌ Error querying direct price:", error.message);
+        console.log(
+          "💡 This is expected - DOT and KSM are on different parachains.",
+        );
+      }
+
+      await api.disconnect();
+      console.log("🔌 Disconnected from Polkadot Asset Hub");
+    } catch (error: any) {
+      console.error("❌ Error:", error.message);
+    }
+
+    // Fallback to default rate if direct query fails
+    return {
+      rate: "0.1", // Fallback rate
+      to_amount: "0.1",
+      from_amount: "1",
+      from_code: "DOT",
+      to_code: "KSM",
+      usd_value: "0",
+    };
+  };
 
   useEffect(() => {
     if (!isWasmLoaded) {
@@ -555,14 +911,13 @@ export function App() {
           SHIELD_CONTRACT_ADDRESS.shielderAbi,
           ETHsigner,
         );
-      } else if (selectedNetwork == "kusama"){
+      } else if (selectedNetwork == "kusama") {
         shieldedContract = new ethers.Contract(
           NETWORKS[selectedNetwork].shield_address,
           NETWORKS[selectedNetwork].abi, //["function deposit(address,uint256,bytes32) payable"],
           ETHsigner,
         );
-      } 
-      else if (selectedNetwork == "paseo_assethub2") {
+      } else if (selectedNetwork == "paseo_assethub2") {
         //	NETWORKS["paseo_assethub"].shield_address,
 
         console.log(
@@ -769,26 +1124,33 @@ export function App() {
               //      gasLimit: 16317587311833n,
             },
           );
-        } else if (selectedNetwork == "paseo_assethub2"|| selectedNetwork == "kusama") {
+        } else if (
+          selectedNetwork == "paseo_assethub2" ||
+          selectedNetwork == "kusama"
+        ) {
           console.log(`paseo v2 called`);
           const contractpase = new ethers.Contract(
             NETWORKS[selectedNetwork].shield_address,
             NETWORKS[selectedNetwork].abi, //["function deposit(address,uint256,bytes32) payable"],
             ETHsigner,
           );
-            toast(`Generating ZK data`, {
-        position: "top-right",
-        autoClose: 4000,
-        hideProgressBar: false,
-        closeOnClick: false,
-        pauseOnHover: true,
-        draggable: true,
-        progress: undefined,
-        theme: "dark",
-      });
-          
-         const zkpService = new ZKPService();
-          const payloaden = zkpService.generateDepositPayload(secret, ethers.ZeroAddress, BigInt(ethers.parseEther(amount).toString()));
+          toast(`Generating ZK data`, {
+            position: "top-right",
+            autoClose: 4000,
+            hideProgressBar: false,
+            closeOnClick: false,
+            pauseOnHover: true,
+            draggable: true,
+            progress: undefined,
+            theme: "dark",
+          });
+
+          const zkpService = new ZKPService();
+          const payloaden = zkpService.generateDepositPayload(
+            secret,
+            ethers.ZeroAddress,
+            BigInt(ethers.parseEther(amount).toString()),
+          );
 
           /*
           const { commitment, nullifier } = await zkDeposit(
@@ -797,7 +1159,7 @@ export function App() {
             ethers.parseEther(amount).toString(),
           );
 */
-         const gasEstimate = await contractpase.deposit3.estimateGas(
+          const gasEstimate = await contractpase.deposit3.estimateGas(
             ethers.ZeroAddress,
             ethers.parseEther(amount),
             payloaden.commitment,
@@ -812,23 +1174,23 @@ export function App() {
             `full input: `,
             ethers.ZeroAddress,
             ethers.parseEther(amount),
-             payloaden.commitment,
+            payloaden.commitment,
             {
               value: ethers.parseEther(amount),
-       //       maxFeePerGas: gasEstimate,
-       //       gasPrice: ethers.parseUnits("1000", "wei"),
+              //       maxFeePerGas: gasEstimate,
+              //       gasPrice: ethers.parseUnits("1000", "wei"),
               //      type: 0,
             },
           );
-          console.log(`paseo v2 txresp`)
+          console.log(`paseo v2 txresp`);
           txResponse2 = await contractpase.deposit3(
             ethers.ZeroAddress,
             ethers.parseEther(amount),
             payloaden.commitment,
             {
               value: ethers.parseEther(amount),
-         //     maxFeePerGas: gasEstimate,
-         //     gasPrice: ethers.parseUnits("1000", "wei"),
+              //     maxFeePerGas: gasEstimate,
+              //     gasPrice: ethers.parseUnits("1000", "wei"),
               //    type: 0,
             },
           );
@@ -1052,17 +1414,22 @@ export function App() {
         // if we manage to load the
         if (ProofWorker) {
           var proofBytes;
-          if (selectedNetwork == "westend_assethub" || selectedNetwork == "paseo_assethub2" || selectedNetwork == "kusama" || selectedNetwork == "paseo_assethub") {
+          if (
+            selectedNetwork == "westend_assethub" ||
+            selectedNetwork == "paseo_assethub2" ||
+            selectedNetwork == "kusama" ||
+            selectedNetwork == "paseo_assethub"
+          ) {
             proofBytes = "not set ";
           } else {
-      const p = await fetchKzgParams(
-        "http://kusamashield.laissez-faire.trade/proofs/hermez-raw-8",
-      ); //params8.bin
-      console.log(`params fetched ok`);
-      console.log("Params length:", p.length);
+            const p = await fetchKzgParams(
+              "http://kusamashield.laissez-faire.trade/proofs/hermez-raw-8",
+            ); //params8.bin
+            console.log(`params fetched ok`);
+            console.log("Params length:", p.length);
 
-      console.log(`generating proof`);
-      
+            console.log(`generating proof`);
+
             proofBytes = await ProofWorker.generate_proof_data(secret, p);
           }
 
@@ -1114,17 +1481,17 @@ export function App() {
               ],
               ETHsigner,
             );
-          } else if (selectedNetwork == "paseo_assethub2" || selectedNetwork == "kusama") {
-              shieldedContract = new ethers.Contract(
-                NETWORKS[selectedNetwork].shield_address,
-                NETWORKS[selectedNetwork].abi,
-                ETHsigner,
-              )
-          }         
-          
-          else {
-
-            console.log(`else contract init`)
+          } else if (
+            selectedNetwork == "paseo_assethub2" ||
+            selectedNetwork == "kusama"
+          ) {
+            shieldedContract = new ethers.Contract(
+              NETWORKS[selectedNetwork].shield_address,
+              NETWORKS[selectedNetwork].abi,
+              ETHsigner,
+            );
+          } else {
+            console.log(`else contract init`);
             shieldedContract = new ethers.Contract(
               SHIELD_CONTRACT_ADDRESS.SHIELD_CONTRACT_ADDRESS, // Using the fake ERC-20 address from your constants
               SHIELD_CONTRACT_ADDRESS.shielderAbi,
@@ -1196,28 +1563,38 @@ export function App() {
                 type: 0,
               },
             );
-          } else if (selectedNetwork == "paseo_assethub2" || selectedNetwork == "kusama") {
-              
-           
-                     const zkpService = new ZKPService();
-       //   const payloaden = zkpService.generateDepositPayload(secret, ethers.ZeroAddress, BigInt(ethers.parseEther(amount).toString()));
-            console.log(`amount is:`, ethers.parseEther(amount))
-    const mockCommitment = zkpService.generateCommitment(secret, ethers.ZeroAddress, BigInt(ethers.parseEther(amount).toString()));
-                
-                // Store the deposit info first (in real app this would be done during deposit)
-                const depositPayload = zkpService.generateDepositPayload(secret, ethers.ZeroAddress, BigInt(ethers.parseEther(amount).toString()));
-                toast("builind zk payload");
-                console.log(`evm address:`, evmAddress);
-                const withdrawalPayload = await zkpService.generateWithdrawalPayload(
-                  mockCommitment,
-                  evmAddress, // selected browser wallet address
-                  "asset.wasm", // circuit WASM path
-                  "asset_0001.zkey", // circuit zkey path
-                  ethers.ZeroAddress // asset
-                );
-                console.log(`got throw`)
+          } else if (
+            selectedNetwork == "paseo_assethub2" ||
+            selectedNetwork == "kusama"
+          ) {
+            const zkpService = new ZKPService();
+            //   const payloaden = zkpService.generateDepositPayload(secret, ethers.ZeroAddress, BigInt(ethers.parseEther(amount).toString()));
+            console.log(`amount is:`, ethers.parseEther(amount));
+            const mockCommitment = zkpService.generateCommitment(
+              secret,
+              ethers.ZeroAddress,
+              BigInt(ethers.parseEther(amount).toString()),
+            );
 
-         /*
+            // Store the deposit info first (in real app this would be done during deposit)
+            const depositPayload = zkpService.generateDepositPayload(
+              secret,
+              ethers.ZeroAddress,
+              BigInt(ethers.parseEther(amount).toString()),
+            );
+            toast("builind zk payload");
+            console.log(`evm address:`, evmAddress);
+            const withdrawalPayload =
+              await zkpService.generateWithdrawalPayload(
+                mockCommitment,
+                evmAddress, // selected browser wallet address
+                "asset.wasm", // circuit WASM path
+                "asset_0001.zkey", // circuit zkey path
+                ethers.ZeroAddress, // asset
+              );
+            console.log(`got throw`);
+
+            /*
                     const gasEstimate = await shieldedContract.withdrawETH.estimateGas(
                     withdrawalPayload.a,
                     withdrawalPayload.b,
@@ -1227,13 +1604,13 @@ export function App() {
                   console.log('Gas estimate for withdrawal:', gasEstimate);
           */
 
-                  txResponse = await shieldedContract.withdrawETH(
-                    withdrawalPayload.a,
-                    withdrawalPayload.b,
-                    withdrawalPayload.c,
-                    withdrawalPayload.publicSignals
-                  );
-          }   else {
+            txResponse = await shieldedContract.withdrawETH(
+              withdrawalPayload.a,
+              withdrawalPayload.b,
+              withdrawalPayload.c,
+              withdrawalPayload.publicSignals,
+            );
+          } else {
             txResponse = await shieldedContract.withdraw2(
               proofData,
               myasset,
@@ -1457,11 +1834,40 @@ export function App() {
   // Swap-related functions
   const fetchExchangeRate = async () => {
     if (!swapAmount || !fromCurrency || !toCurrency) return;
-    
+
     // Prevent DOT to DOT swaps
     if (fromCurrency === "DOT" && toCurrency === "DOT") {
       setError("Cannot swap DOT to DOT");
       return;
+    }
+
+    // Use local DOT/KSM price checker for DOT→KSM swaps
+    if (fromCurrency === "DOT" && toCurrency === "KSM") {
+      try {
+        console.log("Using local DOT→KSM price checker...");
+        const localRate = await getDotToKsmRate();
+
+        // Calculate the actual amount based on user input
+        const calculatedToAmount = (
+          parseFloat(swapAmount) * parseFloat(localRate.rate)
+        ).toFixed(6);
+
+        const transformedRate = {
+          rate: localRate.rate,
+          to_amount: calculatedToAmount,
+          from_amount: swapAmount,
+          from_code: fromCurrency,
+          to_code: toCurrency,
+          usd_value: "0", // Not available from local checker
+        };
+
+        setExchangeRate(transformedRate);
+        console.log("✅ Local DOT→KSM rate applied:", transformedRate);
+        return;
+      } catch (err) {
+        console.error("Local DOT→KSM rate checker failed:", err);
+        // Fall through to API call
+      }
     }
 
     try {
@@ -1478,6 +1884,7 @@ export function App() {
       });
 
       const data = await response.json();
+      console.log(`my trade response was:`, data);
       if (data.status === "good" && data.response) {
         const apiResponse = data.response;
         if (apiResponse.code === 0 && apiResponse.msg === "OK") {
@@ -1488,7 +1895,7 @@ export function App() {
             from_amount: apiResponse.data.from.amount,
             from_code: apiResponse.data.from.code,
             to_code: apiResponse.data.to.code,
-            usd_value: apiResponse.data.to.usd
+            usd_value: apiResponse.data.to.usd,
           };
           setExchangeRate(transformedRate);
         } else {
@@ -1504,19 +1911,311 @@ export function App() {
   };
 
   const createSwap = async () => {
+    console.log(`create swap called`);
     if (!swapAmount || !fromCurrency || !toCurrency || !evmAddress) {
       toast.error("Please fill in all required fields");
+      console.error("Please fill in all required fields");
       return;
     }
-
+    console.log(
+      `[create swap input]: swap amount: ${swapAmount} fromCurrency: ${fromCurrency} toCurrency" ${toCurrency}`,
+    );
     // Prevent DOT to DOT swaps
     if (fromCurrency === "DOT" && toCurrency === "DOT") {
-      toast.error("Cannot swap DOT to DOT - please select different currencies");
+      toast.error(
+        "Cannot swap DOT to DOT - please select different currencies",
+      );
+      console.error(
+        "Cannot swap DOT to DOT - please select different currencies",
+      );
       return;
     }
 
+    // Handle DOT→KSM cross-chain swap with local price checker
+    if (fromCurrency === "DOT" && toCurrency === "KSM") {
+      console.log("Handling DOT→KSM cross-chain swap...");
+      setIsLoading(true);
+      try {
+        // Use local price checker for DOT→KSM
+        toast.info(`Step 1/2 | Swapping DOT to KSM `, {
+          position: "top-right",
+          autoClose: 10000,
+          hideProgressBar: false,
+          closeOnClick: false,
+          pauseOnHover: true,
+          draggable: true,
+          progress: undefined,
+          theme: "dark",
+        });
+        const localRate = await getDotToKsmRate();
+        const calculatedToAmount = (
+          parseFloat(swapAmount) * parseFloat(localRate.rate)
+        ).toFixed(6);
+        console.log(
+          `calling generate_dot2ksm, input:`,
+          swapAmount,
+          evmAddress,
+          calculatedToAmount,
+        );
+        if (isEvmAddress(evmAddress)) {
+          toast.error("Select a non-evm address");
+          return;
+        }
+        console.log(`got the payload`);
+        toast.info(`Grabbing the best rate from the on-chain DEX`, {
+          position: "top-right",
+          autoClose: 6000,
+          hideProgressBar: false,
+          closeOnClick: false,
+          pauseOnHover: true,
+          draggable: true,
+          progress: undefined,
+          theme: "dark",
+        });
+        //      const gen_out = generateDot2KsmInput(swapAmount, calculatedToAmount);
+        //  console.log(`[dot>ksm]converted values: `, gen_out);
+        const tmpapi = await ApiPromise.create({
+          provider: new WsProvider("wss://statemint-rpc-tn.dwellir.com"),
+          noInitWarn: true,
+        });
+        console.log(
+          `sending tx with input: `,
+          //    tmpapi,
+          swapAmount,
+          calculatedToAmount,
+          evmAddress,
+        );
+        console.log(`calling tx`);
+        const signer = selectedWallet.signer;
+        /* */
+      const tx = await generate_dot2ksm(
+          tmpapi,
+        swapAmount,
+ calculatedToAmount,
+  evmAddress
+        );
+        console.log(`tx called!`);
+
+      
+            const unsub = await tx.signAndSend(
+      evmAddress,
+      { signer },
+      ({ status, events, dispatchError }) => {
+        if (status.isInBlock) {
+          console.log(`Transaction included in block: ${status.asInBlock}`);
+          toast.info(`Transaction included in block: ${status.asInBlock}`, {
+            position: "top-right",
+            autoClose: 6000,
+            hideProgressBar: false,
+            closeOnClick: false,
+            pauseOnHover: true,
+            draggable: true,
+            progress: undefined,
+            theme: "dark",
+          });
+        }
+
+        if (status.isFinalized) {
+          console.log(`Transaction finalized: ${status.asFinalized}`);
+          toast.success(`Transaction finalized: ${status.asFinalized}`, {
+            position: "top-right",
+            autoClose: 8000,
+            hideProgressBar: false,
+            closeOnClick: false,
+            pauseOnHover: true,
+            draggable: true,
+            progress: undefined,
+            theme: "dark",
+          });
+          unsub(); // Unsubscribe from updates
+   //       setIsLoading(false);
+            console.log(`tx finished, moving on`);
+         // return true;
+        }
+      },
+    );
+ 
+        console.log(`returno!`);
+
+        // here the user has selected a polkadot address but now we need the ethereum one to fiddle with
+        //setIsLoading(true);
+
+        const waitForEvmAddressSwitch = async () => {
+          console.log(`waitForEvmAddressSwitch called`);
+
+          toast.info(
+            `Step 1 completed! Please switch to an Ethereum wallet for Step 2.`,
+            {
+              position: "top-right",
+              autoClose: false,
+              hideProgressBar: false,
+              closeOnClick: false,
+              pauseOnHover: true,
+              draggable: true,
+              progress: undefined,
+              theme: "dark",
+            },
+          );
+
+          // ⏱️ Helper sleep function
+          const sleep = (ms: number) =>
+            new Promise((resolve) => setTimeout(resolve, ms));
+
+          let maxAttempts = 60; // e.g. wait up to 5 minutes (60 attempts * 5s = 300s)
+          for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            console.log(`Polling for EVM address... attempt ${attempt + 1}`);
+            const currentAddress = evmAddressRef.current;
+            console.log(
+              `checking address: ${currentAddress}, isEvm: ${isEvmAddress(currentAddress)}`,
+            );
+
+            console.log(`checking evm address:`, evmAddress);
+            if (currentAddress && isEvmAddress(currentAddress)) {
+              console.log(`✅ EVM address detected: ${evmAddress}`);
+              toast.dismiss();
+              return true;
+            }
+
+            // Optional: Update user every N attempts
+            if ((attempt + 1) % 6 === 0) {
+              toast.info(
+                `Still waiting for Ethereum wallet... (${((attempt + 1) * 5) / 60} min)`,
+                {
+                  position: "top-right",
+                  autoClose: 5000,
+                  hideProgressBar: false,
+                  closeOnClick: false,
+                  pauseOnHover: true,
+                  draggable: true,
+                  progress: undefined,
+                  theme: "dark",
+                },
+              );
+            }
+
+            await sleep(5000); // wait 5 seconds before checking again
+          }
+
+          console.error("⛔ Timeout: No EVM address detected after waiting.");
+          toast.error(
+            "Timeout: No Ethereum wallet detected. Please try again.",
+            {
+              position: "top-right",
+              autoClose: 8000,
+              theme: "dark",
+            },
+          );
+
+          setIsLoading(false);
+          return false;
+        };
+
+        console.log(`waiting for address switch `);
+        const m = await waitForEvmAddressSwitch();
+
+        toast.info(`Step 2/2 | 🌉 Sending DOT to Kusama Assethub 🌉 `, {
+          position: "top-right",
+          autoClose: 10000,
+          hideProgressBar: false,
+          closeOnClick: false,
+          pauseOnHover: true,
+          draggable: true,
+          progress: undefined,
+          theme: "dark",
+        });
+
+        const destaddress = evmAddressRef.current;
+        console.log(
+          `making tx2 with input:`,
+          calculatedToAmount,
+      //    eth2accountid32(destaddress),
+        );
+        console.log(`returning trueee`);
+        //  return true;
+        const newapi = await ApiPromise.create({
+          provider: new WsProvider("wss://sys.ibp.network/asset-hub-polkadot"),
+          noInitWarn: true,
+        });
+        const tx2 = await KSM2ah(
+          newapi,
+          swapAmount,
+          calculatedToAmount,
+          destaddress,
+        ); //eth2accountid32(destaddress)
+
+        const unsub2 = await tx2.signAndSend(
+          evmAddress,
+          { signer },
+          ({ status, events, dispatchError }) => {
+            if (status.isInBlock) {
+              console.log(
+                `🌉Bridge Transaction included in block: ${status.asInBlock}`,
+              );
+              toast.info(
+                `🌉Bridge Transaction included in block: ${status.asInBlock}`,
+                {
+                  position: "top-right",
+                  autoClose: 6000,
+                  hideProgressBar: false,
+                  closeOnClick: false,
+                  pauseOnHover: true,
+                  draggable: true,
+                  progress: undefined,
+                  theme: "dark",
+                },
+              );
+            }
+
+            if (status.isFinalized) {
+              console.log(
+                `🌉Bridge Transaction finalized: ${status.asFinalized}`,
+              );
+              toast.success(
+                `🌉Bridge Transaction finalized: ${status.asFinalized}`,
+                {
+                  position: "top-right",
+                  autoClose: 8000,
+                  hideProgressBar: false,
+                  closeOnClick: false,
+                  pauseOnHover: true,
+                  draggable: true,
+                  progress: undefined,
+                  theme: "dark",
+                },
+              );
+              unsub2(); // Unsubscribe from updates
+              setIsLoading(false);
+              console.log(`unsubscribing...`);
+            }
+          },
+        );
+        console.log(`all good, everything good`);
+        toast.success("DOT→KSM sent");
+        setIsLoading(false);
+        await tmpapi.disconnect();
+        return;
+      } catch (error) {
+        console.error("DOT→KSM swap creation failed:", error);
+        toast.error("Failed to create DOT→KSM swap");
+        setIsLoading(false);
+        return;
+      }
+    }
+
+    // Regular swap for other currency pairs
     setIsLoading(true);
     try {
+      console.log(
+        `sending request:`,
+        "fromCcy:",
+        fromCurrency,
+        "toCcy:",
+        toCurrency,
+        "amount:",
+        parseFloat(swapAmount),
+        "destination_addres:",
+        evmAddress,
+      );
       const response = await fetch(`${SWAP_API_BASE}/trade`, {
         method: "POST",
         headers: {
@@ -1529,22 +2228,44 @@ export function App() {
           destination_addres: evmAddress,
         }),
       });
-
+      console.log(`trade called`);
       const data = await response.json();
       if (data.status === "trade created :)") {
         setCurrentTrade(data.trade);
         setSwapStage("deposit");
-        
+        console.log(`trade data: `, data);
+
         // Generate QR code for deposit address
-        const qrData = await QRCode.toDataURL(data.trade.deposit);
+        console.log(`qr encoding address: `, data.trade.from.address);
+        const qrData = await QRCode.toDataURL(data.trade.from.address);
         setQrCodeData(qrData);
-        
+
         toast.success("Swap created successfully!");
       } else {
+        toast.error(`Failed to create swap`, {
+          position: "top-right",
+          autoClose: 5000,
+          hideProgressBar: false,
+          closeOnClick: false,
+          pauseOnHover: true,
+          draggable: true,
+          progress: undefined,
+          theme: "dark",
+        });
         setError(data.error || "Failed to create swap");
       }
     } catch (err) {
       setError("Failed to create swap");
+      toast.error(`Failed to create swap`, {
+        position: "top-right",
+        autoClose: 5000,
+        hideProgressBar: false,
+        closeOnClick: false,
+        pauseOnHover: true,
+        draggable: true,
+        progress: undefined,
+        theme: "dark",
+      });
       console.error("Swap creation error:", err);
     } finally {
       setIsLoading(false);
@@ -1567,7 +2288,10 @@ export function App() {
 
       const data = await response.json();
       if (data.msg === "found trade") {
-        setSwapStage("completed");
+        console.log(`got swap order status back and it is:`, data.msg);
+        console.log(`Raw data:`, data);
+        setTradeData(data);
+        // setSwapStage("completed");
         toast.success("Swap completed!");
       }
     } catch (err) {
@@ -1586,13 +2310,13 @@ export function App() {
   // Reset currencies when network changes
   useEffect(() => {
     const networkCurrencies = getAvailableCurrencies(selectedNetwork);
-    const networkSymbols = networkCurrencies.map(c => c.symbol);
-    
+    const networkSymbols = networkCurrencies.map((c) => c.symbol);
+
     // Set specific defaults for Kusama AssetHub mainnet
     if (selectedNetwork === "kusama") {
-      // For Kusama mainnet, set USDT as default from currency and DOT as default to currency
-      setFromCurrency("USDT");
-      setToCurrency("DOT");
+      // For Kusama mainnet, set DOT as default from currency and KSM as default to currency
+      setFromCurrency("DOT");
+      setToCurrency("KSM");
     } else {
       // For other networks, reset to valid currencies if current selection is not available
       if (!networkSymbols.includes(fromCurrency)) {
@@ -1602,14 +2326,20 @@ export function App() {
         setToCurrency(networkSymbols[1] || networkSymbols[0] || "PAS");
       }
     }
-    
+
     // Reset exchange rate when network changes
     setExchangeRate(null);
   }, [selectedNetwork]);
 
   // Auto-refresh exchange rate when inputs change (only for mainnet)
   useEffect(() => {
-    if (activeTab === "bridge" && swapAmount && fromCurrency && toCurrency && isMainnet(selectedNetwork)) {
+    if (
+      activeTab === "bridge" &&
+      swapAmount &&
+      fromCurrency &&
+      toCurrency &&
+      isMainnet(selectedNetwork)
+    ) {
       const timer = setTimeout(fetchExchangeRate, 500);
       return () => clearTimeout(timer);
     }
@@ -1739,7 +2469,6 @@ export function App() {
                   opacity: 0.7,
                   cursor: "not-allowed",
                 }}
-                disabled
               >
                 🚧 Coming Soon 🚧
               </button>
@@ -1761,8 +2490,12 @@ export function App() {
                                 setFromCurrency(newFromCurrency);
                                 // Prevent same currency to same currency swaps
                                 if (newFromCurrency === toCurrency) {
-                                  const availableCurrencies = getAvailableCurrencies(selectedNetwork);
-                                  const filteredCurrencies = availableCurrencies.filter(c => c.symbol !== newFromCurrency);
+                                  const availableCurrencies =
+                                    getAvailableCurrencies(selectedNetwork);
+                                  const filteredCurrencies =
+                                    availableCurrencies.filter(
+                                      (c) => c.symbol !== newFromCurrency,
+                                    );
                                   if (filteredCurrencies.length > 0) {
                                     setToCurrency(filteredCurrencies[0].symbol);
                                   }
@@ -1770,34 +2503,53 @@ export function App() {
                               }}
                               className="currency-select"
                             >
-                              {getAvailableCurrencies(selectedNetwork).map((currency) => (
-                                <option key={currency.symbol} value={currency.symbol}>
-                                  {currency.symbol} - {currency.name}
-                                </option>
-                              ))}
+                              {getAvailableCurrencies(selectedNetwork).map(
+                                (currency) => (
+                                  <option
+                                    key={currency.symbol}
+                                    value={currency.symbol}
+                                  >
+                                    {currency.symbol} - {currency.name}
+                                  </option>
+                                ),
+                              )}
                             </select>
-                            <img 
-                              src={getAvailableCurrencies(selectedNetwork).find(c => c.symbol === fromCurrency)?.logo} 
+                            <img
+                              src={
+                                getAvailableCurrencies(selectedNetwork).find(
+                                  (c) => c.symbol === fromCurrency,
+                                )?.logo
+                              }
                               alt={fromCurrency}
                               className="currency-logo"
-                              style={{ width: "24px", height: "24px", marginLeft: "8px" }}
+                              style={{
+                                width: "24px",
+                                height: "24px",
+                                marginLeft: "8px",
+                              }}
                             />
                           </div>
 
-                          <div className="swap-arrow" onClick={() => {
-                            const temp = fromCurrency;
-                            const newFromCurrency = toCurrency;
-                            const newToCurrency = temp;
-                            
-                            // Prevent DOT to DOT swaps
-                            if (newFromCurrency === "DOT" && newToCurrency === "DOT") {
-                              // Don't swap if both would be DOT
-                              return;
-                            }
-                            
-                            setFromCurrency(newFromCurrency);
-                            setToCurrency(newToCurrency);
-                          }}>
+                          <div
+                            className="swap-arrow"
+                            onClick={() => {
+                              const temp = fromCurrency;
+                              const newFromCurrency = toCurrency;
+                              const newToCurrency = temp;
+
+                              // Prevent DOT to DOT swaps
+                              if (
+                                newFromCurrency === "DOT" &&
+                                newToCurrency === "DOT"
+                              ) {
+                                // Don't swap if both would be DOT
+                                return;
+                              }
+
+                              setFromCurrency(newFromCurrency);
+                              setToCurrency(newToCurrency);
+                            }}
+                          >
                             ⇄
                           </div>
 
@@ -1812,18 +2564,32 @@ export function App() {
                               className="currency-select"
                             >
                               {getAvailableCurrencies(selectedNetwork)
-                                .filter(currency => currency.symbol !== fromCurrency)
+                                .filter(
+                                  (currency) =>
+                                    currency.symbol !== fromCurrency,
+                                )
                                 .map((currency) => (
-                                  <option key={currency.symbol} value={currency.symbol}>
+                                  <option
+                                    key={currency.symbol}
+                                    value={currency.symbol}
+                                  >
                                     {currency.symbol} - {currency.name}
                                   </option>
                                 ))}
                             </select>
-                            <img 
-                              src={getAvailableCurrencies(selectedNetwork).find(c => c.symbol === toCurrency)?.logo} 
+                            <img
+                              src={
+                                getAvailableCurrencies(selectedNetwork).find(
+                                  (c) => c.symbol === toCurrency,
+                                )?.logo
+                              }
                               alt={toCurrency}
                               className="currency-logo"
-                              style={{ width: "24px", height: "24px", marginLeft: "8px" }}
+                              style={{
+                                width: "24px",
+                                height: "24px",
+                                marginLeft: "8px",
+                              }}
                             />
                           </div>
                         </div>
@@ -1836,6 +2602,7 @@ export function App() {
                             onChange={(e) => setSwapAmount(e.target.value)}
                             placeholder={`Enter ${fromCurrency} amount`}
                             step="0.00000001"
+                            min="0.1"
                           />
                           <div className="balance-display">
                             Destination Balance: {userBalance} {toCurrency}
@@ -1845,12 +2612,29 @@ export function App() {
                         {isMainnet(selectedNetwork) && exchangeRate && (
                           <div className="exchange-rate-display">
                             <div className="rate-info">
-                              <div>Rate: 1 {fromCurrency} = {exchangeRate.rate} {toCurrency}</div>
-                              <div>Source Chain: {getNetworkForCurrency(fromCurrency)}</div>
-                              <div>Destination Chain: {getNetworkForCurrency(toCurrency)}</div>
-                              <div>You will send: ~{exchangeRate.from_amount} {fromCurrency}</div>
-                              <div>You will receive: ~{exchangeRate.to_amount} {toCurrency}</div>
-                              <div className="fee-info">Fee: 0.6% (included in the floating rate)</div>
+                              <div>
+                                Rate: 1 {toCurrency} = {exchangeRate.rate}{" "}
+                                {fromCurrency}
+                              </div>
+                              <div>
+                                Source Chain:{" "}
+                                {getNetworkForCurrency(fromCurrency)}
+                              </div>
+                              <div>
+                                Destination Chain:{" "}
+                                {getNetworkForCurrency(toCurrency)}
+                              </div>
+                              <div>
+                                You will send: ~{exchangeRate.from_amount}{" "}
+                                {fromCurrency}
+                              </div>
+                              <div>
+                                You will receive: ~{exchangeRate.to_amount}{" "}
+                                {toCurrency}
+                              </div>
+                              <div className="fee-info">
+                                Fee: 0.6% (included in the floating rate)
+                              </div>
                             </div>
                           </div>
                         )}
@@ -1858,13 +2642,26 @@ export function App() {
                         {isTestnet(selectedNetwork) && (
                           <div className="bridge-info">
                             <div className="network-info">
-                              <div>From: {getNetworkForCurrency(fromCurrency)} ({fromCurrency})</div>
-                              <div>To: {getNetworkForCurrency(toCurrency)} ({toCurrency})</div>
+                              <div>
+                                From: {getNetworkForCurrency(fromCurrency)} (
+                                {fromCurrency})
+                              </div>
+                              <div>
+                                To: {getNetworkForCurrency(toCurrency)} (
+                                {toCurrency})
+                              </div>
                             </div>
                             <div className="info-box">
                               <h4>XCM Bridge</h4>
-                              <p>Cross-chain transfers between {NETWORKS[selectedNetwork].asset} and other parachains</p>
-                              <p className="note">Exchange rates are determined by the destination network</p>
+                              <p>
+                                Cross-chain transfers between{" "}
+                                {NETWORKS[selectedNetwork].asset} and other
+                                parachains
+                              </p>
+                              <p className="note">
+                                Exchange rates are determined by the destination
+                                network
+                              </p>
                             </div>
                           </div>
                         )}
@@ -1876,30 +2673,77 @@ export function App() {
                         <h3>Send {fromCurrency} to complete swap</h3>
                         <div className="deposit-info">
                           <div className="deposit-address">
-                            <label>Deposit Address:</label>
+                            <label>Send tokens to this Deposit Address:</label>
                             <div className="address-container">
-                              <code>{currentTrade.deposit}</code>
-                              <button onClick={() => navigator.clipboard.writeText(currentTrade.deposit)}>
+                              {qrCodeData && (
+                                <div className="qr-code">
+                                  <img
+                                    src={qrCodeData}
+                                    alt="Deposit Address QR Code"
+                                  />
+                                </div>
+                              )}
+                              <code>{currentTrade.from.address}</code>
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(
+                                    currentTrade.from.address,
+                                  );
+                                  toast("📋 Address copied to clipboard!", {
+                                    position: "top-right",
+                                    autoClose: 3000,
+                                    hideProgressBar: false,
+                                    closeOnClick: true,
+                                    pauseOnHover: true,
+                                    draggable: true,
+                                    progress: undefined,
+                                    theme: "dark",
+                                  });
+                                }}
+                                title="Copy to clipboard"
+                              >
                                 📋
                               </button>
                             </div>
                           </div>
-                          
-                          <div className="deposit-amount">
-                            <label>Send exactly:</label>
+
+                          <div className="deposit-network">
+                            <label>Send token on the network:</label>
                             <div className="amount-display">
-                              {currentTrade.in} {fromCurrency}
+                              {currentTrade.from.network}
                             </div>
                           </div>
 
-                          {qrCodeData && (
-                            <div className="qr-code">
-                              <img src={qrCodeData} alt="Deposit Address QR Code" />
+                          <div className="deposit-network">
+                            <label>Required block confirmations:</label>
+                            <div className="amount-display">
+                              {currentTrade.from.reqConfirmations}
                             </div>
-                          )}
+                          </div>
+
+                          <div className="deposit-amount">
+                            <label>Send exactly:</label>
+                            <div className="amount-display">
+                              {currentTrade.from.amount} {fromCurrency}
+                            </div>
+                          </div>
+
+                          <div className="deposit-amount">
+                            <label>Receiving:</label>
+                            <div className="amount-display">
+                              {currentTrade.to.amount} {toCurrency}
+                            </div>
+                          </div>
+
+                          <div className="deposit-amount">
+                            <label>Receiving address:</label>
+                            <div className="amount-display">
+                              {currentTrade.to.address}
+                            </div>
+                          </div>
 
                           <div className="swap-progress">
-                            <button 
+                            <button
                               onClick={() => setSwapStage("processing")}
                               className="confirm-deposit-button"
                             >
@@ -1915,7 +2759,9 @@ export function App() {
                         <h3>Processing Swap...</h3>
                         <div className="loading-spinner"></div>
                         <p>Waiting for confirmation and processing your swap</p>
-                        <div className="trade-id">Trade ID: {currentTrade?.trade_id}</div>
+                        <div className="trade-id">
+                          Trade ID: {currentTrade?.trade_id}
+                        </div>
                       </div>
                     )}
 
@@ -1934,46 +2780,49 @@ export function App() {
                 {activeTab !== "bridge" && (
                   <div className="token-input">
                     <div className="amount-slider-container">
-                    <label>
-                      Amount: {amount} {NETWORKS[selectedNetwork].asset}
-                    </label>
-                    <div className="amount-slider">
-                      <input
-                        type="range"
-                        min="0"
-                        max="6"
-                        value={amountOptions.indexOf(parseInt(amount))}
-                        onChange={(e) =>
-                          setAmount(
-                            amountOptions[parseInt(e.target.value)].toString(),
-                          )
-                        }
-                        className="amount-range-slider"
-                      />
-                      <div className="amount-labels">
-                        {amountOptions.map((option, index) => (
-                          <span
-                            key={option}
-                            className={`amount-label ${amount === option.toString() ? "active" : ""}`}
-                            onClick={() => setAmount(option.toString())}
-                          >
-                            {option}
-                          </span>
-                        ))}
+                      <label>
+                        Amount: {amount} {NETWORKS[selectedNetwork].asset}
+                      </label>
+                      <div className="amount-slider">
+                        <input
+                          type="range"
+                          min="0"
+                          max="6"
+                          value={amountOptions.indexOf(parseInt(amount))}
+                          onChange={(e) =>
+                            setAmount(
+                              amountOptions[
+                                parseInt(e.target.value)
+                              ].toString(),
+                            )
+                          }
+                          className="amount-range-slider"
+                        />
+                        <div className="amount-labels">
+                          {amountOptions.map((option) => (
+                            <span
+                              key={option}
+                              className={`amount-label ${amount === option.toString() ? "active" : ""}`}
+                              onClick={() => setAmount(option.toString())}
+                            >
+                              {option}
+                            </span>
+                          ))}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <select
-                    value={selectedToken}
-                    onChange={(e) => setSelectedToken(e.target.value)}
-                  >
-                    <option title="native Currency">
-                      {NETWORKS[selectedNetwork].asset}
-                    </option>
+                    <select
+                      value={selectedToken}
+                      onChange={(e) => setSelectedToken(e.target.value)}
+                    >
+                      <option title="native Currency">
+                        {NETWORKS[selectedNetwork].asset}
+                      </option>
 
-                    {/* Alternative assets */}
-                    {NETWORKS[selectedNetwork].alternative_assets?.map(
-                      (token) => (
+                      {/* Alternative assets */}
+                      {(
+                        NETWORKS[selectedNetwork] as any
+                      ).alternative_assets?.map((token: any) => (
                         <option
                           key={token.name}
                           title={`${token.name} (${token.address})`}
@@ -1981,30 +2830,30 @@ export function App() {
                         >
                           {token.name}
                         </option>
-                      ),
-                    )}
-                  </select>
-                </div>
-                )}
-
-{activeTab === "shield" && NETWORKS[selectedNetwork].faucet && (
-                  <div className="balance">
-                    <a
-                      title="faucet link"
-                      target="_blank"
-                      href={NETWORKS[selectedNetwork].faucet}
-                    >
-                      {NETWORKS[selectedNetwork].name} faucet link
-                    </a>
+                      ))}
+                    </select>
                   </div>
                 )}
+
+                {activeTab === "shield" &&
+                  (NETWORKS[selectedNetwork] as any).faucet && (
+                    <div className="balance">
+                      <a
+                        title="faucet link"
+                        target="_blank"
+                        href={(NETWORKS[selectedNetwork] as any).faucet}
+                      >
+                        {NETWORKS[selectedNetwork].name} faucet link
+                      </a>
+                    </div>
+                  )}
 
                 {activeTab === "shield" && (
                   <div className="balance">
                     <a
                       title="Documentation link"
                       target="_blank"
-                      href={NETWORKS[selectedNetwork].docs}
+                      href={(NETWORKS[selectedNetwork] as any).docs}
                     >
                       {NETWORKS[selectedNetwork].name} Documentation
                     </a>
@@ -2039,31 +2888,35 @@ export function App() {
               </div>
               {error && <div className="error-message">{error}</div>}
               {(activeTab !== "bridge" || swapStage === "input") && (
-              <button
-                className={`swap-button ${isLoading ? "loading" : ""}`}
-                onClick={
-                  activeTab === "shield"
-                    ? handleShield
-                    : activeTab === "unshield"
-                      ? handleUnshield
-                      : activeTab === "bridge"
-                        ? (isMainnet(selectedNetwork) ? createSwap : handleBridge)
-                        : () => {}
-                }
-                disabled={isLoading || !isWalletConnected}
-              >
-                {isLoading
-                  ? "Processing..."
-                  : activeTab === "shield"
-                    ? "Shield"
-                    : activeTab === "unshield"
-                      ? "Unshield"
-                      : activeTab === "bridge"
-                        ? (isMainnet(selectedNetwork) 
-                            ? (swapStage === "input" ? "Create Swap" : "Continue")
-                            : "Bridge Tokens")
-                        : "Action"}
-              </button>
+                <button
+                  className={`swap-button ${isLoading ? "loading" : ""}`}
+                  onClick={
+                    activeTab === "shield"
+                      ? handleShield
+                      : activeTab === "unshield"
+                        ? handleUnshield
+                        : activeTab === "bridge"
+                          ? isMainnet(selectedNetwork)
+                            ? createSwap
+                            : handleBridge
+                          : () => {}
+                  }
+                  disabled={isLoading || !isWalletConnected}
+                >
+                  {isLoading
+                    ? "Processing..."
+                    : activeTab === "shield"
+                      ? "Shield"
+                      : activeTab === "unshield"
+                        ? "Unshield"
+                        : activeTab === "bridge"
+                          ? isMainnet(selectedNetwork)
+                            ? swapStage === "input"
+                              ? "Create Swap"
+                              : "Continue"
+                            : "Bridge Tokens"
+                          : "Action"}
+                </button>
               )}
             </>
           )}

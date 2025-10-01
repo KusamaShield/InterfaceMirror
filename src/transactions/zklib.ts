@@ -55,7 +55,7 @@ export class ZKPService {
     const secretBN = BigInt(secret);
     const assetBN = asset === ethers.ZeroAddress ? 0n : BigInt(asset);
     const amountBN = BigInt(amount);
-    
+
     const hash = poseidon3([secretBN, assetBN, amountBN]);
     return hash.toString();
   }
@@ -72,7 +72,11 @@ export class ZKPService {
   }
 
   // Generate deposit payload
-  generateDepositPayload(secret: string, asset: string, amount: bigint): DepositPayload {
+  generateDepositPayload(
+    secret: string,
+    asset: string,
+    amount: bigint,
+  ): DepositPayload {
     const commitment = this.generateCommitment(secret, asset, amount);
     const commitmentBytes32 = this.toBytes32(commitment);
 
@@ -82,13 +86,13 @@ export class ZKPService {
       asset,
       amount,
       commitment,
-      nullifier: this.generateNullifier(secret)
+      nullifier: this.generateNullifier(secret),
     });
 
     return {
       asset,
       amount,
-      commitment: commitmentBytes32
+      commitment: commitmentBytes32,
     };
   }
 
@@ -99,7 +103,7 @@ export class ZKPService {
     amount: bigint,
     recipient: string,
     circuitWasmPath: string,
-    circuitZkeyPath: string
+    circuitZkeyPath: string,
   ): Promise<ZKProofResult> {
     const input = {
       secret: secret.toString(),
@@ -107,13 +111,13 @@ export class ZKPService {
       amount: amount.toString(),
       leafIndex: "0",
       siblings: Array(256).fill("0"),
-      recipient: BigInt(recipient).toString()
+      recipient: BigInt(recipient).toString(),
     };
 
     const { proof, publicSignals } = await snarkjs.groth16.fullProve(
       input,
       circuitWasmPath,
-      circuitZkeyPath
+      circuitZkeyPath,
     );
 
     return { proof, publicSignals };
@@ -123,8 +127,11 @@ export class ZKPService {
   formatProofForSolidity(proof: any): FormattedProof {
     return {
       a: [proof.pi_a[0], proof.pi_a[1]],
-      b: [[proof.pi_b[0][1], proof.pi_b[0][0]], [proof.pi_b[1][1], proof.pi_b[1][0]]],
-      c: [proof.pi_c[0], proof.pi_c[1]]
+      b: [
+        [proof.pi_b[0][1], proof.pi_b[0][0]],
+        [proof.pi_b[1][1], proof.pi_b[1][0]],
+      ],
+      c: [proof.pi_c[0], proof.pi_c[1]],
     };
   }
 
@@ -134,7 +141,7 @@ export class ZKPService {
     recipient: string,
     circuitWasmPath: string,
     circuitZkeyPath: string,
-    asset?: string
+    asset?: string,
   ): Promise<WithdrawalPayload> {
     const depositInfo = this.deposits.get(commitment);
     if (!depositInfo) {
@@ -147,7 +154,7 @@ export class ZKPService {
       depositInfo.amount,
       recipient,
       circuitWasmPath,
-      circuitZkeyPath
+      circuitZkeyPath,
     );
 
     const formattedProof = this.formatProofForSolidity(proof);
@@ -156,7 +163,7 @@ export class ZKPService {
       a: formattedProof.a,
       b: formattedProof.b,
       c: formattedProof.c,
-      publicSignals
+      publicSignals,
     };
 
     if (asset) {
