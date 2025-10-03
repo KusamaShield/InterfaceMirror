@@ -1,3 +1,7 @@
+/*
+ * Copyright 2025 Kusama Shield Developers on behalf of the Kusama DAO, see LICENSE in main folder.
+ */
+
 import { ethers } from "ethers";
 import SHIELD_CONTRACT_ADDRESS from "../transactions/shield";
 

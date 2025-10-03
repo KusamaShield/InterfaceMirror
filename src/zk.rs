@@ -1,3 +1,7 @@
+/*
+ * Copyright 2025 Kusama Shield Developers on behalf of the Kusama DAO, see LICENSE in main folder.
+ */
+
 use halo2_solidity_verifier::{Keccak256Transcript, SolidityGenerator, BatchOpenScheme::Bdfg21};
 
 use halo2_proofs::{

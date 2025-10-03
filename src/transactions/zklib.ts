@@ -1,3 +1,7 @@
+/*
+ * Copyright 2025 Kusama Shield Developers on behalf of the Kusama DAO, see LICENSE in main folder.
+ */
+
 import { ethers } from "ethers";
 import * as snarkjs from "snarkjs";
 import { poseidon2, poseidon3 } from "poseidon-lite";

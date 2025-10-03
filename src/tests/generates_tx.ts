@@ -1,3 +1,7 @@
+/*
+ * Copyright 2025 Kusama Shield Developers on behalf of the Kusama DAO, see LICENSE in main folder.
+ */
+
 import { ApiPromise, WsProvider, Keyring } from "@polkadot/api";
 // snowbridge has a UI for this: https://app.snowbridge.network/kusama
 

@@ -1,8 +1,13 @@
+/*
+ * Copyright 2025 Kusama Shield Developers on behalf of the Kusama DAO, see LICENSE in main folder.
+ */
+
 import React, { useState } from 'react';
 import { web3Accounts, web3Enable } from '@polkadot/extension-dapp';
 import type { InjectedAccountWithMeta } from '@polkadot/extension-inject/types';
-import { Button } from '@/components/ui/button';
-import { useToast } from '@/hooks/use-toast';
+// Note: Using basic button element since UI library not available
+// import { Button } from '@/components/ui/button';
+// import { useToast } from '@/hooks/use-toast';
 
 interface WalletConnectionProps {
   isWalletConnected: boolean;
@@ -25,7 +30,8 @@ export const WalletConnection: React.FC<WalletConnectionProps> = ({
   onShowAccountSelect,
   onDisconnect,
 }) => {
-  const { toast } = useToast();
+  // Mock toast function since useToast is not available
+  const toast = (options: any) => console.log('Toast:', options);
 
   const connectWallet = async () => {
     try {
@@ -116,11 +122,11 @@ export const WalletConnection: React.FC<WalletConnectionProps> = ({
         {accounts.map((account, index) => {
           const displayInfo = getAccountDisplayInfo(account);
           return (
-            <Button
+            <button
               key={account.address}
               onClick={() => onAccountSelected(account)}
               className="w-full justify-start bg-white/5 hover:bg-white/10 text-white border border-white/20 p-4 h-auto"
-              variant="outline"
+              style={{ background: 'rgba(255, 255, 255, 0.05)', color: 'white', border: '1px solid rgba(255, 255, 255, 0.2)', padding: '16px', borderRadius: '6px', cursor: 'pointer', width: '100%' }}
             >
               <div className="text-left w-full">
                 <div className="flex justify-between items-start">
@@ -136,16 +142,15 @@ export const WalletConnection: React.FC<WalletConnectionProps> = ({
                   </div>
                 </div>
               </div>
-            </Button>
+            </button>
           );
         })}
-        <Button
+        <button
           onClick={() => onShowAccountSelect(false)}
-          variant="outline"
           className="w-full border-white/20 text-purple-200 hover:bg-white/10 hover:text-white"
         >
           Back
-        </Button>
+        </button>
       </div>
     );
   }
@@ -153,13 +158,12 @@ export const WalletConnection: React.FC<WalletConnectionProps> = ({
   if (!isWalletConnected) {
     return (
       <div className="space-y-4">
-        <Button 
+        <button 
           onClick={connectWallet}
           className="w-full bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white font-semibold py-3 px-6 rounded-lg transition-all duration-300 transform hover:scale-105"
-          size="lg"
         >
           Connect Wallet
-        </Button>
+        </button>
         
         <div className="text-center text-sm text-purple-300">
           Supports Talisman, Polkadot.js, SubWallet and other Polkadot wallets
@@ -191,23 +195,19 @@ export const WalletConnection: React.FC<WalletConnectionProps> = ({
         </div>
         <div className="flex space-x-2">
           {accounts.length > 1 && (
-            <Button
+            <button
               onClick={() => onShowAccountSelect(true)}
-              variant="outline"
-              size="sm"
-              className="border-white/20 text-purple-200 hover:bg-white/10 hover:text-white"
+                    className="border-white/20 text-purple-200 hover:bg-white/10 hover:text-white"
             >
               Switch Account
-            </Button>
+            </button>
           )}
-          <Button
+          <button
             onClick={onDisconnect}
-            variant="outline"
-            size="sm"
-            className="border-white/20 text-purple-200 hover:bg-white/10 hover:text-white"
+              className="border-white/20 text-purple-200 hover:bg-white/10 hover:text-white"
           >
             Disconnect
-          </Button>
+          </button>
         </div>
       </div>
     </div>
