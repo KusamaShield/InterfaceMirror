@@ -1,3 +1,7 @@
+/*
+ * Copyright 2025 Kusama Shield Developers on behalf of the Kusama DAO, see LICENSE in main folder.
+ */
+
 import { Buffer } from "buffer";
 
 // Polyfill for the global Buffer object

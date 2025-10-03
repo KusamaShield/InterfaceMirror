@@ -6,7 +6,10 @@ Kusama Shield User interface
 Use with **Google Chrome and Talisman browser wallet**
 
 ## Documentation:     
-https://kusamashield.codeberg.page/intro.html
+https://kusamashield.codeberg.page
+
+### License: 
+MIT, see LICENSE file.
 
 ### Clone: 
 ```shell

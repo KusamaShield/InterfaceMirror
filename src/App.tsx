@@ -1,3 +1,7 @@
+/*
+ * Copyright 2025 Kusama Shield Developers on behalf of the Kusama DAO, see LICENSE in main folder.
+ */
+
 import "./App.css";
 import { useState, useEffect, useRef } from "react";
 import { WalletSelect } from "@talismn/connect-components";
@@ -27,6 +31,7 @@ import { u8aToHex } from "@polkadot/util";
 import { Transaction, parseEther, parseUnits } from "ethers";
 import { WalletAccount } from "@talismn/connect-wallets";
 import QRCode from "qrcode";
+import SwapStatusTracker from "./components/SwapStatusTracker";
 //import init, { generate_commitment, test_console, test_proofo, generate_proof_data } from '../pkg/generate_zk_wasm'; // adjust path as needed
 import { Buffer } from "buffer";
 
@@ -48,7 +53,7 @@ import {
 import { ethers, Network } from "ethers";
 
 // input token amounts
-const amountOptions = [1, 5, 10, 100, 500, 1000, 10000];
+const amountOptions = [0.5, 1, 5, 10, 100, 500, 1000, 10000];
 
 // Add TypeScript declaration for window.ethereum
 declare global {
@@ -256,6 +261,13 @@ export function App() {
   const [currentTrade, setCurrentTrade] = useState<any>(null);
   const [qrCodeData, setQrCodeData] = useState<string>("");
   const [userBalance, setUserBalance] = useState<string>("0");
+  // Enhanced status tracking state
+  const [swapStatusData, setSwapStatusData] = useState<any>(null);
+  const [isPolling, setIsPolling] = useState<boolean>(false);
+  const [pollInterval, setPollInterval] = useState<number>(10000); // Start with 10 seconds
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  // Destination address for non-KSM swaps
+  const [destinationAddress, setDestinationAddress] = useState<string>("");
 
   // Available currencies - only currencies that can be swapped TO DOT
   const availableCurrencies = [
@@ -517,6 +529,12 @@ export function App() {
       (fromCurrency === "DOT" && toCurrency === "KSM") ||
       (fromCurrency === "KSM" && toCurrency === "DOT")
     );
+  };
+
+  // Check if swap requires destination address input
+  const requiresDestinationAddress = (fromCurrency: string, toCurrency: string) => {
+    // DOT to KSM uses connected wallet address, other swaps need destination input
+    return fromCurrency === "DOT" && toCurrency !== "KSM";
   };
 
   // Get bridge functionality type
@@ -1917,6 +1935,13 @@ export function App() {
       console.error("Please fill in all required fields");
       return;
     }
+
+    // Check if destination address is required and provided
+    if (requiresDestinationAddress(fromCurrency, toCurrency) && !destinationAddress.trim()) {
+      toast.error(`Please enter a ${toCurrency} destination address`);
+      console.error(`Destination address required for ${fromCurrency} to ${toCurrency} swap`);
+      return;
+    }
     console.log(
       `[create swap input]: swap amount: ${swapAmount} fromCurrency: ${fromCurrency} toCurrency" ${toCurrency}`,
     );
@@ -1929,6 +1954,22 @@ export function App() {
         "Cannot swap DOT to DOT - please select different currencies",
       );
       return;
+    }
+
+
+    if (toCurrency == "DOT" && isEvmAddress(evmAddress)) {
+              toast.error(`Select a (Polkadot style)non-evm address`, {
+          position: "top-right",
+          autoClose: 5000,
+          hideProgressBar: false,
+          closeOnClick: false,
+          pauseOnHover: true,
+          draggable: true,
+          progress: undefined,
+          theme: "dark",
+        });
+    //    setError("Select a polkadot style account, not evm");
+      return ;
     }
 
     // Handle DOT→KSM cross-chain swap with local price checker
@@ -1972,8 +2013,7 @@ export function App() {
           progress: undefined,
           theme: "dark",
         });
-        //      const gen_out = generateDot2KsmInput(swapAmount, calculatedToAmount);
-        //  console.log(`[dot>ksm]converted values: `, gen_out);
+
         const tmpapi = await ApiPromise.create({
           provider: new WsProvider("wss://statemint-rpc-tn.dwellir.com"),
           noInitWarn: true,
@@ -2204,6 +2244,10 @@ export function App() {
 
     // Regular swap for other currency pairs
     setIsLoading(true);
+    const finalDestinationAddress = requiresDestinationAddress(fromCurrency, toCurrency) 
+      ? destinationAddress.trim() 
+      : evmAddress;
+    
     try {
       console.log(
         `sending request:`,
@@ -2214,7 +2258,7 @@ export function App() {
         "amount:",
         parseFloat(swapAmount),
         "destination_addres:",
-        evmAddress,
+        finalDestinationAddress,
       );
       const response = await fetch(`${SWAP_API_BASE}/trade`, {
         method: "POST",
@@ -2225,7 +2269,7 @@ export function App() {
           fromCcy: fromCurrency,
           toCcy: toCurrency,
           amount: parseFloat(swapAmount),
-          destination_addres: evmAddress,
+          destination_addres: finalDestinationAddress,
         }),
       });
       console.log(`trade called`);
@@ -2241,6 +2285,9 @@ export function App() {
         setQrCodeData(qrData);
 
         toast.success("Swap created successfully!");
+        
+        // Start immediate status check to get initial status data
+        setTimeout(checkSwapStatus, 1000);
       } else {
         toast.error(`Failed to create swap`, {
           position: "top-right",
@@ -2274,7 +2321,8 @@ export function App() {
 
   const checkSwapStatus = async () => {
     if (!currentTrade?.trade_id) return;
-
+    
+    setIsPolling(true);
     try {
       const response = await fetch(`${SWAP_API_BASE}/order-status`, {
         method: "POST",
@@ -2287,16 +2335,109 @@ export function App() {
       });
 
       const data = await response.json();
-      if (data.msg === "found trade") {
-        console.log(`got swap order status back and it is:`, data.msg);
-        console.log(`Raw data:`, data);
+      
+      if (data.msg === "found trade" && data.data?.data) {
+        console.log(`Status update:`, data.data.data.status);
+        console.log(`Full status data:`, data.data.data);
+        
+        const statusData = data.data.data;
+        setSwapStatusData(statusData);
         setTradeData(data);
-        // setSwapStage("completed");
-        toast.success("Swap completed!");
+        
+        // Update swap stage based on status
+        switch (statusData.status) {
+          case 'NEW':
+            setSwapStage("deposit");
+            break;
+          case 'PENDING':
+          case 'EXCHANGE':
+          case 'WITHDRAW':
+            setSwapStage("processing");
+            break;
+          case 'DONE':
+            setSwapStage("completed");
+            toast.success("Swap completed successfully!");
+            stopPolling();
+            break;
+          case 'EXPIRED':
+            toast.error("Swap expired");
+            stopPolling();
+            break;
+          case 'EMERGENCY':
+            toast.error(`🚨 Order requires manual review!\n\nPlease email kusamashield@smokes.thc.org with your order number: ${statusData.id}\n\nWe will sort it out straight away.`, {
+              position: "top-center",
+              autoClose: false,
+              hideProgressBar: false,
+              closeOnClick: true,
+              pauseOnHover: true,
+              draggable: true,
+              progress: undefined,
+              theme: "dark",
+              style: {
+                whiteSpace: 'pre-line',
+                textAlign: 'center',
+                fontSize: '14px',
+                maxWidth: '500px'
+              }
+            });
+            stopPolling();
+            break;
+        }
+        
+        // Adjust polling frequency based on status
+        updatePollingFrequency(statusData.status);
       }
     } catch (err) {
       console.error("Status check error:", err);
+      toast.error("Failed to check swap status");
+    } finally {
+      setIsPolling(false);
     }
+  };
+
+  // Enhanced polling management
+  const updatePollingFrequency = (status: string) => {
+    let newInterval = 10000; // Default 10 seconds
+    
+    switch (status) {
+      case 'NEW':
+        newInterval = 15000; // 15 seconds for new orders
+        break;
+      case 'PENDING':
+        newInterval = 5000; // 5 seconds for pending confirmation
+        break;
+      case 'EXCHANGE':
+      case 'WITHDRAW':
+        newInterval = 3000; // 3 seconds for active processing
+        break;
+      case 'DONE':
+      case 'EXPIRED':
+      case 'EMERGENCY':
+        return; // Stop polling for terminal states
+    }
+    
+    if (newInterval !== pollInterval) {
+      setPollInterval(newInterval);
+      restartPolling(newInterval);
+    }
+  };
+
+  const startPolling = (interval = 10000) => {
+    stopPolling();
+    pollIntervalRef.current = setInterval(checkSwapStatus, interval);
+  };
+
+  const stopPolling = () => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+    setIsPolling(false);
+  };
+
+  const restartPolling = (newInterval: number) => {
+    stopPolling();
+    pollIntervalRef.current = setInterval(checkSwapStatus, newInterval);
   };
 
   const resetSwap = () => {
@@ -2305,6 +2446,10 @@ export function App() {
     setExchangeRate(null);
     setQrCodeData("");
     setSwapAmount("");
+    setSwapStatusData(null);
+    setTradeData(null);
+    setDestinationAddress("");
+    stopPolling();
   };
 
   // Reset currencies when network changes
@@ -2345,13 +2490,25 @@ export function App() {
     }
   }, [swapAmount, fromCurrency, toCurrency, activeTab, selectedNetwork]);
 
+  // Clear destination address when currencies change
+  useEffect(() => {
+    setDestinationAddress("");
+  }, [fromCurrency, toCurrency]);
+
   // Auto-refresh swap status during processing
   useEffect(() => {
-    if (swapStage === "processing" && currentTrade?.trade_id) {
-      const interval = setInterval(checkSwapStatus, 10000); // Check every 10 seconds
-      return () => clearInterval(interval);
+    if ((swapStage === "processing" || swapStage === "deposit") && currentTrade?.trade_id) {
+      startPolling(pollInterval);
+      return () => stopPolling();
+    } else {
+      stopPolling();
     }
   }, [swapStage, currentTrade]);
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => stopPolling();
+  }, []);
 
   return (
     <div className="App">
@@ -2609,6 +2766,34 @@ export function App() {
                           </div>
                         </div>
 
+                        {requiresDestinationAddress(fromCurrency, toCurrency) && (
+                          <div className="amount-input">
+                            <label>{toCurrency} Destination Address:</label>
+                            <input
+                              type="text"
+                              value={destinationAddress}
+                              onChange={(e) => setDestinationAddress(e.target.value)}
+                              placeholder={`Enter ${toCurrency} address to receive funds`}
+                              style={{
+                                width: '100%',
+                                padding: '8px',
+                                borderRadius: '4px',
+                                border: '1px solid rgba(255, 255, 255, 0.2)',
+                                background: 'rgba(255, 255, 255, 0.05)',
+                                color: 'white',
+                                fontSize: '14px'
+                              }}
+                            />
+                            <div className="address-help" style={{
+                              fontSize: '12px',
+                              color: '#9ca3af',
+                              marginTop: '4px'
+                            }}>
+                              Enter a valid {toCurrency} address where you want to receive your {toCurrency} tokens
+                            </div>
+                          </div>
+                        )}
+
                         {isMainnet(selectedNetwork) && exchangeRate && (
                           <div className="exchange-rate-display">
                             <div className="rate-info">
@@ -2757,20 +2942,77 @@ export function App() {
                     {swapStage === "processing" && (
                       <div className="processing-stage">
                         <h3>Processing Swap...</h3>
-                        <div className="loading-spinner"></div>
-                        <p>Waiting for confirmation and processing your swap</p>
-                        <div className="trade-id">
-                          Trade ID: {currentTrade?.trade_id}
-                        </div>
+                        {swapStatusData ? (
+                          <SwapStatusTracker
+                            statusData={swapStatusData}
+                            fromCurrency={fromCurrency}
+                            toCurrency={toCurrency}
+                            isPolling={isPolling}
+                          />
+                        ) : (
+                          <>
+                            <div className="loading-spinner"></div>
+                            <p>Waiting for confirmation and processing your swap</p>
+                            <div className="trade-id">
+                              Trade ID: {currentTrade?.trade_id}
+                            </div>
+                          </>
+                        )}
                       </div>
                     )}
 
                     {swapStage === "completed" && (
                       <div className="completed-stage">
                         <h3>✅ Swap Completed!</h3>
-                        <p>Your {toCurrency} has been sent to your address</p>
-                        <button onClick={resetSwap} className="new-swap-button">
-                          Start New Swap
+                        <p>Your {swapStatusData?.to?.code || toCurrency} has been sent to your address</p>
+                        {swapStatusData && (
+                          <SwapStatusTracker
+                            statusData={swapStatusData}
+                            fromCurrency={fromCurrency}
+                            toCurrency={toCurrency}
+                            isPolling={false}
+                          />
+                        )}
+                        <button 
+                          onClick={resetSwap} 
+                          className="new-swap-button"
+                          style={{
+                            background: 'linear-gradient(135deg, #8b5cf6 0%, #3b82f6 50%, #06b6d4 100%)',
+                            border: 'none',
+                            borderRadius: '12px',
+                            padding: '16px 32px',
+                            color: 'white',
+                            fontSize: '16px',
+                            fontWeight: '600',
+                            cursor: 'pointer',
+                            transition: 'all 0.3s ease',
+                            boxShadow: '0 4px 15px rgba(139, 92, 246, 0.3)',
+                            textTransform: 'none',
+                            letterSpacing: '0.5px',
+                            minWidth: '200px',
+                            margin: '20px auto 0',
+                            display: 'block',
+                            position: 'relative',
+                            overflow: 'hidden'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.target.style.transform = 'translateY(-2px)';
+                            e.target.style.boxShadow = '0 8px 25px rgba(139, 92, 246, 0.4)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.target.style.transform = 'translateY(0)';
+                            e.target.style.boxShadow = '0 4px 15px rgba(139, 92, 246, 0.3)';
+                          }}
+                          onMouseDown={(e) => {
+                            e.target.style.transform = 'translateY(0) scale(0.98)';
+                          }}
+                          onMouseUp={(e) => {
+                            e.target.style.transform = 'translateY(-2px) scale(1)';
+                          }}
+                        >
+                          <span style={{ position: 'relative', zIndex: 2 }}>
+                            ✨ Start New Swap
+                          </span>
                         </button>
                       </div>
                     )}

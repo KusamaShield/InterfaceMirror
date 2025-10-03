@@ -1,3 +1,7 @@
+/*
+ * Copyright 2025 Kusama Shield Developers on behalf of the Kusama DAO, see LICENSE in main folder.
+ */
+
 import getaccounid32 from "./adresses";
 import { isEvmAddress, eth2account32} from "./adresses";
 

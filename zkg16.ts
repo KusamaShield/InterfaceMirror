@@ -1,3 +1,7 @@
+/*
+ * Copyright 2025 Kusama Shield Developers on behalf of the Kusama DAO, see LICENSE in main folder.
+ */
+
 //const snarkjs = require("snarkjs");
 //import * as snarkjs from "snarkjs/build/snarkjs.min.js";
 import * as _snarkjs from "snarkjs";

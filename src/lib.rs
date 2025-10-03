@@ -1,3 +1,7 @@
+/*
+ * Copyright 2025 Kusama Shield Developers on behalf of the Kusama DAO, see LICENSE in main folder.
+ */
+
 mod utils;
 use web_sys::js_sys::Uint8Array;
 
