@@ -101,7 +101,7 @@ const NETWORKS = {
     name: "Paseo hub v2",
     asset: "PAS",
     chain_id: 420420422,
-    rpcEndpoint: "http://eth-pas-hub.laissez-faire.trade:8545", //"https://testnet-passet-hub-eth-rpc.polkadot.io",
+    rpcEndpoint: "https://testnet-passet-hub-eth-rpc.polkadot.io", //"https://testnet-passet-hub-eth-rpc.polkadot.io",
     faucet: "https://faucet.polkadot.io/?parachain=1111",
     block_explorer: "https://blockscout-passet-hub.parity-testnet.parity.io/",
     vk_address: "0xF3A0c5DaE0Cb99f9e4ED56D77BAC094517a05166",
