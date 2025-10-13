@@ -133,7 +133,7 @@ const NETWORKS = {
     name: "Kusama Assethub Mainnet",
     type: "mainnet",
     wsEndpoint: "wss://statemine-rpc-tn.dwellir.com",
-    rpcEndpoint: "http://eth-pas-hub.laissez-faire.trade:8545",
+    rpcEndpoint: "https://eth-asset-hub-kusama.dotters.network/",//"https://kusama-asset-hub-rpc.polkadot.io",//"http://eth-asset-hub-kusama.dotters.network/",//"http://eth-pas-hub.laissez-faire.trade:8545",
     asset: "KSM",
     chain_id: 420420418,
     shield_address: "0xDC80565357D63eCa67F3f020b6DD1CE1fD0E1Ed8",
@@ -1335,6 +1335,23 @@ export function App() {
               NETWORKS[networkKey].rpcEndpoint,
             );
             // send request to wallet to switch to the selected chain
+	   console.log(`sending add chain request`);
+	console.log(`params:`, [
+                {
+                  nativeCurrency: {
+                    name: NETWORKS[networkKey].asset,
+                    symbol: NETWORKS[networkKey].asset,
+                    decimals: 18,
+                  },
+                  chainId: `0x${NETWORKS[networkKey].chain_id?.toString(16)}`,
+                  chainName: NETWORKS[networkKey].name,
+                  rpcUrls: [NETWORKS[networkKey].rpcEndpoint],
+                  blockExplorerUrls: NETWORKS[networkKey].block_explorer
+                    ? [NETWORKS[networkKey].block_explorer]
+                    : [],
+                },
+              ],
+ );
             await talismanEth.request({
               method: "wallet_addEthereumChain",
               params: [
@@ -1344,7 +1361,7 @@ export function App() {
                     symbol: NETWORKS[networkKey].asset,
                     decimals: 18,
                   },
-                  chainId: targetChainId,
+                  chainId: `0x${NETWORKS[networkKey].chain_id?.toString(16)}`,
                   chainName: NETWORKS[networkKey].name,
                   rpcUrls: [NETWORKS[networkKey].rpcEndpoint],
                   blockExplorerUrls: NETWORKS[networkKey].block_explorer
@@ -1354,11 +1371,15 @@ export function App() {
               ],
             });
           } else {
+	    console.log(`ERRRORR`);
             throw switchError;
           }
         }
       }
 
+      // Clear any previous errors
+      setError(null);
+      
       // Update the selected network in state
       setSelectedNetwork(networkKey);
       setSelectedToken(NETWORKS[networkKey].asset);
