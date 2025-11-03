@@ -1,0 +1,18 @@
+{
+  "name": "generate-zk-wasm",
+  "type": "module",
+  "collaborators": [
+    "Kusama Shield Devs"
+  ],
+  "version": "0.1.2",
+  "files": [
+    "generate_zk_wasm_bg.wasm",
+    "generate_zk_wasm.js",
+    "generate_zk_wasm.d.ts"
+  ],
+  "main": "generate_zk_wasm.js",
+  "types": "generate_zk_wasm.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}
