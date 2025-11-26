@@ -5,11 +5,11 @@
 import "./App.css";
 import { useState, useEffect, useRef } from "react";
 import { WalletSelect } from "@talismn/connect-components";
-import { shieldTokens, fakeshield } from "./transactions/shield";
-import { isEvmAddress } from "./transactions/adresses";
+import { shieldTokens } from "./transactions/shield";
+import { isEvmAddress, ispolkadotaddress } from "./transactions/adresses";
 import SHIELD_CONTRACT_ADDRESS from "./transactions/shield";
 import fakeerc20asset from "./transactions/shield";
-import { make_deposit_tx, gen_tx_no_sig } from "./transactions/txgen";
+//import { make_deposit_tx, gen_tx_no_sig } from "./transactions/txgen";
 import { unshieldTokens, fetchKzgParams } from "./transactions/unshield";
 import {
   generate_tx2,
@@ -133,7 +133,7 @@ const NETWORKS = {
     name: "Kusama Assethub Mainnet",
     type: "mainnet",
     wsEndpoint: "wss://statemine-rpc-tn.dwellir.com",
-    rpcEndpoint: "https://eth-asset-hub-kusama.dotters.network/",//"https://kusama-asset-hub-rpc.polkadot.io",//"http://eth-asset-hub-kusama.dotters.network/",//"http://eth-pas-hub.laissez-faire.trade:8545",
+    rpcEndpoint: "https://eth-asset-hub-kusama.dotters.network/", //"https://kusama-asset-hub-rpc.polkadot.io",//"http://eth-asset-hub-kusama.dotters.network/",//"http://eth-pas-hub.laissez-faire.trade:8545",
     asset: "KSM",
     chain_id: 420420418,
     shield_address: "0xDC80565357D63eCa67F3f020b6DD1CE1fD0E1Ed8",
@@ -266,12 +266,20 @@ export function App() {
   const [isPolling, setIsPolling] = useState<boolean>(false);
   const [pollInterval, setPollInterval] = useState<number>(10000); // Start with 10 seconds
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Local countdown timer state
+  const [localTimeLeft, setLocalTimeLeft] = useState<number | null>(null);
+  const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
   // Destination address for non-KSM swaps
   const [destinationAddress, setDestinationAddress] = useState<string>("");
 
   // Available currencies - only currencies that can be swapped TO DOT
   const availableCurrencies = [
-    { symbol: "DOT", name: "Polkadot", logo: "/coin_logos/images/dot.svg" },
+    {
+      symbol: "DOT",
+      name: "Polkadot Assethub",
+      logo: "/coin_logos/images/assethub.svg",
+    },
     { symbol: "KSM", name: "Kusama", logo: "/coin_logos/images/kusama.svg" },
     {
       symbol: "AAVEETH",
@@ -532,9 +540,30 @@ export function App() {
   };
 
   // Check if swap requires destination address input
-  const requiresDestinationAddress = (fromCurrency: string, toCurrency: string) => {
-    // DOT to KSM uses connected wallet address, other swaps need destination input
-    return fromCurrency === "DOT" && toCurrency !== "KSM";
+  const requiresDestinationAddress = (
+    fromCurrency: string,
+    toCurrency: string,
+  ) => {
+    // Show destination address field for DOT and DOTAH swaps
+    return toCurrency === "DOT" || toCurrency === "DOTAH";
+  };
+
+  // Check if wallet connection is required for the current operation
+  const requiresWalletConnection = () => {
+    if (activeTab === "shield" || activeTab === "unshield") {
+      return true; // Always need wallet for shield/unshield
+    }
+    if (activeTab === "bridge") {
+      // For bridge (swap), only require wallet if no destination address provided for DOT swaps
+      if (
+        requiresDestinationAddress(fromCurrency, toCurrency) &&
+        destinationAddress.trim()
+      ) {
+        return false; // Have destination address, don't need wallet
+      }
+      return true; // Need wallet for other swaps or when no destination address
+    }
+    return true;
   };
 
   // Get bridge functionality type
@@ -640,7 +669,7 @@ export function App() {
       S: "Unknown Network",
 
       // Polkadot ecosystem
-      DOT: "Polkadot",
+      DOT: "Polkadot Assethub",
       KSM: "Kusama",
       PAS: "Paseo Testnet",
       WND: "Westend Testnet",
@@ -651,7 +680,7 @@ export function App() {
   };
 
   // Swap API base URL - will be deployed to public endpoint
-  const SWAP_API_BASE = "https://proxyswap.laissez-faire.trade";//"http://localhost:5000";
+  const SWAP_API_BASE = "http://localhost:5000"; //"https://proxyswap.laissez-faire.trade";//;
 
   // DOT/KSM price checker function
   const getDotToKsmRate = async () => {
@@ -805,6 +834,8 @@ export function App() {
       //await wallet.enable("KUSAMA SHIELD");
       setSelectedWallet(wallet);
       await wallet.enable(DAPP_NAME);
+
+      // Subscribe to account changes
       const unsubscribe = await wallet.subscribeAccounts(
         (accounts: WalletAccount[]) => {
           console.log(`accounts:`, accounts);
@@ -812,14 +843,21 @@ export function App() {
           // Also save the selected wallet name as well...
         },
       );
+
       //     window.talismanEth.enable()
       //     const wl = (window as any);
       //    console.log(`try it: `, wl);
       const talismanEth = (window as any).talismanEth;
-      const provider3 = new ethers.BrowserProvider(talismanEth);
-      console.log(`selected wallet:`, talismanEth.selectedAddress);
       if (!talismanEth) {
-        throw new Error("Talisman Ethereum provider not detected");
+        console.warn(
+          "Talisman Ethereum provider not available, continuing with Substrate-only functionality",
+        );
+        setSelectedWalletEVM(null);
+      } else {
+        const provider3 = new ethers.BrowserProvider(talismanEth);
+        console.log(`selected wallet:`, talismanEth.selectedAddress);
+        setSelectedWalletEVM(provider3);
+        console.log(`provider3 ok`);
       }
       console.log("got talisman eth");
 
@@ -827,23 +865,19 @@ export function App() {
       //        method: "eth_chainId",
       //});
       //      console.log(`current chain is: `, currentChainId);
-
-      setSelectedWalletEVM(provider3);
-      console.log(`provider3 ok`);
       //   await wallet.enable("KSMSHIELD");
 
+      // Get accounts but don't auto-connect - let user select account through UI
       const accounts = await wallet.getAccounts();
-      const substrateAddress = accounts[0]?.address || null;
-      console.log(`substrate address: `, substrateAddress);
-      if (accounts.length > 0) {
-        const address = accounts[0].address;
-        setEvmAddress(address);
-        setIsWalletConnected(true);
-      } else {
-        throw new Error("No accounts found");
-      }
+      console.log(
+        `Found ${accounts.length} accounts, waiting for user to select one`,
+      );
+
+      // Note: Don't set wallet as connected here - wait for account selection
+      // The onAccountSelected callback in the UI will handle the final connection
     } catch (err) {
-      setError("Failed to connect wallet");
+      console.error("Failed to enable wallet:", err);
+      setError("Failed to enable wallet");
     }
   };
 
@@ -1286,7 +1320,7 @@ export function App() {
   };
 
   const setNetwork = async (networkKey: keyof typeof NETWORKS) => {
-    console.log(`setNework called, input:`, networkKey);
+    console.log(`setNetwork called, input:`, networkKey);
     try {
       setIsLoading(true);
       setError(null);
@@ -1294,7 +1328,7 @@ export function App() {
       // Display loading toast
       toast.info(`Switching to ${NETWORKS[networkKey].name}...`, {
         position: "top-right",
-        autoClose: 5000,
+        autoClose: 2000,
         hideProgressBar: false,
         closeOnClick: false,
         pauseOnHover: true,
@@ -1303,97 +1337,100 @@ export function App() {
         theme: "dark",
       });
 
-      // Check if Talisman Ethereum provider is available
-      const talismanEth = (window as any).talismanEth;
-      if (!talismanEth) {
-        throw new Error("Talisman Ethereum provider not detected");
-      }
+      // Update the selected network in app state (this always works)
+      setSelectedNetwork(networkKey);
+      setSelectedToken(NETWORKS[networkKey].asset);
 
-      // Get current chain ID
-      //     const currentChainId = await talismanEth.request({
-      //       method: "eth_chainId",
-      //    });
-      // target chain id
-      const targetChainId = NETWORKS[networkKey].chain_id
-        ? `0x${NETWORKS[networkKey].chain_id?.toString(16)}`
-        : undefined;
-      if (targetChainId) {
+      // Clear any previous errors
+      setError(null);
+
+      // Display success toast
+      toast.success(`Successfully switched to ${NETWORKS[networkKey].name}`, {
+        position: "top-right",
+        autoClose: 3000,
+        hideProgressBar: false,
+        closeOnClick: false,
+        pauseOnHover: true,
+        draggable: true,
+        progress: undefined,
+        theme: "dark",
+      });
+
+      // If wallet is connected, try to switch wallet network as well
+      const talismanEth = (window as any).talismanEth;
+      if (isWalletConnected && talismanEth && NETWORKS[networkKey].chain_id) {
+        console.log("Attempting to switch wallet network...");
+        const targetChainId = `0x${NETWORKS[networkKey].chain_id?.toString(16)}`;
+
         try {
-          // Try to switch the network
-          console.log(`wallet_switchEthereumChain: `, targetChainId);
           await talismanEth.request({
             method: "wallet_switchEthereumChain",
             params: [{ chainId: targetChainId }],
           });
-        } catch (switchError) {
-          // This error code indicates that the chain has not been added to the wallet
-          console.log(`switch error!`);
+          console.log("Wallet network switched successfully");
+        } catch (switchError: any) {
+          console.log("Wallet network switch error:", switchError);
+
           if (switchError.code === 4902) {
-            // Add the network to the wallet
-            console.log(
-              `4902 wallet_addEthereumChain:`,
-              NETWORKS[networkKey].rpcEndpoint,
-            );
-            // send request to wallet to switch to the selected chain
-	   console.log(`sending add chain request`);
-	console.log(`params:`, [
-                {
-                  nativeCurrency: {
-                    name: NETWORKS[networkKey].asset,
-                    symbol: NETWORKS[networkKey].asset,
-                    decimals: 18,
+            // Try to add the network to the wallet
+            try {
+              await talismanEth.request({
+                method: "wallet_addEthereumChain",
+                params: [
+                  {
+                    nativeCurrency: {
+                      name: NETWORKS[networkKey].asset,
+                      symbol: NETWORKS[networkKey].asset,
+                      decimals: 18,
+                    },
+                    chainId: targetChainId,
+                    chainName: NETWORKS[networkKey].name,
+                    rpcUrls: [NETWORKS[networkKey].rpcEndpoint],
+                    blockExplorerUrls: NETWORKS[networkKey].block_explorer
+                      ? [NETWORKS[networkKey].block_explorer]
+                      : [],
                   },
-                  chainId: `0x${NETWORKS[networkKey].chain_id?.toString(16)}`,
-                  chainName: NETWORKS[networkKey].name,
-                  rpcUrls: [NETWORKS[networkKey].rpcEndpoint],
-                  blockExplorerUrls: NETWORKS[networkKey].block_explorer
-                    ? [NETWORKS[networkKey].block_explorer]
-                    : [],
-                },
-              ],
- );
-            await talismanEth.request({
-              method: "wallet_addEthereumChain",
-              params: [
+                ],
+              });
+              console.log("Network added to wallet successfully");
+            } catch (addError) {
+              console.warn("Failed to add network to wallet:", addError);
+              toast.warn(
+                "Network switched in app, but couldn't update wallet. You may need to manually switch networks in your wallet.",
                 {
-                  nativeCurrency: {
-                    name: NETWORKS[networkKey].asset,
-                    symbol: NETWORKS[networkKey].asset,
-                    decimals: 18,
-                  },
-                  chainId: `0x${NETWORKS[networkKey].chain_id?.toString(16)}`,
-                  chainName: NETWORKS[networkKey].name,
-                  rpcUrls: [NETWORKS[networkKey].rpcEndpoint],
-                  blockExplorerUrls: NETWORKS[networkKey].block_explorer
-                    ? [NETWORKS[networkKey].block_explorer]
-                    : [],
+                  position: "top-right",
+                  autoClose: 5000,
+                  hideProgressBar: false,
+                  closeOnClick: true,
+                  pauseOnHover: true,
+                  draggable: true,
+                  progress: undefined,
+                  theme: "dark",
                 },
-              ],
-            });
+              );
+            }
           } else {
-	    console.log(`ERRRORR`);
-            throw switchError;
+            console.warn("Failed to switch wallet network:", switchError);
+            toast.warn(
+              "Network switched in app, but couldn't update wallet. You may need to manually switch networks in your wallet.",
+              {
+                position: "top-right",
+                autoClose: 5000,
+                hideProgressBar: false,
+                closeOnClick: true,
+                pauseOnHover: true,
+                draggable: true,
+                progress: undefined,
+                theme: "dark",
+              },
+            );
           }
         }
+      } else if (!talismanEth && isWalletConnected) {
+        console.log(
+          "Wallet connected but no Ethereum provider available for network switching",
+        );
       }
-
-      // Clear any previous errors
-      setError(null);
-      
-      // Update the selected network in state
-      setSelectedNetwork(networkKey);
-      setSelectedToken(NETWORKS[networkKey].asset);
-      // Display success toast
-      toast.success(`Successfully switched to ${NETWORKS[networkKey].name}`, {
-        position: "top-right",
-        autoClose: 5000,
-        hideProgressBar: false,
-        closeOnClick: false,
-        pauseOnHover: true,
-        draggable: true,
-        progress: undefined,
-        theme: "dark",
-      });
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : "Failed to switch network";
@@ -1870,6 +1907,64 @@ export function App() {
     // console.log(`generated transaction: `, transacto.toHex())
   };
 
+  // Helper function to format time left
+  const formatTimeLeft = (seconds: number) => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+
+    if (hours > 0) {
+      return `${hours}h ${minutes}m ${secs}s`;
+    } else if (minutes > 0) {
+      return `${minutes}m ${secs}s`;
+    } else {
+      return `${secs}s`;
+    }
+  };
+
+  // Countdown timer functions
+  const startCountdown = (initialSeconds: number) => {
+    setLocalTimeLeft(initialSeconds);
+
+    // Clear any existing countdown
+    if (countdownIntervalRef.current) {
+      clearInterval(countdownIntervalRef.current);
+    }
+
+    // Start new countdown
+    countdownIntervalRef.current = setInterval(() => {
+      setLocalTimeLeft((prev) => {
+        if (prev === null || prev <= 0) {
+          if (countdownIntervalRef.current) {
+            clearInterval(countdownIntervalRef.current);
+          }
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  const stopCountdown = () => {
+    if (countdownIntervalRef.current) {
+      clearInterval(countdownIntervalRef.current);
+      countdownIntervalRef.current = null;
+    }
+    setLocalTimeLeft(null);
+  };
+
+  const syncCountdown = (serverTimeLeft: number) => {
+    // Sync local countdown with server time
+    if (serverTimeLeft > 0) {
+      setLocalTimeLeft(serverTimeLeft);
+      if (!countdownIntervalRef.current) {
+        startCountdown(serverTimeLeft);
+      }
+    } else {
+      stopCountdown();
+    }
+  };
+
   // Swap-related functions
   const fetchExchangeRate = async () => {
     if (!swapAmount || !fromCurrency || !toCurrency) return;
@@ -1890,7 +1985,6 @@ export function App() {
         const calculatedToAmount = (
           parseFloat(swapAmount) * parseFloat(localRate.rate)
         ).toFixed(6);
-
         const transformedRate = {
           rate: localRate.rate,
           to_amount: calculatedToAmount,
@@ -1910,14 +2004,24 @@ export function App() {
     }
 
     try {
+      var fromc;
+      var toC;
+      fromc = fromCurrency;
+      toC = toCurrency;
+      if (fromCurrency == "DOT") {
+        fromc = "DOTAH";
+      }
+      if (toC == "DOT") {
+        toC = "DOTAH";
+      }
       const response = await fetch(`${SWAP_API_BASE}/exchange_rate`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          fromCcy: fromCurrency,
-          toCcy: toCurrency,
+          fromCcy: fromc,
+          toCcy: toC,
           amount: parseFloat(swapAmount),
         }),
       });
@@ -1951,16 +2055,46 @@ export function App() {
 
   const createSwap = async () => {
     console.log(`create swap called`);
-    if (!swapAmount || !fromCurrency || !toCurrency || !evmAddress) {
-      toast.error("Please fill in all required fields");
+    // Check required fields - evmAddress only required if no destination address is provided for DOT swaps
+    const needsWallet =
+      !requiresDestinationAddress(fromCurrency, toCurrency) ||
+      !destinationAddress.trim();
+    if (
+      !swapAmount ||
+      !fromCurrency ||
+      !toCurrency ||
+      (needsWallet && !evmAddress)
+    ) {
+      if (needsWallet && !evmAddress) {
+        toast.error("Please connect wallet or enter destination address");
+      } else {
+        toast.error("Please fill in all required fields");
+      }
       console.error("Please fill in all required fields");
       return;
     }
 
     // Check if destination address is required and provided
-    if (requiresDestinationAddress(fromCurrency, toCurrency) && !destinationAddress.trim()) {
+    if (
+      requiresDestinationAddress(fromCurrency, toCurrency) &&
+      !destinationAddress.trim()
+    ) {
       toast.error(`Please enter a ${toCurrency} destination address`);
-      console.error(`Destination address required for ${fromCurrency} to ${toCurrency} swap`);
+      console.error(
+        `Destination address required for ${fromCurrency} to ${toCurrency} swap`,
+      );
+      return;
+    }
+
+    // Validate DOT destination address format
+    if (
+      toCurrency === "DOT" &&
+      destinationAddress.trim() &&
+      !ispolkadotaddress(destinationAddress.trim())
+    ) {
+      toast.error("Invalid Polkadot address format for DOT destination");
+      toast.error("Select another Polkadot address");
+      console.error("Invalid Polkadot address format provided for DOT swap");
       return;
     }
     console.log(
@@ -1977,9 +2111,22 @@ export function App() {
       return;
     }
 
+    // Check if DOT destination address is EVM format (invalid)
+    const finalDestination = requiresDestinationAddress(
+      fromCurrency,
+      toCurrency,
+    )
+      ? destinationAddress.trim()
+      : evmAddress;
 
-    if (toCurrency == "DOT" && isEvmAddress(evmAddress)) {
-              toast.error(`Select a (Polkadot style)non-evm address`, {
+    if (
+      toCurrency == "DOT" &&
+      finalDestination &&
+      isEvmAddress(finalDestination)
+    ) {
+      toast.error(
+        `Invalid address format: DOT requires a Polkadot address, not EVM address`,
+        {
           position: "top-right",
           autoClose: 5000,
           hideProgressBar: false,
@@ -1988,9 +2135,9 @@ export function App() {
           draggable: true,
           progress: undefined,
           theme: "dark",
-        });
-    //    setError("Select a polkadot style account, not evm");
-      return ;
+        },
+      );
+      return;
     }
 
     // Handle DOT→KSM cross-chain swap with local price checker
@@ -2049,53 +2196,52 @@ export function App() {
         console.log(`calling tx`);
         const signer = selectedWallet.signer;
         /* */
-      const tx = await generate_dot2ksm(
+        const tx = await generate_dot2ksm(
           tmpapi,
-        swapAmount,
- calculatedToAmount,
-  evmAddress
+          swapAmount,
+          calculatedToAmount,
+          evmAddress,
         );
         console.log(`tx called!`);
 
-      
-            const unsub = await tx.signAndSend(
-      evmAddress,
-      { signer },
-      ({ status, events, dispatchError }) => {
-        if (status.isInBlock) {
-          console.log(`Transaction included in block: ${status.asInBlock}`);
-          toast.info(`Transaction included in block: ${status.asInBlock}`, {
-            position: "top-right",
-            autoClose: 6000,
-            hideProgressBar: false,
-            closeOnClick: false,
-            pauseOnHover: true,
-            draggable: true,
-            progress: undefined,
-            theme: "dark",
-          });
-        }
+        const unsub = await tx.signAndSend(
+          evmAddress,
+          { signer },
+          ({ status, events, dispatchError }) => {
+            if (status.isInBlock) {
+              console.log(`Transaction included in block: ${status.asInBlock}`);
+              toast.info(`Transaction included in block: ${status.asInBlock}`, {
+                position: "top-right",
+                autoClose: 6000,
+                hideProgressBar: false,
+                closeOnClick: false,
+                pauseOnHover: true,
+                draggable: true,
+                progress: undefined,
+                theme: "dark",
+              });
+            }
 
-        if (status.isFinalized) {
-          console.log(`Transaction finalized: ${status.asFinalized}`);
-          toast.success(`Transaction finalized: ${status.asFinalized}`, {
-            position: "top-right",
-            autoClose: 8000,
-            hideProgressBar: false,
-            closeOnClick: false,
-            pauseOnHover: true,
-            draggable: true,
-            progress: undefined,
-            theme: "dark",
-          });
-          unsub(); // Unsubscribe from updates
-   //       setIsLoading(false);
-            console.log(`tx finished, moving on`);
-         // return true;
-        }
-      },
-    );
- 
+            if (status.isFinalized) {
+              console.log(`Transaction finalized: ${status.asFinalized}`);
+              toast.success(`Transaction finalized: ${status.asFinalized}`, {
+                position: "top-right",
+                autoClose: 8000,
+                hideProgressBar: false,
+                closeOnClick: false,
+                pauseOnHover: true,
+                draggable: true,
+                progress: undefined,
+                theme: "dark",
+              });
+              unsub(); // Unsubscribe from updates
+              //       setIsLoading(false);
+              console.log(`tx finished, moving on`);
+              // return true;
+            }
+          },
+        );
+
         console.log(`returno!`);
 
         // here the user has selected a polkadot address but now we need the ethereum one to fiddle with
@@ -2189,7 +2335,7 @@ export function App() {
         console.log(
           `making tx2 with input:`,
           calculatedToAmount,
-      //    eth2accountid32(destaddress),
+          //    eth2accountid32(destaddress),
         );
         console.log(`returning trueee`);
         //  return true;
@@ -2265,10 +2411,13 @@ export function App() {
 
     // Regular swap for other currency pairs
     setIsLoading(true);
-    const finalDestinationAddress = requiresDestinationAddress(fromCurrency, toCurrency) 
-      ? destinationAddress.trim() 
+    const finalDestinationAddress = requiresDestinationAddress(
+      fromCurrency,
+      toCurrency,
+    )
+      ? destinationAddress.trim()
       : evmAddress;
-    
+
     try {
       console.log(
         `sending request:`,
@@ -2281,14 +2430,24 @@ export function App() {
         "destination_addres:",
         finalDestinationAddress,
       );
+      var itoc;
+      itoc = toCurrency;
+      if (toCurrency == "DOT") {
+        itoc = "DOTAH";
+      }
+      var itof;
+      itof = fromCurrency;
+      if (itof == "DOT") {
+        itof = "DOTAH";
+      }
       const response = await fetch(`${SWAP_API_BASE}/trade`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          fromCcy: fromCurrency,
-          toCcy: toCurrency,
+          fromCcy: itof,
+          toCcy: itoc,
           amount: parseFloat(swapAmount),
           destination_addres: finalDestinationAddress,
         }),
@@ -2306,7 +2465,7 @@ export function App() {
         setQrCodeData(qrData);
 
         toast.success("Swap created successfully!");
-        
+
         // Start immediate status check to get initial status data
         setTimeout(checkSwapStatus, 1000);
       } else {
@@ -2342,7 +2501,7 @@ export function App() {
 
   const checkSwapStatus = async () => {
     if (!currentTrade?.trade_id) return;
-    
+
     setIsPolling(true);
     try {
       const response = await fetch(`${SWAP_API_BASE}/order-status`, {
@@ -2356,55 +2515,65 @@ export function App() {
       });
 
       const data = await response.json();
-      
+
       if (data.msg === "found trade" && data.data?.data) {
         console.log(`Status update:`, data.data.data.status);
         console.log(`Full status data:`, data.data.data);
-        
+        console.log(`trade id:`, currentTrade.trade_id);
         const statusData = data.data.data;
         setSwapStatusData(statusData);
         setTradeData(data);
-        
+
+        // Sync countdown timer with server time
+        if (statusData.time && typeof statusData.time.left === "number") {
+          syncCountdown(statusData.time.left);
+        }
+
         // Update swap stage based on status
         switch (statusData.status) {
-          case 'NEW':
+          case "NEW":
             setSwapStage("deposit");
             break;
-          case 'PENDING':
-          case 'EXCHANGE':
-          case 'WITHDRAW':
+          case "PENDING":
+          case "EXCHANGE":
+          case "WITHDRAW":
             setSwapStage("processing");
             break;
-          case 'DONE':
+          case "DONE":
             setSwapStage("completed");
             toast.success("Swap completed successfully!");
             stopPolling();
+            stopCountdown();
             break;
-          case 'EXPIRED':
+          case "EXPIRED":
             toast.error("Swap expired");
             stopPolling();
+            stopCountdown();
             break;
-          case 'EMERGENCY':
-            toast.error(`🚨 Order requires manual review!\n\nPlease email kusamashield@smokes.thc.org with your order number: ${statusData.id}\n\nWe will sort it out straight away.`, {
-              position: "top-center",
-              autoClose: false,
-              hideProgressBar: false,
-              closeOnClick: true,
-              pauseOnHover: true,
-              draggable: true,
-              progress: undefined,
-              theme: "dark",
-              style: {
-                whiteSpace: 'pre-line',
-                textAlign: 'center',
-                fontSize: '14px',
-                maxWidth: '500px'
-              }
-            });
+          case "EMERGENCY":
+            toast.error(
+              `🚨 Order requires manual review!\n\nPlease email kusamashield@smokes.thc.org with your order number: ${statusData.id}\n\nWe will sort it out straight away.`,
+              {
+                position: "top-center",
+                autoClose: false,
+                hideProgressBar: false,
+                closeOnClick: true,
+                pauseOnHover: true,
+                draggable: true,
+                progress: undefined,
+                theme: "dark",
+                style: {
+                  whiteSpace: "pre-line",
+                  textAlign: "center",
+                  fontSize: "14px",
+                  maxWidth: "500px",
+                },
+              },
+            );
             stopPolling();
             break;
         }
-        
+
         // Adjust polling frequency based on status
         updatePollingFrequency(statusData.status);
       }
@@ -2419,24 +2588,24 @@ export function App() {
   // Enhanced polling management
   const updatePollingFrequency = (status: string) => {
     let newInterval = 10000; // Default 10 seconds
-    
+
     switch (status) {
-      case 'NEW':
+      case "NEW":
         newInterval = 15000; // 15 seconds for new orders
         break;
-      case 'PENDING':
+      case "PENDING":
         newInterval = 5000; // 5 seconds for pending confirmation
         break;
-      case 'EXCHANGE':
-      case 'WITHDRAW':
+      case "EXCHANGE":
+      case "WITHDRAW":
         newInterval = 3000; // 3 seconds for active processing
         break;
-      case 'DONE':
-      case 'EXPIRED':
-      case 'EMERGENCY':
+      case "DONE":
+      case "EXPIRED":
+      case "EMERGENCY":
         return; // Stop polling for terminal states
     }
-    
+
     if (newInterval !== pollInterval) {
       setPollInterval(newInterval);
       restartPolling(newInterval);
@@ -2471,10 +2640,16 @@ export function App() {
     setTradeData(null);
     setDestinationAddress("");
     stopPolling();
+    stopCountdown();
   };
 
   // Reset currencies when network changes
   useEffect(() => {
+    // Don't reset currencies if there's an active swap in progress
+    if (currentTrade || swapStage !== "input") {
+      return;
+    }
+
     const networkCurrencies = getAvailableCurrencies(selectedNetwork);
     const networkSymbols = networkCurrencies.map((c) => c.symbol);
 
@@ -2495,7 +2670,14 @@ export function App() {
 
     // Reset exchange rate when network changes
     setExchangeRate(null);
-  }, [selectedNetwork]);
+  }, [selectedNetwork, currentTrade, swapStage]);
+
+  // Cleanup countdown timer on unmount
+  useEffect(() => {
+    return () => {
+      stopCountdown();
+    };
+  }, []);
 
   // Auto-refresh exchange rate when inputs change (only for mainnet)
   useEffect(() => {
@@ -2516,9 +2698,48 @@ export function App() {
     setDestinationAddress("");
   }, [fromCurrency, toCurrency]);
 
+  // Auto-populate destination address with connected wallet for DOT/DOTAH swaps
+  useEffect(() => {
+    if (
+      requiresDestinationAddress(fromCurrency, toCurrency) &&
+      evmAddress &&
+      !destinationAddress
+    ) {
+      // Only auto-populate if field is empty and we have a connected wallet
+      setDestinationAddress(evmAddress);
+    }
+  }, [evmAddress, fromCurrency, toCurrency, destinationAddress]);
+
+  // Validate destination address for DOT swaps
+  useEffect(() => {
+    if (toCurrency === "DOT" && destinationAddress.trim()) {
+      if (!ispolkadotaddress(destinationAddress.trim())) {
+        toast.error("Invalid Polkadot address format for DOT destination", {
+          position: "top-right",
+          autoClose: 5000,
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+          progress: undefined,
+          theme: "dark",
+        });
+        setError("Invalid Polkadot address format for DOT destination");
+      } else {
+        // Clear any previous address validation errors
+        if (error === "Invalid Polkadot address format for DOT destination") {
+          setError(null);
+        }
+      }
+    }
+  }, [destinationAddress, toCurrency]);
+
   // Auto-refresh swap status during processing
   useEffect(() => {
-    if ((swapStage === "processing" || swapStage === "deposit") && currentTrade?.trade_id) {
+    if (
+      (swapStage === "processing" || swapStage === "deposit") &&
+      currentTrade?.trade_id
+    ) {
       startPolling(pollInterval);
       return () => stopPolling();
     } else {
@@ -2606,7 +2827,9 @@ export function App() {
       </div>
 
       <div className="swap-container">
-        <div className="swap-box">
+        <div
+          className={`swap-box ${activeTab === "bridge" ? "no-shield-shape" : ""}`}
+        >
           <div className="tabs">
             <button
               className={`tab ${activeTab === "shield" ? "active" : ""}`}
@@ -2783,34 +3006,33 @@ export function App() {
                             min="0.1"
                           />
                           <div className="balance-display">
-                            Destination Balance: {userBalance} {toCurrency}
+                            Destination Balance: Coming soon to {toCurrency}
                           </div>
                         </div>
 
-                        {requiresDestinationAddress(fromCurrency, toCurrency) && (
+                        {requiresDestinationAddress(
+                          fromCurrency,
+                          toCurrency,
+                        ) && (
                           <div className="amount-input">
                             <label>{toCurrency} Destination Address:</label>
                             <input
                               type="text"
                               value={destinationAddress}
-                              onChange={(e) => setDestinationAddress(e.target.value)}
-                              placeholder={`Enter ${toCurrency} address to receive funds`}
-                              style={{
-                                width: '100%',
-                                padding: '8px',
-                                borderRadius: '4px',
-                                border: '1px solid rgba(255, 255, 255, 0.2)',
-                                background: 'rgba(255, 255, 255, 0.05)',
-                                color: 'white',
-                                fontSize: '14px'
-                              }}
+                              onChange={(e) =>
+                                setDestinationAddress(e.target.value)
+                              }
+                              placeholder={
+                                evmAddress && !destinationAddress
+                                  ? `Will use connected wallet: ${evmAddress.slice(0, 10)}...`
+                                  : `Enter ${toCurrency} address to receive funds`
+                              }
+                              className="destination-address-input"
                             />
-                            <div className="address-help" style={{
-                              fontSize: '12px',
-                              color: '#9ca3af',
-                              marginTop: '4px'
-                            }}>
-                              Enter a valid {toCurrency} address where you want to receive your {toCurrency} tokens
+                            <div className="address-help">
+                              {evmAddress
+                                ? `Auto-filled with connected wallet address. You can change it if needed.`
+                                : `Enter a valid ${toCurrency} address where you want to receive your ${toCurrency} tokens. No wallet connection required.`}
                             </div>
                           </div>
                         )}
@@ -2879,7 +3101,9 @@ export function App() {
                         <h3>Send {fromCurrency} to complete swap</h3>
                         <div className="deposit-info">
                           <div className="deposit-address">
-                            <label>Send tokens to this Deposit Address:</label>
+                            <label>
+                              Send {fromCurrency} to this Deposit Address:
+                            </label>
                             <div className="address-container">
                               {qrCodeData && (
                                 <div className="qr-code">
@@ -2914,9 +3138,9 @@ export function App() {
                           </div>
 
                           <div className="deposit-network">
-                            <label>Send token on the network:</label>
+                            <label>Send {fromCurrency} on the network:</label>
                             <div className="amount-display">
-                              {currentTrade.from.network}
+                              {getNetworkForCurrency(fromCurrency)}
                             </div>
                           </div>
 
@@ -2929,10 +3153,45 @@ export function App() {
 
                           <div className="deposit-amount">
                             <label>Send exactly:</label>
-                            <div className="amount-display">
-                              {currentTrade.from.amount} {fromCurrency}
+                            <div className="address-container">
+                              <div className="amount-display">
+                                {currentTrade.from.amount} {fromCurrency}
+                              </div>
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(
+                                    currentTrade.from.amount,
+                                  );
+                                  toast("📋 Amount copied to clipboard!", {
+                                    position: "top-right",
+                                    autoClose: 3000,
+                                    hideProgressBar: false,
+                                    closeOnClick: true,
+                                    pauseOnHover: true,
+                                    draggable: true,
+                                    progress: undefined,
+                                    theme: "dark",
+                                  });
+                                }}
+                                title="Copy amount to clipboard"
+                              >
+                                📋
+                              </button>
                             </div>
                           </div>
+
+                          {localTimeLeft !== null && localTimeLeft > 0 && (
+                            <div className="deposit-amount">
+                              <label>Time remaining:</label>
+                              <div
+                                className={`amount-display time-remaining ${
+                                  localTimeLeft < 300 ? "warning" : ""
+                                }`}
+                              >
+                                ⏰ {formatTimeLeft(localTimeLeft)}
+                              </div>
+                            </div>
+                          )}
 
                           <div className="deposit-amount">
                             <label>Receiving:</label>
@@ -2943,8 +3202,33 @@ export function App() {
 
                           <div className="deposit-amount">
                             <label>Receiving address:</label>
-                            <div className="amount-display">
-                              {currentTrade.to.address}
+                            <div className="address-container">
+                              <div className="amount-display">
+                                {currentTrade.to.address}
+                              </div>
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(
+                                    currentTrade.to.address,
+                                  );
+                                  toast(
+                                    "📋 Receiving address copied to clipboard!",
+                                    {
+                                      position: "top-right",
+                                      autoClose: 3000,
+                                      hideProgressBar: false,
+                                      closeOnClick: true,
+                                      pauseOnHover: true,
+                                      draggable: true,
+                                      progress: undefined,
+                                      theme: "dark",
+                                    },
+                                  );
+                                }}
+                                title="Copy receiving address to clipboard"
+                              >
+                                📋
+                              </button>
                             </div>
                           </div>
 
@@ -2954,6 +3238,12 @@ export function App() {
                               className="confirm-deposit-button"
                             >
                               I've sent the {fromCurrency}
+                            </button>
+                            <button
+                              onClick={resetSwap}
+                              className="cancel-swap-button"
+                            >
+                              Cancel Swap
                             </button>
                           </div>
                         </div>
@@ -2973,7 +3263,9 @@ export function App() {
                         ) : (
                           <>
                             <div className="loading-spinner"></div>
-                            <p>Waiting for confirmation and processing your swap</p>
+                            <p>
+                              Waiting for confirmation and processing your swap
+                            </p>
                             <div className="trade-id">
                               Trade ID: {currentTrade?.trade_id}
                             </div>
@@ -2985,7 +3277,10 @@ export function App() {
                     {swapStage === "completed" && (
                       <div className="completed-stage">
                         <h3>✅ Swap Completed!</h3>
-                        <p>Your {swapStatusData?.to?.code || toCurrency} has been sent to your address</p>
+                        <p>
+                          Your {swapStatusData?.to?.code || toCurrency} has been
+                          sent to your address
+                        </p>
                         {swapStatusData && (
                           <SwapStatusTracker
                             statusData={swapStatusData}
@@ -2994,44 +3289,49 @@ export function App() {
                             isPolling={false}
                           />
                         )}
-                        <button 
-                          onClick={resetSwap} 
+                        <button
+                          onClick={resetSwap}
                           className="new-swap-button"
                           style={{
-                            background: 'linear-gradient(135deg, #8b5cf6 0%, #3b82f6 50%, #06b6d4 100%)',
-                            border: 'none',
-                            borderRadius: '12px',
-                            padding: '16px 32px',
-                            color: 'white',
-                            fontSize: '16px',
-                            fontWeight: '600',
-                            cursor: 'pointer',
-                            transition: 'all 0.3s ease',
-                            boxShadow: '0 4px 15px rgba(139, 92, 246, 0.3)',
-                            textTransform: 'none',
-                            letterSpacing: '0.5px',
-                            minWidth: '200px',
-                            margin: '20px auto 0',
-                            display: 'block',
-                            position: 'relative',
-                            overflow: 'hidden'
+                            background:
+                              "linear-gradient(135deg, #8b5cf6 0%, #3b82f6 50%, #06b6d4 100%)",
+                            border: "none",
+                            borderRadius: "12px",
+                            padding: "16px 32px",
+                            color: "white",
+                            fontSize: "16px",
+                            fontWeight: "600",
+                            cursor: "pointer",
+                            transition: "all 0.3s ease",
+                            boxShadow: "0 4px 15px rgba(139, 92, 246, 0.3)",
+                            textTransform: "none",
+                            letterSpacing: "0.5px",
+                            minWidth: "200px",
+                            margin: "20px auto 0",
+                            display: "block",
+                            position: "relative",
+                            overflow: "hidden",
                           }}
                           onMouseEnter={(e) => {
-                            e.target.style.transform = 'translateY(-2px)';
-                            e.target.style.boxShadow = '0 8px 25px rgba(139, 92, 246, 0.4)';
+                            e.target.style.transform = "translateY(-2px)";
+                            e.target.style.boxShadow =
+                              "0 8px 25px rgba(139, 92, 246, 0.4)";
                           }}
                           onMouseLeave={(e) => {
-                            e.target.style.transform = 'translateY(0)';
-                            e.target.style.boxShadow = '0 4px 15px rgba(139, 92, 246, 0.3)';
+                            e.target.style.transform = "translateY(0)";
+                            e.target.style.boxShadow =
+                              "0 4px 15px rgba(139, 92, 246, 0.3)";
                           }}
                           onMouseDown={(e) => {
-                            e.target.style.transform = 'translateY(0) scale(0.98)';
+                            e.target.style.transform =
+                              "translateY(0) scale(0.98)";
                           }}
                           onMouseUp={(e) => {
-                            e.target.style.transform = 'translateY(-2px) scale(1)';
+                            e.target.style.transform =
+                              "translateY(-2px) scale(1)";
                           }}
                         >
-                          <span style={{ position: 'relative', zIndex: 2 }}>
+                          <span style={{ position: "relative", zIndex: 2 }}>
                             ✨ Start New Swap
                           </span>
                         </button>
@@ -3164,7 +3464,10 @@ export function App() {
                             : handleBridge
                           : () => {}
                   }
-                  disabled={isLoading || !isWalletConnected}
+                  disabled={
+                    isLoading ||
+                    (requiresWalletConnection() && !isWalletConnected)
+                  }
                 >
                   {isLoading
                     ? "Processing..."
@@ -3213,7 +3516,8 @@ export function App() {
               fill="currentColor"
             />
           </svg>
-          By using this website you agree to the Terms of Service
+          By using this website you agree to the Terms of Service. App has
+          <u>NOT BEEN AUDITED yet</u>
         </button>
         <div
           style={{

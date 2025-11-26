@@ -1,13 +1,25 @@
 @import "./root.css";
+@import url('https://fonts.googleapis.com/css?family=Exo+2');
 
 body {
-    background-color: black;
+    background: radial-gradient(ellipse at center, #09002b 0%, #000000 100%);
     margin: 0;
     color: white;
+    font-family: 'Exo 2', sans-serif;
+    font-weight: 700;
+    perspective: 200px;
+    perspective-origin: bottom;
+    animation: fadeIn .5s var(--acc) 1;
+}
+
+@keyframes fadeIn{
+  0%,50%{
+    opacity: 0;
+    transform: scale(.89);
+  }
 }
 
 .App {
-    background-color: black;
     min-height: 100vh;
     display: flex;
     flex-direction: column;
@@ -58,23 +70,54 @@ body {
 }
 
 .swap-container {
-    width: 100%;
-    max-width: 500px;
-    margin-bottom: 2rem;
+    width: 95%;
+    max-width: var(--shield-width);
+    margin-bottom: 4rem;
     position: relative;
     z-index: 1;
+    padding: 2% 0 6% 0;
+    overflow: visible;
+    transform-style: preserve-3d;
+    outline: 1px solid transparent;
+    cursor: pointer;
+    will-change: background;
+}
+
+@keyframes float{
+  0%{
+    transform: none;
+  }
+  50%{
+    transform: translate3d(-1%,-3%,0) scaleX(1.02) scaleY(.98) skewY(-2deg) rotateX(-1deg) rotateY(1deg) rotateZ(-1deg);
+  }
 }
 
 .swap-box {
     background: linear-gradient(145deg, #1a0b2e, #0a0515);
-    border-radius: 20px;
-    padding: 2rem;
+    padding: 4% 8% 6% 8%;
     box-shadow: 0 0 20px rgba(147, 51, 234, 0.3);
-    border: 1px solid rgba(147, 51, 234, 0.2);
+    border: 2px solid rgba(147, 51, 234, 0.5);
+    animation: pulsateBorder 3s ease-in-out infinite;
     position: relative;
+    z-index: 2;
+    margin: 0 auto;
+    width: 100%;
+    max-width: 600px;
+    box-sizing: border-box;
+    clip-path: polygon(50% 0%, 95% 0%, 90% 50%, 80% 90%, 50% 100%, 20% 90%, 10% 50%, 5% 0%);
+    backdrop-filter: blur(5px);
     overflow: visible;
-    z-index: 0;
+    margin-bottom: 60px;
+    border-radius: 0;
 }
+
+.swap-box.no-shield-shape {
+    clip-path: none;
+    border-radius: 20px;
+}
+
+
+
 
 .swap-box h2 {
     margin: 0 0 1.5rem 0;
@@ -777,6 +820,9 @@ body {
     padding: 8px 16px;
     font-size: 14px;
     transition: color 0.3s ease;
+    white-space: nowrap;
+    overflow: visible;
+    width: auto;
 }
 
 .terms-button:hover {
@@ -1451,6 +1497,39 @@ body {
     font-weight: 400;
 }
 
+.destination-address-input {
+    background: rgba(0, 0, 0, 0.3) !important;
+    border: 1px solid rgba(147, 51, 234, 0.2) !important;
+    border-radius: 12px !important;
+    padding: 1.2rem 1.5rem !important;
+    color: white !important;
+    font-size: 1rem !important;
+    font-weight: 500 !important;
+    width: 100% !important;
+    transition: all 0.3s ease !important;
+    box-sizing: border-box !important;
+}
+
+.destination-address-input:focus {
+    outline: none !important;
+    border-color: #9333ea !important;
+    box-shadow: 0 0 20px rgba(147, 51, 234, 0.4) !important;
+    background: rgba(0, 0, 0, 0.5) !important;
+}
+
+.destination-address-input::placeholder {
+    color: rgba(255, 255, 255, 0.5) !important;
+    font-weight: 400 !important;
+}
+
+.address-help {
+    font-size: 12px;
+    color: #9ca3af;
+    margin-top: 8px;
+    line-height: 1.4;
+    padding: 0 4px;
+}
+
 .balance-display {
     color: rgba(255, 255, 255, 0.7);
     font-size: 0.9rem;
@@ -1604,6 +1683,66 @@ body {
     }
 }
 
+@keyframes pulsateOutline {
+    0% {
+        background: linear-gradient(145deg, rgba(147, 51, 234, 0.4), rgba(126, 34, 206, 0.2));
+        filter: blur(0px) brightness(1);
+    }
+    50% {
+        background: linear-gradient(145deg, rgba(147, 51, 234, 0.8), rgba(126, 34, 206, 0.6));
+        filter: blur(1px) brightness(1.2);
+    }
+    100% {
+        background: linear-gradient(145deg, rgba(147, 51, 234, 0.4), rgba(126, 34, 206, 0.2));
+        filter: blur(0px) brightness(1);
+    }
+}
+
+@keyframes pulsateBorder {
+    0% {
+        border-color: rgba(147, 51, 234, 0.3);
+        box-shadow: 0 0 20px rgba(147, 51, 234, 0.3);
+    }
+    50% {
+        border-color: rgba(147, 51, 234, 0.8);
+        box-shadow: 0 0 30px rgba(147, 51, 234, 0.6);
+    }
+    100% {
+        border-color: rgba(147, 51, 234, 0.3);
+        box-shadow: 0 0 20px rgba(147, 51, 234, 0.3);
+    }
+}
+
+@keyframes pulsateOutlineOnly {
+    0% {
+        opacity: 0.6;
+        box-shadow: 0 0 10px rgba(147, 51, 234, 0.3);
+    }
+    50% {
+        opacity: 1;
+        box-shadow: 0 0 20px rgba(147, 51, 234, 0.6), 0 0 30px rgba(147, 51, 234, 0.4);
+    }
+    100% {
+        opacity: 0.6;
+        box-shadow: 0 0 10px rgba(147, 51, 234, 0.3);
+    }
+}
+
+@keyframes pulsateShieldPoint {
+    0% {
+        filter: drop-shadow(0 0 10px rgba(147, 51, 234, 0.3));
+        border-top-color: #1a0b2e;
+    }
+    50% {
+        filter: drop-shadow(0 0 20px rgba(147, 51, 234, 0.6)) drop-shadow(0 0 30px rgba(147, 51, 234, 0.4));
+        border-top-color: rgba(26, 11, 46, 0.9);
+    }
+    100% {
+        filter: drop-shadow(0 0 10px rgba(147, 51, 234, 0.3));
+        border-top-color: #1a0b2e;
+    }
+}
+
 .currency-input:hover::before {
     animation: shimmer 2s infinite;
     background: linear-gradient(90deg, transparent, rgba(147, 51, 234, 0.3), transparent);
@@ -1685,6 +1824,46 @@ body {
     align-items: center;
 }
 
+.deposit-amount .address-container {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+}
+
+.deposit-amount .address-container .amount-display {
+    flex: 1;
+    margin: 0;
+}
+
+.time-remaining {
+    background: linear-gradient(145deg, rgba(16, 185, 129, 0.15), rgba(16, 185, 129, 0.05));
+    border-color: rgba(16, 185, 129, 0.3);
+    color: #10b981;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    transition: all 0.3s ease;
+}
+
+.time-remaining.warning {
+    background: linear-gradient(145deg, rgba(239, 68, 68, 0.15), rgba(239, 68, 68, 0.05));
+    border-color: rgba(239, 68, 68, 0.3);
+    color: #ef4444;
+    animation: pulseWarning 2s ease-in-out infinite;
+}
+
+@keyframes pulseWarning {
+    0%, 100% {
+        box-shadow: 0 0 20px rgba(239, 68, 68, 0.2);
+    }
+    50% {
+        box-shadow: 0 0 30px rgba(239, 68, 68, 0.4);
+    }
+}
+
 .qr-code {
     display: flex;
     justify-content: center;
@@ -1764,6 +1943,9 @@ body {
     font-weight: 600;
     text-align: center;
     transition: all 0.3s ease;
+    word-break: break-all;
+    overflow-wrap: break-word;
+    white-space: normal;
 }
 
 .amount-display:hover {
@@ -1773,7 +1955,9 @@ body {
 
 .swap-progress {
     display: flex;
-    justify-content: center;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
     margin-top: 2rem;
 }
 
@@ -1820,6 +2004,35 @@ body {
     box-shadow: 0 6px 20px rgba(147, 51, 234, 0.3);
 }
 
+.cancel-swap-button {
+    background: transparent;
+    border: 2px solid rgba(239, 68, 68, 0.3);
+    border-radius: 16px;
+    padding: 1rem 2rem;
+    color: #ef4444;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 1rem;
+    width: 100%;
+    max-width: 300px;
+}
+
+.cancel-swap-button:hover {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: rgba(239, 68, 68, 0.5);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(239, 68, 68, 0.2);
+}
+
+.cancel-swap-button:active {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.2);
+}
+
 /* Mobile responsiveness for deposit stage */
 @media (max-width: 768px) {
     .deposit-stage {
@@ -1850,6 +2063,12 @@ body {
     .confirm-deposit-button {
         padding: 1rem 2rem;
         font-size: 1rem;
+    }
+    
+    .cancel-swap-button {
+        padding: 1rem 1.5rem;
+        font-size: 0.9rem;
+        margin-top: 0.75rem;
     }
     
     .qr-code img {

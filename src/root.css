@@ -9,4 +9,10 @@
     --talisman-connect-control-background
   );
   --talisman-connect-button-foreground: #fafafa;
+  
+  /* Shield Design Variables */
+  --shield-width: 600px;
+  --shield-height: calc(var(--shield-width) * 0.8);
+  --acc: cubic-bezier(0.390, 0.575, 0.565, 1.000);
+  --acc-2: cubic-bezier(0.390, 0.575, 0.565, 1.000);
 }
