@@ -3,7 +3,7 @@
  */
 
 import getaccounid32 from "./adresses";
-import { isEvmAddress, eth2account32} from "./adresses";
+import { isEvmAddress, eth2account32 } from "./adresses";
 
 export const xcm_routes = [
   {
@@ -137,9 +137,9 @@ export async function KSM2ah(
   // convert address
   var destaddress;
   if (isEvmAddress(destination_address)) {
-      destaddress = eth2account32(destination_address);
+    destaddress = eth2account32(destination_address);
   } else {
-      destaddress = getaccounid32(destination_address);
+    destaddress = getaccounid32(destination_address);
   }
   console.log(`destination address set as: `, destaddress);
   const k2 = {
@@ -157,7 +157,7 @@ export async function KSM2ah(
         X1: [
           {
             AccountId32: {
-              id: destaddress, //destination_address, 
+              id: destaddress, //destination_address,
               network: null,
             },
           },
