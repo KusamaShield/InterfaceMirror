@@ -47,11 +47,13 @@ npm run dev
 Linux + Google Chrome + Talisman Browser Wallet
 
 
-### Supported Chains:   
+### Supported Chains:      
+#### Testnet:   
 -  [x] Moonbase Testnet  
 -  [x] Westend Assethub  
 -  [x] Paseo hub
-
+#### Mainnet:  
+-  [x] Kusama Assethub    
 
 ## Project supported by:   
 ![](./kusama-logo.png)      
