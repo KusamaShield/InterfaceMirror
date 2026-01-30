@@ -17,8 +17,8 @@ jobs:
         run: |
           git clone https://codeberg.org/KusamaShield/Interface/ && cd Interface/ && npm install -f 
       - name: Balance rpc checks
-        run: npm run check_balance
+        run: cd Interface && npm run check_balance
 
       - name: wasm check
-        run: npm run check_balance
+        run: cd Interface && npm run check_balance
   
