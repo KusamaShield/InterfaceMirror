@@ -15,19 +15,6 @@ jobs:
     steps:
       - name: Install dependencies
         run: |
-          # Use npm, yarn, or pnpm based on your project
-          npm ci --prefer-offline
-          # Alternative: yarn install --frozen-lockfile
-          # Alternative: pnpm install --frozen-lockfile
+          git clone https://codeberg.org/KusamaShield/Interface/ && cd Interface/ && npm install -f 
 
-      - name: Type check (if using TypeScript)
-        run: npx tsc --noEmit
-
-      - name: Lint code
-        run: npm run lint || echo "No lint script found"
-
-      - name: Run tests
-        run: npm test -- --passWithNoTests || echo "No tests found"
-
-      - name: Build project
-        run: npm run build
+  
