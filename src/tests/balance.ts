@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Kusama Shield Developers on behalf of the Kusama DAO, see LICENSE in main folder.
+ * Copyright 2025-2026 Kusama Shield Developers on behalf of the Kusama DAO, see LICENSE in main folder.
  */
 
 import { ethers } from "ethers";
@@ -20,7 +20,7 @@ async function getBalanceWithEthers(rpcurl: string, address: string) {
 async function main() {
   console.log(`main`);
   const output = await getBalanceWithEthers(
-    "http://eth-pas-hub.laissez-faire.trade:8545",
+    "https://eth-asset-hub-kusama.dotters.network",
     "0xDe734DB4aB4A8D9AD59D69737e402F54A84d4C17",
   );
   console.log(`got output:`, output);
