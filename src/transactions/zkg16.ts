@@ -32,7 +32,7 @@ export async function g2c(
   };
 
   const { proof, publicSignals } = await snarkjs.groth16.fullProve(
-    inputs,
+      inputs,
     "asset.wasm",
     "asset_0001.zkey",
   );
@@ -50,7 +50,7 @@ export async function g2c(
       [toethhex(proof.pi_b[1][0]), toethhex(proof.pi_b[1][1])],
     ],
     [toethhex(proof.pi_c[0]), toethhex(proof.pi_c[1])],
-    publicSignals.map((signal: any) => toethhex(signal)),
+    publicSignals.map((signal) => toethhex(signal)),
   ];
 
   return {
@@ -107,7 +107,7 @@ export async function zkWithdraw({
       [toethhex(proof.pi_b[1][0]), toethhex(proof.pi_b[1][1])],
     ],
     [toethhex(proof.pi_c[0]), toethhex(proof.pi_c[1])],
-    publicSignals.map((x: any) => toethhex(x)),
+    publicSignals.map((x) => toethhex(x)),
   ];
 
   return {
@@ -181,7 +181,7 @@ export async function generateCommitment(secret: string) {
       [toethhex(proof.pi_b[1][0]), toethhex(proof.pi_b[1][1])],
     ],
     [toethhex(proof.pi_c[0]), toethhex(proof.pi_c[1])],
-    publicSignals.map((signal: any) => toethhex(signal)), // Ensure public signals are in hex
+    publicSignals.map((signal) => toethhex(signal)), // Ensure public signals are in hex
   ];
   const solcall = formattedCall; //JSON.stringify(formattedCall);
 

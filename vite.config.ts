@@ -14,8 +14,8 @@ export default defineConfig({
   build: {
     target: 'esnext',
   },
-  assetsInclude: ['**/*.wasm'],
   worker: {
-    format: 'es'
-  }
+    format: 'es',
+  },
+  assetsInclude: ['**/*.wasm'],
 })
