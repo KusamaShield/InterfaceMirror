@@ -10,7 +10,7 @@ const KA = "wss://asset-hub-polkadot.dotters.network";
 
 // KSM on PA to KA: https://assethub-polkadot.subscan.io/extrinsic/9745588-2
 
-async function connect(wsurl) {
+async function connect(wsurl: string) {
   const wsProvider = new WsProvider(wsurl);
   const api = await ApiPromise.create({ provider: wsProvider });
   return api;

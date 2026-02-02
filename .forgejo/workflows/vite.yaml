@@ -19,6 +19,6 @@ jobs:
       - name: Balance rpc checks
         run: cd Interface && npm run check_balance
 
-      - name: wasm check
-        run: cd Interface && npm run check_balance
+      - name: Building repo
+        run: cd Interface && npm run build
   
