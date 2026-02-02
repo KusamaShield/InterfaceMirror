@@ -8,6 +8,9 @@ Use with **Google Chrome and Talisman browser wallet**
 ## Documentation:     
 https://kusamashield.codeberg.page
 
+## Landing page:    
+https://shield.markets   
+
 ### License: 
 MIT, see LICENSE file.
 
