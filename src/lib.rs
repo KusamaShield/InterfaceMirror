@@ -34,8 +34,7 @@ use halo2_proofs::{
     halo2curves::bn256::{Bn256, Fr as Fp, G1Affine}};
 use halo2_proofs::poly::commitment::Params;
 
-// expose threadpool - only for development
-#[cfg(debug_assertions)]
+// expose threadpool
 pub use wasm_bindgen_rayon::init_thread_pool;
 
 
@@ -104,11 +103,6 @@ impl From<ZkError> for JsValue {
 #[wasm_bindgen(start)]
 pub fn init() {
     console_error_panic_hook::set_once();
-    // Initialize thread pool only in development
-    #[cfg(debug_assertions)]
-    {
-        wasm_bindgen_rayon::init_thread_pool();
-    }
     /*
     #[cfg(target_arch = "wasm32")]
     wasm_bindgen::__rt::set_table_size(8192).unwrap_or_else(|_| {

@@ -1869,7 +1869,7 @@ export function App() {
     const unsub = await transacto.signAndSend(
       fromaddress,
       { signer },
-      ({ status, events, dispatchError }: { status: any; events: any; dispatchError: any }) => {
+     ({ status, events, dispatchError }: { status: any; events: any; dispatchError: any }) => {
         if (status.isInBlock) {
           console.log(`Transaction included in block: ${status.asInBlock}`);
           toast.info(`Transaction included in block: ${status.asInBlock}`, {
@@ -2166,7 +2166,7 @@ export function App() {
           evmAddress,
           calculatedToAmount,
         );
-        if (evmAddress && isEvmAddress(evmAddress)) {
+         if (evmAddress && isEvmAddress(evmAddress))  {
           toast.error("Select a non-evm address");
           return;
         }
@@ -2205,9 +2205,10 @@ export function App() {
         console.log(`tx called!`);
 
         const unsub = await tx.signAndSend(
-          evmAddress || "",
+          evmAddress,
           { signer },
-          ({ status, events, dispatchError }: { status: any; events: any; dispatchError: any }) => {
+                   ({ status, events, dispatchError }: { status: any; events: any; dispatchError: any }) => {
+
             if (status.isInBlock) {
               console.log(`Transaction included in block: ${status.asInBlock}`);
               toast.info(`Transaction included in block: ${status.asInBlock}`, {
@@ -2273,7 +2274,7 @@ export function App() {
             console.log(`Polling for EVM address... attempt ${attempt + 1}`);
             const currentAddress = evmAddressRef.current;
             console.log(
-              `checking address: ${currentAddress}, isEvm: ${currentAddress && isEvmAddress(currentAddress)}`,
+              `checking address: ${currentAddress}, isEvm: ${currentAddress ? isEvmAddress(currentAddress) : false}`,
             );
 
             console.log(`checking evm address:`, evmAddress);
@@ -2351,7 +2352,7 @@ export function App() {
         ); //eth2accountid32(destaddress)
 
         const unsub2 = await tx2.signAndSend(
-          evmAddress || "",
+          evmAddress,
           { signer },
           ({ status, events, dispatchError }: { status: any; events: any; dispatchError: any }) => {
             if (status.isInBlock) {
@@ -3312,7 +3313,7 @@ export function App() {
                             position: "relative",
                             overflow: "hidden",
                           }}
-                          onMouseEnter={(e) => {
+                        onMouseEnter={(e) => {
                             (e.target as HTMLElement).style.transform = "translateY(-2px)";
                             (e.target as HTMLElement).style.boxShadow =
                               "0 8px 25px rgba(139, 92, 246, 0.4)";
@@ -3412,6 +3413,7 @@ export function App() {
                   )}
 
                 {activeTab === "shield" && (
+                  <center>
                   <div className="balance">
                     <a
                       title="Documentation link"
@@ -3421,6 +3423,7 @@ export function App() {
                       {NETWORKS[selectedNetwork].name} Documentation
                     </a>
                   </div>
+                  </center>
                 )}
 
                 {activeTab === "shield" && (
@@ -3440,6 +3443,7 @@ export function App() {
 
                 {activeTab === "unshield" && (
                   <div className="secret-input">
+                  
                     <input
                       type="password"
                       placeholder="Enter withdrawal secret"

@@ -263,8 +263,8 @@ export async function generate_tx2(
   const from_chain_info = xcm_chains.find((item) => item.name === from_chain);
 
   if (!from_chain_info) {
-    throw new Error(`Unsupported from_chain: ${from_chain}`);
-  }
+  throw new Error(`Chain configuration not found for: ${from_chain}`);
+}
 
   const token_decimals = from_chain_info.decimals;
   const adjustedAmount = (
@@ -422,18 +422,18 @@ export async function generate_tx2(
       console.log(`from Paseo Hydration`);
       // Different tx structure for Hydration
       const baseAsset = {
-        fun: {
-          Fungible: adjustedAmount,
-        },
-        id: {
-          Concrete: {
-            interior: {
-              Here: null,
-            },
-            parents: 0,
-          },
-        },
-      };
+            fun: {
+               Fungible: adjustedAmount,
+             },
+             id: {
+               Concrete: {
+                 interior: {
+                   Here: null,
+                 },
+                 parents: 0,
+              },
+             },
+           };
       const hydrationAsset = {
         ...baseAsset,
         id: {
