@@ -1,7 +1,7 @@
 {
   "name": "kusama-shield",
   "private": true,
-  "version": "0.0.40",
+  "version": "0.0.42",
   "type": "module",
   "scripts": {
     "dev": "vite --host",
@@ -52,6 +52,8 @@
     "@talismn/connect-wallets": "1.2.8",
     "@tsconfig/svelte": "^5.0.2",
     "@types/react": "^19.1.2",
+    "@types/react-dom": "^19.2.3",
+    "@types/snarkjs": "^0.7.9",
     "@vitejs/plugin-react": "4.4.1",
     "dotenv": "16.5.0",
     "ethers": "6.13.5",

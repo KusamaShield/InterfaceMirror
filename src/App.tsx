@@ -1663,7 +1663,7 @@ export function App() {
             const withdrawalPayload =
               await zkpService.generateWithdrawalPayload(
                 mockCommitment,
-                evmAddress, // selected browser wallet address
+                evmAddress || "", // selected browser wallet address
                 "asset.wasm", // circuit WASM path
                 "asset_0001.zkey", // circuit zkey path
                 ethers.ZeroAddress, // asset
@@ -1765,7 +1765,7 @@ export function App() {
   };
 
   const handleBridge = async () => {
-    if (isEvmAddress(evmAddress)) {
+    if (evmAddress && isEvmAddress(evmAddress)) {
       toast(`ERROR: select a polkadot address not ethereum address`, {
         position: "top-right",
         autoClose: 6000,
@@ -1831,7 +1831,7 @@ export function App() {
         tapi,
         from_chain,
         to_chain,
-        evmAddress,
+        evmAddress || "",
         amount,
       );
 
@@ -1869,7 +1869,7 @@ export function App() {
     const unsub = await transacto.signAndSend(
       fromaddress,
       { signer },
-      ({ status, events, dispatchError }) => {
+      ({ status, events, dispatchError }: { status: any; events: any; dispatchError: any }) => {
         if (status.isInBlock) {
           console.log(`Transaction included in block: ${status.asInBlock}`);
           toast.info(`Transaction included in block: ${status.asInBlock}`, {
@@ -2166,7 +2166,7 @@ export function App() {
           evmAddress,
           calculatedToAmount,
         );
-        if (isEvmAddress(evmAddress)) {
+        if (evmAddress && isEvmAddress(evmAddress)) {
           toast.error("Select a non-evm address");
           return;
         }
@@ -2200,14 +2200,14 @@ export function App() {
           tmpapi,
           swapAmount,
           calculatedToAmount,
-          evmAddress,
+          evmAddress || "",
         );
         console.log(`tx called!`);
 
         const unsub = await tx.signAndSend(
-          evmAddress,
+          evmAddress || "",
           { signer },
-          ({ status, events, dispatchError }) => {
+          ({ status, events, dispatchError }: { status: any; events: any; dispatchError: any }) => {
             if (status.isInBlock) {
               console.log(`Transaction included in block: ${status.asInBlock}`);
               toast.info(`Transaction included in block: ${status.asInBlock}`, {
@@ -2273,7 +2273,7 @@ export function App() {
             console.log(`Polling for EVM address... attempt ${attempt + 1}`);
             const currentAddress = evmAddressRef.current;
             console.log(
-              `checking address: ${currentAddress}, isEvm: ${isEvmAddress(currentAddress)}`,
+              `checking address: ${currentAddress}, isEvm: ${currentAddress && isEvmAddress(currentAddress)}`,
             );
 
             console.log(`checking evm address:`, evmAddress);
@@ -2347,13 +2347,13 @@ export function App() {
           newapi,
           swapAmount,
           calculatedToAmount,
-          destaddress,
+          destaddress || "",
         ); //eth2accountid32(destaddress)
 
         const unsub2 = await tx2.signAndSend(
-          evmAddress,
+          evmAddress || "",
           { signer },
-          ({ status, events, dispatchError }) => {
+          ({ status, events, dispatchError }: { status: any; events: any; dispatchError: any }) => {
             if (status.isInBlock) {
               console.log(
                 `🌉Bridge Transaction included in block: ${status.asInBlock}`,
@@ -3313,21 +3313,21 @@ export function App() {
                             overflow: "hidden",
                           }}
                           onMouseEnter={(e) => {
-                            e.target.style.transform = "translateY(-2px)";
-                            e.target.style.boxShadow =
+                            (e.target as HTMLElement).style.transform = "translateY(-2px)";
+                            (e.target as HTMLElement).style.boxShadow =
                               "0 8px 25px rgba(139, 92, 246, 0.4)";
                           }}
                           onMouseLeave={(e) => {
-                            e.target.style.transform = "translateY(0)";
-                            e.target.style.boxShadow =
+                            (e.target as HTMLElement).style.transform = "translateY(0)";
+                            (e.target as HTMLElement).style.boxShadow =
                               "0 4px 15px rgba(139, 92, 246, 0.3)";
                           }}
                           onMouseDown={(e) => {
-                            e.target.style.transform =
+                            (e.target as HTMLElement).style.transform =
                               "translateY(0) scale(0.98)";
                           }}
                           onMouseUp={(e) => {
-                            e.target.style.transform =
+                            (e.target as HTMLElement).style.transform =
                               "translateY(-2px) scale(1)";
                           }}
                         >
