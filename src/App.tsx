@@ -6,7 +6,7 @@ import "./App.css";
 import { useState, useEffect, useRef } from "react";
 import { WalletSelect } from "@talismn/connect-components";
 import { shieldTokens } from "./transactions/shield";
-import { isEvmAddress, ispolkadotaddress } from "./transactions/adresses";
+import { isEvmAddress, ispolkadotaddress, get_blockexplorer } from "./transactions/adresses";
 import SHIELD_CONTRACT_ADDRESS from "./transactions/shield";
 import fakeerc20asset from "./transactions/shield";
 //import { make_deposit_tx, gen_tx_no_sig } from "./transactions/txgen";
@@ -51,18 +51,13 @@ import {
   TalismanWallet,
 } from "@talismn/connect-wallets";
 import { ethers, Network } from "ethers";
+import UnifiedWalletSelector from "./components/UnifiedWalletSelector";
+import { useAccount, useSwitchChain } from "wagmi";
 
 // input token amounts
 const amountOptions = [0.5, 1, 5, 10, 100, 500, 1000, 10000];
 
-// Add TypeScript declaration for window.ethereum
-declare global {
-  interface Window {
-    ethereum?: {
-      request: (args: { method: string }) => Promise<string[]>;
-    };
-  }
-}
+// window.ethereum type is provided by wagmi/viem
 
 // Networks: name, endpoint, native asset
 const NETWORKS = {
@@ -272,6 +267,22 @@ export function App() {
   const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
   // Destination address for non-KSM swaps
   const [destinationAddress, setDestinationAddress] = useState<string>("");
+
+  // Monitor wagmi account state for external disconnects (e.g., user disconnects from MetaMask)
+  const { isConnected: wagmiConnected, address: wagmiAddress } = useAccount();
+
+  // Wagmi network switching for MetaMask/WalletConnect
+  const { switchChain } = useSwitchChain();
+
+  useEffect(() => {
+    // If wagmi disconnects but app still thinks it's connected, sync the state
+    if (!wagmiConnected && isWalletConnected && evmAddress?.startsWith("0x")) {
+      console.log("Detected wallet disconnect from wagmi");
+      setIsWalletConnected(false);
+      setEvmAddress(null);
+      setSelectedWalletEVM(null);
+    }
+  }, [wagmiConnected, isWalletConnected, evmAddress]);
 
   // Available currencies - only currencies that can be swapped TO DOT
   const availableCurrencies = [
@@ -1426,7 +1437,30 @@ export function App() {
             );
           }
         }
-      } else if (!talismanEth && isWalletConnected) {
+      } else if (isWalletConnected && wagmiConnected && NETWORKS[networkKey].chain_id) {
+        // Use wagmi's switchChain for MetaMask/WalletConnect connections
+        console.log("Attempting to switch network via wagmi...");
+        try {
+          await switchChain({ chainId: NETWORKS[networkKey].chain_id });
+          console.log("Network switched successfully via wagmi");
+        } catch (switchError: any) {
+          console.warn("Failed to switch network via wagmi:", switchError);
+          // If chain not added, wagmi will prompt to add it automatically
+          toast.warn(
+            "Network switched in app, but couldn't update wallet. You may need to manually switch networks in your wallet.",
+            {
+              position: "top-right",
+              autoClose: 5000,
+              hideProgressBar: false,
+              closeOnClick: true,
+              pauseOnHover: true,
+              draggable: true,
+              progress: undefined,
+              theme: "dark",
+            },
+          );
+        }
+      } else if (!talismanEth && isWalletConnected && !wagmiConnected) {
         console.log(
           "Wallet connected but no Ethereum provider available for network switching",
         );
@@ -2788,31 +2822,10 @@ export function App() {
             <option value="kusama">🐦 Kusama Assethub Mainnet</option>
           </select>
 
-          <WalletSelect
-            dappName="Talisman"
-            showAccountsList
-            walletList={[
-              new TalismanWallet(),
-              new NovaWallet(),
-              new SubWallet(),
-              new MantaWallet(),
-              new PolkaGate(),
-              new FearlessWallet(),
-              new EnkryptWallet(),
-              new PolkadotjsWallet(),
-              new AlephZeroWallet(),
-            ]}
-            triggerComponent={
-              <button
-                className={`connect-button ${isWalletConnected ? "connected" : ""}`}
-              >
-                {isWalletConnected
-                  ? `Connected: ${evmAddress?.slice(0, 6)}...${evmAddress?.slice(-4)}`
-                  : "Connect EVM Wallet"}
-              </button>
-            }
+          <UnifiedWalletSelector
+            isWalletConnected={isWalletConnected}
+            evmAddress={evmAddress}
             onAccountSelected={(account) => {
-              // Handle the selected account
               console.log("Selected account:", account.address);
               setEvmAddress(account.address);
               const talismanEth = (window as any).talismanEth;
@@ -2823,6 +2836,9 @@ export function App() {
               setIsWalletConnected(true);
             }}
             onWalletSelected={handleWalletSelected}
+            setEvmAddress={setEvmAddress}
+            setSelectedWalletEVM={setSelectedWalletEVM}
+            setIsWalletConnected={setIsWalletConnected}
           />
         </div>
       </div>
