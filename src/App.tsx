@@ -6,7 +6,7 @@ import "./App.css";
 import { useState, useEffect, useRef } from "react";
 import { WalletSelect } from "@talismn/connect-components";
 import { shieldTokens } from "./transactions/shield";
-import { isEvmAddress, ispolkadotaddress } from "./transactions/adresses";
+import { isEvmAddress, ispolkadotaddress, get_blockexplorer } from "./transactions/adresses";
 import SHIELD_CONTRACT_ADDRESS from "./transactions/shield";
 import fakeerc20asset from "./transactions/shield";
 //import { make_deposit_tx, gen_tx_no_sig } from "./transactions/txgen";
@@ -51,18 +51,13 @@ import {
   TalismanWallet,
 } from "@talismn/connect-wallets";
 import { ethers, Network } from "ethers";
+import UnifiedWalletSelector from "./components/UnifiedWalletSelector";
+import { useAccount, useSwitchChain } from "wagmi";
 
 // input token amounts
 const amountOptions = [0.5, 1, 5, 10, 100, 500, 1000, 10000];
 
-// Add TypeScript declaration for window.ethereum
-declare global {
-  interface Window {
-    ethereum?: {
-      request: (args: { method: string }) => Promise<string[]>;
-    };
-  }
-}
+// window.ethereum type is provided by wagmi/viem
 
 // Networks: name, endpoint, native asset
 const NETWORKS = {
@@ -96,16 +91,15 @@ const NETWORKS = {
     faucet: "https://faucet.polkadot.io/westend?parachain=1000",
     docs: "https://kusamashield.codeberg.page/networks/WestendAH.html",
   },
-
-  paseo_assethub2: {
-    name: "Paseo hub v2",
-    asset: "PAS",
-    chain_id: 420420422,
-    rpcEndpoint: "https://testnet-passet-hub-eth-rpc.polkadot.io", //"https://testnet-passet-hub-eth-rpc.polkadot.io",
-    faucet: "https://faucet.polkadot.io/?parachain=1111",
-    block_explorer: "https://blockscout-passet-hub.parity-testnet.parity.io/",
-    vk_address: "0xF3A0c5DaE0Cb99f9e4ED56D77BAC094517a05166",
-    shield_address: "0xa1Ab66CB2634007a5450643F0a240f8E8062178C", //"0xA3d1E0e2AAEFAf6E8a20144E433e123BC0cC5ef8",
+  paseo_assethub: {
+    name: "Paseo Assethub",
+    asset: "PAS", 
+    chain_id: 420420417,
+    rpcEndpoint: "https://services.polkadothub-rpc.com/testnet/", //"https://testnet-passet-hub-eth-rpc.polkadot.io",
+    faucet: "https://faucet.polkadot.io",
+    block_explorer: "https://blockscout-testnet.polkadot.io/",
+    vk_address: "not set",
+    shield_address: "0x38d3AA413f9A643642373cE20f2DD4dA6AF4E876", //"0xA3d1E0e2AAEFAf6E8a20144E433e123BC0cC5ef8",
     abi: [
       "function deposit3(address asset, uint256 amount, bytes32 commitment) external payable",
       "function withdrawETH(uint256[2] calldata a, uint256[2][2] calldata b, uint256[2] calldata c, uint256[6] calldata pubSignals) external",
@@ -118,22 +112,12 @@ const NETWORKS = {
     ],
     docs: "https://kusamashield.codeberg.page/networks/PaseoAH.html",
   },
-  paseo_assethub: {
-    name: "Paseo hub",
-    asset: "PAS",
-    chain_id: 420420422,
-    rpcEndpoint: "http://eth-pas-hub.laissez-faire.trade:8545", //"https://testnet-passet-hub-eth-rpc.polkadot.io",
-    faucet: "https://faucet.polkadot.io/?parachain=1111",
-    block_explorer: "https://blockscout-passet-hub.parity-testnet.parity.io/",
-    vk_address: "0x60cc34b6eaf6d3d13e8d34ec25c6cee15b7fdefc",
-    shield_address: "0xde734db4ab4a8d9ad59d69737e402f54a84d4c17",
-    docs: "https://kusamashield.codeberg.page/networks/PaseoAH.html",
-  },
+
   kusama: {
     name: "Kusama Assethub Mainnet",
     type: "mainnet",
     wsEndpoint: "wss://statemine-rpc-tn.dwellir.com",
-    rpcEndpoint: "https://eth-asset-hub-kusama.dotters.network/", //"https://kusama-asset-hub-rpc.polkadot.io",//"http://eth-asset-hub-kusama.dotters.network/",//"http://eth-pas-hub.laissez-faire.trade:8545",
+    rpcEndpoint: "https://eth-rpc-kusama.polkadot.io/", //"https://kusama-asset-hub-rpc.polkadot.io",//"http://eth-asset-hub-kusama.dotters.network/",//"http://eth-pas-hub.laissez-faire.trade:8545",
     asset: "KSM",
     chain_id: 420420418,
     shield_address: "0xDC80565357D63eCa67F3f020b6DD1CE1fD0E1Ed8",
@@ -148,7 +132,7 @@ const NETWORKS = {
       "function getNullifierInfo(uint256 nullifier) external view returns (address asset, uint256 amount, bytes32 commitment, bool isUsed)",
     ],
     block_explorer:
-      "https://blockscout-kusama-asset-hub.parity-chains-scw.parity.io/",
+      "https://blockscout-kusama.polkadot.io/",
     docs: "https://kusamashield.codeberg.page/networks/kusama.html",
   },
 };
@@ -272,6 +256,22 @@ export function App() {
   const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
   // Destination address for non-KSM swaps
   const [destinationAddress, setDestinationAddress] = useState<string>("");
+
+  // Monitor wagmi account state for external disconnects (e.g., user disconnects from MetaMask)
+  const { isConnected: wagmiConnected, address: wagmiAddress, chain: connectedChain } = useAccount();
+
+  // Wagmi network switching for MetaMask/WalletConnect
+  const { switchChain } = useSwitchChain();
+
+  useEffect(() => {
+    // If wagmi disconnects but app still thinks it's connected, sync the state
+    if (!wagmiConnected && isWalletConnected && evmAddress?.startsWith("0x")) {
+      console.log("Detected wallet disconnect from wagmi");
+      setIsWalletConnected(false);
+      setEvmAddress(null);
+      setSelectedWalletEVM(null);
+    }
+  }, [wagmiConnected, isWalletConnected, evmAddress]);
 
   // Available currencies - only currencies that can be swapped TO DOT
   const availableCurrencies = [
@@ -906,7 +906,9 @@ export function App() {
   }
 
   const handleShield = async () => {
-    if (!isWalletConnected || !amount || !selectedToken || !selectedWallet) {
+    // Check for either Polkadot wallet (selectedWallet) or EVM wallet (selectedWalletEVM)
+    const hasWallet = selectedWallet || selectedWalletEVM;
+    if (!isWalletConnected || !amount || !selectedToken || !hasWallet) {
       toast(`❌ ERROR: Connect wallet and select token`, {
         position: "top-right",
         autoClose: 6000,
@@ -917,6 +919,28 @@ export function App() {
         progress: undefined,
         theme: "dark",
       });
+      return;
+    }
+
+    // Check if connected to the correct chain for EVM wallets
+    const expectedChainId = NETWORKS[selectedNetwork]?.chain_id;
+    if (selectedWalletEVM && connectedChain && expectedChainId && connectedChain.id !== expectedChainId) {
+      toast(`❌ Wrong network! Please switch to ${NETWORKS[selectedNetwork].name} (Chain ID: ${expectedChainId}). You are on chain ${connectedChain.id}.`, {
+        position: "top-right",
+        autoClose: 8000,
+        hideProgressBar: false,
+        closeOnClick: false,
+        pauseOnHover: true,
+        draggable: true,
+        progress: undefined,
+        theme: "dark",
+      });
+      // Try to switch chain automatically
+      try {
+        await switchChain({ chainId: expectedChainId });
+      } catch (e) {
+        console.error("Failed to switch chain:", e);
+      }
       return;
     }
 
@@ -936,22 +960,26 @@ export function App() {
         amount,
         selectedToken,
         generatedSecret,
-        selectedWallet,
+        selectedWallet || selectedWalletEVM,
       );
-      if (!isWalletConnected || !amount || !selectedToken || !selectedWallet)
+      if (!isWalletConnected || !amount || !selectedToken || !hasWallet)
         return;
 
       console.log(`sign sign`);
 
-      const accounts = await selectedWallet.getAccounts();
-      const account = accounts[0];
-      console.log(`account: `, account.address);
+      // Get account address from either Polkadot wallet or EVM wallet
+      let accountAddress: string;
+      if (selectedWallet) {
+        const accounts = await selectedWallet.getAccounts();
+        const account = accounts[0];
+        accountAddress = account.address;
+      } else {
+        accountAddress = evmAddress || "";
+      }
+      console.log(`account: `, accountAddress);
       const secret = generatedSecret;
       //      const txdata = await gen_tx_no_sig(Number(amount), fakeerc20asset, account.address);
       //      console.log(`got tx data: `, txdata);
-      console.log(`signer caller`);
-      const signer = selectedWallet.signer;
-      console.log(`signo`);
 
       console.log(`signed tx`);
       //  console.log(`westend pool:`, westend_pool);
@@ -998,7 +1026,7 @@ export function App() {
 
         shieldedContract = new ethers.Contract(
           NETWORKS["paseo_assethub"].shield_address,
-          ["function deposit(address,uint256,bytes32) payable"],
+          NETWORKS["paseo_assethub"].abi,
           ETHsigner,
         );
       } else {
@@ -1040,16 +1068,34 @@ export function App() {
         // const txResponse = await ETHsigner.sendTransaction(transaction66);
         // console.log('Transaction hash:', txResponse.hash);
 
-        toast(`Transaction hash: ${txResponse.hash}`, {
-          position: "top-right",
-          autoClose: 4000,
-          hideProgressBar: false,
-          closeOnClick: false,
-          pauseOnHover: true,
-          draggable: true,
-          progress: undefined,
-          theme: "dark",
-        });
+        const approvalExplorerUrl = NETWORKS[selectedNetwork]?.block_explorer;
+        toast(
+          <div>
+            Approval submitted:{" "}
+            {approvalExplorerUrl ? (
+              <a
+                href={`${approvalExplorerUrl}/tx/${txResponse.hash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: "#58a6ff", textDecoration: "underline" }}
+              >
+                View on Explorer
+              </a>
+            ) : (
+              txResponse.hash
+            )}
+          </div>,
+          {
+            position: "top-right",
+            autoClose: 8000,
+            hideProgressBar: false,
+            closeOnClick: false,
+            pauseOnHover: true,
+            draggable: true,
+            progress: undefined,
+            theme: "dark",
+          }
+        );
         // 8. Wait for confirmation
         const receipt = await txResponse.wait();
 
@@ -1125,18 +1171,6 @@ export function App() {
         console.log(`calling abi66`);
         console.log(`sending paseo deposit`);
         if (selectedNetwork == "paseo_assethub") {
-          const ABI66 = [
-            "function deposit(address,uint256,bytes32) payable",
-            "function withdraw2(uint256[2],uint256[2][2],uint256[2],uint256[3],address,uint256,bytes32)",
-          ];
-          console.log(`calling contract paseo invalid`);
-
-          const contractpase = new ethers.Contract(
-            "0xde734db4ab4a8d9ad59d69737e402f54a84d4c17",
-            ABI66, //["function deposit(address,uint256,bytes32) payable"],
-            ETHsigner,
-          );
-
           const myamount = ethers.parseUnits(amount, 18);
           console.log("Sending with params:", {
             token: ethers.ZeroAddress,
@@ -1151,11 +1185,12 @@ export function App() {
 
           try {
             console.log(`running gasEstimate`);
-            gasEstimate = await contractpase.deposit.estimateGas(
+            console.log(`calling with input:`,  ethers.ZeroAddress, ethers.parseEther(amount), paddedCommitment);
+            gasEstimate = await shieldedContract.deposit3.estimateGas(
               ethers.ZeroAddress,
-              1000000000000000000n,
-              paddedCommitment, //x,  uint8ArrayToHex(ethers.randomBytes(32))
-              { value: 1000000000000000000n },
+              ethers.parseEther(amount),
+              paddedCommitment,
+              { value: ethers.parseEther(amount) },
             );
             console.log("Gas estimate:", gasEstimate);
           } catch (e) {
@@ -1164,16 +1199,13 @@ export function App() {
 
           console.log(`x:`, x);
           console.log(`calling txResponse2`);
-          txResponse2 = await shieldedContract.deposit(
+          txResponse2 = await shieldedContract.deposit3(
             ethers.ZeroAddress,
-            ethers.parseEther(amount), //,
-            x,
+            ethers.parseEther(amount),
+            paddedCommitment,
             {
-              value: ethers.parseEther(amount), //1000000000000000000n,
-              maxFeePerGas: gasEstimate,
-              gasPrice: ethers.parseUnits("1000", "wei"),
-              type: 0,
-              //      gasLimit: 16317587311833n,
+              value: ethers.parseEther(amount),
+              gasLimit: gasEstimate,
             },
           );
         } else if (
@@ -1258,16 +1290,34 @@ export function App() {
         );
       }
 
-      toast(`Transaction hash: ${txResponse2.hash}`, {
-        position: "top-right",
-        autoClose: 4000,
-        hideProgressBar: false,
-        closeOnClick: false,
-        pauseOnHover: true,
-        draggable: true,
-        progress: undefined,
-        theme: "dark",
-      });
+      const explorerUrl = NETWORKS[selectedNetwork]?.block_explorer;
+      toast(
+        <div>
+          Transaction submitted:{" "}
+          {explorerUrl ? (
+            <a
+              href={`${explorerUrl}/tx/${txResponse2.hash}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: "#58a6ff", textDecoration: "underline" }}
+            >
+              View on Explorer
+            </a>
+          ) : (
+            txResponse2.hash
+          )}
+        </div>,
+        {
+          position: "top-right",
+          autoClose: 8000,
+          hideProgressBar: false,
+          closeOnClick: false,
+          pauseOnHover: true,
+          draggable: true,
+          progress: undefined,
+          theme: "dark",
+        }
+      );
       // 8. Wait for confirmation
       const receipt2 = await txResponse2.wait();
 
@@ -1282,10 +1332,6 @@ export function App() {
         theme: "dark",
       });
 
-      if (!account) throw new Error("No accounts found");
-      /*
-      );
- */
       //    await fakeshield(amount, selectedToken, secret);
       setAmount("");
       setSecret("");
@@ -1426,7 +1472,30 @@ export function App() {
             );
           }
         }
-      } else if (!talismanEth && isWalletConnected) {
+      } else if (isWalletConnected && wagmiConnected && NETWORKS[networkKey].chain_id) {
+        // Use wagmi's switchChain for MetaMask/WalletConnect connections
+        console.log("Attempting to switch network via wagmi...");
+        try {
+          await switchChain({ chainId: NETWORKS[networkKey].chain_id });
+          console.log("Network switched successfully via wagmi");
+        } catch (switchError: any) {
+          console.warn("Failed to switch network via wagmi:", switchError);
+          // If chain not added, wagmi will prompt to add it automatically
+          toast.warn(
+            "Network switched in app, but couldn't update wallet. You may need to manually switch networks in your wallet.",
+            {
+              position: "top-right",
+              autoClose: 5000,
+              hideProgressBar: false,
+              closeOnClick: true,
+              pauseOnHover: true,
+              draggable: true,
+              progress: undefined,
+              theme: "dark",
+            },
+          );
+        }
+      } else if (!talismanEth && isWalletConnected && !wagmiConnected) {
         console.log(
           "Wallet connected but no Ethereum provider available for network switching",
         );
@@ -1698,16 +1767,34 @@ export function App() {
             );
           }
 
-          toast(`Transaction hash: ${txResponse.hash}`, {
-            position: "top-right",
-            autoClose: 4000,
-            hideProgressBar: false,
-            closeOnClick: false,
-            pauseOnHover: true,
-            draggable: true,
-            progress: undefined,
-            theme: "dark",
-          });
+          const withdrawExplorerUrl = NETWORKS[selectedNetwork]?.block_explorer;
+          toast(
+            <div>
+              Withdrawal submitted:{" "}
+              {withdrawExplorerUrl ? (
+                <a
+                  href={`${withdrawExplorerUrl}/tx/${txResponse.hash}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: "#58a6ff", textDecoration: "underline" }}
+                >
+                  View on Explorer
+                </a>
+              ) : (
+                txResponse.hash
+              )}
+            </div>,
+            {
+              position: "top-right",
+              autoClose: 8000,
+              hideProgressBar: false,
+              closeOnClick: false,
+              pauseOnHover: true,
+              draggable: true,
+              progress: undefined,
+              theme: "dark",
+            }
+          );
           // 8. Wait for confirmation
           const receipt2 = await txResponse.wait();
 
@@ -2775,10 +2862,6 @@ export function App() {
               🔗 {NETWORKS.paseo_assethub.name}
             </option>
 
-            <option value="paseo_assethub2">
-              🔗 {NETWORKS.paseo_assethub2.name}
-            </option>
-
             <option value="westend_assethub">
               🔗 {NETWORKS.westend_assethub.name}
             </option>
@@ -2788,31 +2871,10 @@ export function App() {
             <option value="kusama">🐦 Kusama Assethub Mainnet</option>
           </select>
 
-          <WalletSelect
-            dappName="Talisman"
-            showAccountsList
-            walletList={[
-              new TalismanWallet(),
-              new NovaWallet(),
-              new SubWallet(),
-              new MantaWallet(),
-              new PolkaGate(),
-              new FearlessWallet(),
-              new EnkryptWallet(),
-              new PolkadotjsWallet(),
-              new AlephZeroWallet(),
-            ]}
-            triggerComponent={
-              <button
-                className={`connect-button ${isWalletConnected ? "connected" : ""}`}
-              >
-                {isWalletConnected
-                  ? `Connected: ${evmAddress?.slice(0, 6)}...${evmAddress?.slice(-4)}`
-                  : "Connect EVM Wallet"}
-              </button>
-            }
+          <UnifiedWalletSelector
+            isWalletConnected={isWalletConnected}
+            evmAddress={evmAddress}
             onAccountSelected={(account) => {
-              // Handle the selected account
               console.log("Selected account:", account.address);
               setEvmAddress(account.address);
               const talismanEth = (window as any).talismanEth;
@@ -2823,6 +2885,9 @@ export function App() {
               setIsWalletConnected(true);
             }}
             onWalletSelected={handleWalletSelected}
+            setEvmAddress={setEvmAddress}
+            setSelectedWalletEVM={setSelectedWalletEVM}
+            setIsWalletConnected={setIsWalletConnected}
           />
         </div>
       </div>
@@ -3401,7 +3466,8 @@ export function App() {
 
                 {activeTab === "shield" &&
                   (NETWORKS[selectedNetwork] as any).faucet && (
-                    <div className="balance">
+             <center>
+              <div className="balance">
                       <a
                         title="faucet link"
                         target="_blank"
@@ -3410,6 +3476,7 @@ export function App() {
                         {NETWORKS[selectedNetwork].name} faucet link
                       </a>
                     </div>
+                    </center>
                   )}
 
                 {activeTab === "shield" && (

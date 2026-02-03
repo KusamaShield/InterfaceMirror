@@ -18,4 +18,7 @@ export default defineConfig({
     format: 'es',
   },
   assetsInclude: ['**/*.wasm'],
+  optimizeDeps: {
+    include: ['dayjs', 'dayjs/plugin/relativeTime', 'dayjs/locale/en'],
+  },
 })
