@@ -91,14 +91,13 @@ const NETWORKS = {
     faucet: "https://faucet.polkadot.io/westend?parachain=1000",
     docs: "https://kusamashield.codeberg.page/networks/WestendAH.html",
   },
-
-  paseo_assethub2: {
-    name: "Paseo hub v2",
+  paseo_assethub: {
+    name: "Paseo Assethub",
     asset: "PAS",
-    chain_id: 420420422,
-    rpcEndpoint: "https://testnet-passet-hub-eth-rpc.polkadot.io", //"https://testnet-passet-hub-eth-rpc.polkadot.io",
-    faucet: "https://faucet.polkadot.io/?parachain=1111",
-    block_explorer: "https://blockscout-passet-hub.parity-testnet.parity.io/",
+    chain_id: 420420417,
+    rpcEndpoint: "https://services.polkadothub-rpc.com/testnet/", //"https://testnet-passet-hub-eth-rpc.polkadot.io",
+    faucet: "https://faucet.polkadot.io",
+    block_explorer: "https://blockscout-testnet.polkadot.io/",
     vk_address: "0xF3A0c5DaE0Cb99f9e4ED56D77BAC094517a05166",
     shield_address: "0xa1Ab66CB2634007a5450643F0a240f8E8062178C", //"0xA3d1E0e2AAEFAf6E8a20144E433e123BC0cC5ef8",
     abi: [
@@ -113,22 +112,12 @@ const NETWORKS = {
     ],
     docs: "https://kusamashield.codeberg.page/networks/PaseoAH.html",
   },
-  paseo_assethub: {
-    name: "Paseo hub",
-    asset: "PAS",
-    chain_id: 420420422,
-    rpcEndpoint: "http://eth-pas-hub.laissez-faire.trade:8545", //"https://testnet-passet-hub-eth-rpc.polkadot.io",
-    faucet: "https://faucet.polkadot.io/?parachain=1111",
-    block_explorer: "https://blockscout-passet-hub.parity-testnet.parity.io/",
-    vk_address: "0x60cc34b6eaf6d3d13e8d34ec25c6cee15b7fdefc",
-    shield_address: "0xde734db4ab4a8d9ad59d69737e402f54a84d4c17",
-    docs: "https://kusamashield.codeberg.page/networks/PaseoAH.html",
-  },
+
   kusama: {
     name: "Kusama Assethub Mainnet",
     type: "mainnet",
     wsEndpoint: "wss://statemine-rpc-tn.dwellir.com",
-    rpcEndpoint: "https://eth-asset-hub-kusama.dotters.network/", //"https://kusama-asset-hub-rpc.polkadot.io",//"http://eth-asset-hub-kusama.dotters.network/",//"http://eth-pas-hub.laissez-faire.trade:8545",
+    rpcEndpoint: "https://eth-rpc-kusama.polkadot.io/", //"https://kusama-asset-hub-rpc.polkadot.io",//"http://eth-asset-hub-kusama.dotters.network/",//"http://eth-pas-hub.laissez-faire.trade:8545",
     asset: "KSM",
     chain_id: 420420418,
     shield_address: "0xDC80565357D63eCa67F3f020b6DD1CE1fD0E1Ed8",
@@ -143,7 +132,7 @@ const NETWORKS = {
       "function getNullifierInfo(uint256 nullifier) external view returns (address asset, uint256 amount, bytes32 commitment, bool isUsed)",
     ],
     block_explorer:
-      "https://blockscout-kusama-asset-hub.parity-chains-scw.parity.io/",
+      "https://blockscout-kusama.polkadot.io/",
     docs: "https://kusamashield.codeberg.page/networks/kusama.html",
   },
 };
@@ -2809,10 +2798,6 @@ export function App() {
               🔗 {NETWORKS.paseo_assethub.name}
             </option>
 
-            <option value="paseo_assethub2">
-              🔗 {NETWORKS.paseo_assethub2.name}
-            </option>
-
             <option value="westend_assethub">
               🔗 {NETWORKS.westend_assethub.name}
             </option>
@@ -3417,7 +3402,8 @@ export function App() {
 
                 {activeTab === "shield" &&
                   (NETWORKS[selectedNetwork] as any).faucet && (
-                    <div className="balance">
+             <center>
+              <div className="balance">
                       <a
                         title="faucet link"
                         target="_blank"
@@ -3426,6 +3412,7 @@ export function App() {
                         {NETWORKS[selectedNetwork].name} faucet link
                       </a>
                     </div>
+                    </center>
                   )}
 
                 {activeTab === "shield" && (

@@ -25,13 +25,13 @@ export const kusamaAssetHub = defineChain({
   },
   rpcUrls: {
     default: {
-      http: ["https://eth-asset-hub-kusama.dotters.network/"],
+      http: ["https://eth-rpc-kusama.polkadot.io/"],
     },
   },
   blockExplorers: {
     default: {
       name: "Blockscout",
-      url: "https://blockscout-kusama-asset-hub.parity-chains-scw.parity.io",
+      url: "https://blockscout-kusama.polkadot.io/",
     },
   },
 });
@@ -59,7 +59,7 @@ export const westendAssetHub = defineChain({
 });
 
 export const paseoAssetHub = defineChain({
-  id: 420420422,
+  id: 420420417,
   name: "Paseo Asset Hub",
   nativeCurrency: {
     name: "Paseo",
@@ -68,7 +68,7 @@ export const paseoAssetHub = defineChain({
   },
   rpcUrls: {
     default: {
-      http: ["https://testnet-passet-hub-eth-rpc.polkadot.io"],
+      http: ["https://services.polkadothub-rpc.com/testnet/"],
     },
   },
   blockExplorers: {
