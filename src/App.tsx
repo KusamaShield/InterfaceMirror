@@ -93,22 +93,22 @@ const NETWORKS = {
   },
   paseo_assethub: {
     name: "Paseo Assethub",
-    asset: "PAS", 
+    asset: "PAS",
     chain_id: 420420417,
     rpcEndpoint: "https://services.polkadothub-rpc.com/testnet/", //"https://testnet-passet-hub-eth-rpc.polkadot.io",
     faucet: "https://faucet.polkadot.io",
     block_explorer: "https://blockscout-testnet.polkadot.io/",
     vk_address: "not set",
-    shield_address: "0x38d3AA413f9A643642373cE20f2DD4dA6AF4E876", //"0xA3d1E0e2AAEFAf6E8a20144E433e123BC0cC5ef8",
+    shield_address: "0xbF3F84Ed0f6b6Df6Bc6427300D58436D369FF164",
     abi: [
-      "function deposit3(address asset, uint256 amount, bytes32 commitment) external payable",
-      "function withdrawETH(uint256[2] calldata a, uint256[2][2] calldata b, uint256[2] calldata c, uint256[6] calldata pubSignals) external",
-      "function withdrawWithAsset(uint256[2] calldata a, uint256[2][2] calldata b, uint256[2] calldata c, uint256[6] calldata pubSignals, address asset) external",
+      "function deposit(address asset, uint256 amount, bytes32 commitment) external payable",
+      "function withdraw(uint256[2] a, uint256[2][2] b, uint256[2] c, bytes32 expectedCommitment, bytes32 nullifier, uint256 amount, address recipient) external",
       "function currentRoot() external view returns (uint256)",
-      "function nullifiers(bytes32) external view returns (address asset, uint256 amount, bytes32 commitment, bool isUsed)",
       "function escrow(address) external view returns (uint256)",
-      "function isNullifierUsed(uint256 nullifier) external view returns (bool)",
-      "function getNullifierInfo(uint256 nullifier) external view returns (address asset, uint256 amount, bytes32 commitment, bool isUsed)",
+      "function isNullifierUsed(bytes32 nullifier) external view returns (bool)",
+      "function getDepositInfo(bytes32 commitment) external view returns (address asset, uint256 amount, uint256 leafIndex, bool isSpent)",
+      "function isLeafInTree(bytes32 commitment) external view returns (bool)",
+      "function getLeafIndex(bytes32 commitment) external view returns (uint256)",
     ],
     docs: "https://kusamashield.codeberg.page/networks/PaseoAH.html",
   },
@@ -1126,6 +1126,13 @@ export function App() {
       let x;
       if (selectedNetwork == "westend_assethub") {
         x = ProofWorker.generate_commitment(secret); //await generateCommitment(secret);
+      } else if (selectedNetwork == "paseo_assethub") {
+        // Use the same circuit as withdraw: H(secret, "1")
+        const commitmentData = await generateCommitment(secret, "1");
+        // commitmentData[3][0] is the public signal (the hash output)
+        const commitmentBigInt = BigInt(commitmentData[3][0]);
+        x = ethers.toBeHex(commitmentBigInt);
+        console.log(`paseo commitment from circuit:`, x);
       } else {
         x = ProofWorker.generate_commitment(secret);
       }
@@ -1185,8 +1192,8 @@ export function App() {
 
           try {
             console.log(`running gasEstimate`);
-            console.log(`calling with input:`,  ethers.ZeroAddress, ethers.parseEther(amount), paddedCommitment);
-            gasEstimate = await shieldedContract.deposit3.estimateGas(
+            console.log(`calling with input:`, ethers.ZeroAddress, ethers.parseEther(amount), paddedCommitment);
+            gasEstimate = await shieldedContract.deposit.estimateGas(
               ethers.ZeroAddress,
               ethers.parseEther(amount),
               paddedCommitment,
@@ -1199,7 +1206,7 @@ export function App() {
 
           console.log(`x:`, x);
           console.log(`calling txResponse2`);
-          txResponse2 = await shieldedContract.deposit3(
+          txResponse2 = await shieldedContract.deposit(
             ethers.ZeroAddress,
             ethers.parseEther(amount),
             paddedCommitment,
@@ -1617,19 +1624,17 @@ export function App() {
               ETHsigner,
             );
           } else if (selectedNetwork == "paseo_assethub") {
-            console.log(`set shielded contract`);
+            console.log(`set shielded contract to paseo`);
             shieldedContract = new ethers.Contract(
               NETWORKS["paseo_assethub"].shield_address,
-              [
-                "function deposit(address,uint256,bytes32) payable",
-                "function withdraw2(uint256[2],uint256[2][2],uint256[2],uint256[3],address,uint256,bytes32)",
-              ],
+              NETWORKS["paseo_assethub"].abi,
               ETHsigner,
             );
           } else if (
-            selectedNetwork == "paseo_assethub2" ||
+        //    selectedNetwork == "paseo_assethub" ||
             selectedNetwork == "kusama"
           ) {
+            console.log(`doubel shield`);
             shieldedContract = new ethers.Contract(
               NETWORKS[selectedNetwork].shield_address,
               NETWORKS[selectedNetwork].abi,
@@ -1665,10 +1670,7 @@ export function App() {
             myasset = SHIELD_CONTRACT_ADDRESS.fakeerc20asset;
           }
           var txResponse;
-          if (
-            selectedNetwork == "westend_assethub" ||
-            selectedNetwork === "paseo_assethub"
-          ) {
+          if (selectedNetwork == "westend_assethub") {
             //function withdraw2(uint[2], uint[2][2], unit[2], uint[3], uint256, bytes32)
             const datn = await generateCommitment(secret);
             console.log(`calling with datn: `, datn);
@@ -1679,7 +1681,7 @@ export function App() {
             //console.log(`p4: `, p4);
             var gasestimate;
             try {
-              gasestimate = await shieldedContract.withdraw2.estimateGas(
+              gasestimate = await shieldedContract.withdraw.estimateGas(
                 datn[0],
                 datn[1],
                 datn[2],
@@ -1694,7 +1696,7 @@ export function App() {
             }
 
             console.log(`nullifier: `, nullifier);
-            txResponse = await shieldedContract.withdraw2(
+            txResponse = await shieldedContract.withdraw(
               datn[0],
               datn[1],
               datn[2],
@@ -1707,6 +1709,194 @@ export function App() {
                 gasPrice: ethers.parseUnits("1000", "wei"),
                 type: 0,
               },
+            );
+          } else if (selectedNetwork === "paseo_assethub") {
+            // New circuit: in[2] = [secret, nullifier_value], outputs 1 public signal (H(secret, nullifier_value))
+            // Generate proof with secret and "1" as the nullifier input
+            const datn = await generateCommitment(secret, "1");
+            console.log(`calling withdraw with datn: `, datn);
+            console.log(` datn[0] (a): `, datn[0]);
+            console.log(` datn[1] (b): `, datn[1]);
+            console.log(` datn[2] (c): `, datn[2]);
+            console.log(` datn[3] (pubSignals): `, datn[3]);
+
+            // The circuit output H(secret, 1) is the expectedCommitment (must match what was stored during deposit)
+            // datn[3][0] is the public signal from snarkjs (already a decimal string)
+            const commitmentBigInt = BigInt(datn[3][0]);
+            const expectedCommitment = ethers.zeroPadValue(ethers.toBeHex(commitmentBigInt), 32);
+
+            // For nullifier, we need a different value to prevent double-spending
+            // The nullifier should be computed as part of the ZK proof with a different input
+            // For now, derive it from the secret in a different way than the commitment
+            // In a proper implementation, this would come from a separate ZK proof
+            const nullifierSource = ethers.keccak256(ethers.toUtf8Bytes(secret + "_nullifier"));
+            const nullifierBigInt = BigInt(nullifierSource) % (BigInt(2) ** BigInt(250)); // Reduce to field size
+            const nullifierBytes = ethers.zeroPadValue(ethers.toBeHex(nullifierBigInt), 32);
+
+            const recipient = evmAddress;
+            const withdrawAmount = ethers.parseEther(amount);
+
+            console.log(`expectedCommitment: `, expectedCommitment);
+            console.log(`nullifier: `, nullifierBytes);
+            console.log(`amount: `, withdrawAmount);
+            console.log(`recipient: `, recipient);
+
+            // Pre-check: verify the deposit exists and get info
+            const checkContract = new ethers.Contract(
+              NETWORKS["paseo_assethub"].shield_address,
+              NETWORKS["paseo_assethub"].abi,
+              ETHsigner,
+            );
+            try {
+              const depositInfo = await checkContract.getDepositInfo(expectedCommitment);
+              console.log(`Deposit info:`, {
+                asset: depositInfo[0],
+                amount: depositInfo[1].toString(),
+                leafIndex: depositInfo[2].toString(),
+                isSpent: depositInfo[3],
+              });
+              if (depositInfo[0] === ethers.ZeroAddress && depositInfo[1] === 0n) {
+                console.error(`ERROR: Commitment not found in contract! Did you deposit with this secret?`);
+                toast(`❌ Commitment not found. Make sure you deposited with this secret first.`, {
+                  position: "top-right",
+                  autoClose: 8000,
+                  theme: "dark",
+                });
+                throw new Error("Commitment not found in contract");
+              }
+              if (depositInfo[3]) {
+                console.error(`ERROR: This commitment has already been withdrawn!`);
+                toast(`❌ Already withdrawn!`, { position: "top-right", autoClose: 5000, theme: "dark" });
+                throw new Error("Already withdrawn");
+              }
+              if (depositInfo[1] !== withdrawAmount) {
+                console.error(`ERROR: Amount mismatch! Deposited: ${depositInfo[1]}, Trying to withdraw: ${withdrawAmount}`);
+                toast(`❌ Amount mismatch! Deposited: ${ethers.formatEther(depositInfo[1])} ETH`, {
+                  position: "top-right",
+                  autoClose: 8000,
+                  theme: "dark",
+                });
+                throw new Error("Amount mismatch");
+              }
+            } catch (e: any) {
+              if (e.message?.includes("Commitment not found") || e.message?.includes("Already withdrawn") || e.message?.includes("Amount mismatch")) {
+                throw e;
+              }
+              console.error(`Error checking deposit:`, e);
+            }
+
+            // Debug: Test all contract checks
+            try {
+              // Check the verifier address the pool contract is using
+              const poolWithVerifier = new ethers.Contract(
+                NETWORKS["paseo_assethub"].shield_address,
+                ["function verifier() view returns (address)"],
+                ETHsigner,
+              );
+              const poolVerifierAddress = await poolWithVerifier.verifier();
+              console.log(`Pool contract's verifier address:`, poolVerifierAddress);
+
+              // Check actual contract ETH balance
+              const contractBalance = await ETHsigner.provider?.getBalance(NETWORKS["paseo_assethub"].shield_address);
+              console.log(`Actual contract ETH balance:`, ethers.formatEther(contractBalance || 0));
+
+              // Check escrow balance
+              const escrowBalance = await checkContract.escrow(ethers.ZeroAddress);
+              console.log(`Escrow balance (ETH):`, ethers.formatEther(escrowBalance), `(${escrowBalance})`);
+              if (escrowBalance < withdrawAmount) {
+                console.error(`ERROR: Insufficient escrow! Have: ${escrowBalance}, Need: ${withdrawAmount}`);
+              }
+
+              // Check if nullifier is already used
+              const nullifierUsed = await checkContract.isNullifierUsed(nullifierBytes);
+              console.log(`Nullifier already used:`, nullifierUsed);
+              if (nullifierUsed) {
+                console.error(`ERROR: Nullifier already used!`);
+              }
+
+              // Check if commitment is in tree
+              const inTree = await checkContract.isLeafInTree(expectedCommitment);
+              console.log(`Commitment in tree:`, inTree);
+              if (!inTree) {
+                console.error(`ERROR: Commitment not in merkle tree!`);
+              }
+
+              // Check current root
+              const currentRoot = await checkContract.currentRoot();
+              console.log(`Current merkle root:`, currentRoot.toString());
+
+            } catch (debugError) {
+              console.error(`Error in debug checks:`, debugError);
+            }
+
+            // Debug: Test proof verification directly against verifier
+            const verifierAddress = "0xA1b8eC7226F81Ea8CC0d53D0F9c1d760cd03dC66";
+            const verifierContract = new ethers.Contract(
+              verifierAddress,
+              ["function verifyProof(uint[2] calldata _pA, uint[2][2] calldata _pB, uint[2] calldata _pC, uint[1] calldata _pubSignals) public view returns (bool)"],
+              ETHsigner,
+            );
+            try {
+              // Convert expectedCommitment to uint256 for the verifier
+              const pubSignalForVerifier = [BigInt(expectedCommitment)];
+              console.log(`Testing verifier directly with pubSignals:`, pubSignalForVerifier);
+              const isValid = await verifierContract.verifyProof(datn[0], datn[1], datn[2], pubSignalForVerifier);
+              console.log(`Direct verifier result:`, isValid);
+              if (!isValid) {
+                console.error(`PROOF VERIFICATION FAILED! The verifier rejected the proof.`);
+                toast(`❌ ZK Proof verification failed! Check verifier deployment.`, { position: "top-right", autoClose: 8000, theme: "dark" });
+              }
+            } catch (verifyError) {
+              console.error(`Error calling verifier directly:`, verifyError);
+            }
+
+            // First try staticCall to get the revert reason
+            try {
+              console.log(`Trying staticCall to get revert reason...`);
+              console.log(`staticCall params:`, {
+                a: datn[0],
+                b: datn[1],
+                c: datn[2],
+                expectedCommitment,
+                nullifierBytes,
+                withdrawAmount: withdrawAmount.toString(),
+                recipient,
+              });
+              await shieldedContract.withdraw.staticCall(
+                datn[0],
+                datn[1],
+                datn[2],
+                expectedCommitment,
+                nullifierBytes,
+                withdrawAmount,
+                recipient,
+              );
+              console.log(`staticCall succeeded! Proceeding with actual transaction...`);
+            } catch (staticError: any) {
+              console.error(`staticCall failed with:`, staticError);
+              console.error(`Revert reason:`, staticError.reason);
+              console.error(`Error data:`, staticError.data);
+              console.error(`Error code:`, staticError.code);
+              console.error(`Error message:`, staticError.message);
+              if (staticError.error) {
+                console.error(`Inner error:`, staticError.error);
+              }
+              if (staticError.info) {
+                console.error(`Error info:`, JSON.stringify(staticError.info, null, 2));
+              }
+              // Don't throw here - let the actual transaction try and give us more info
+            }
+
+            // Let the network estimate gas instead of using hardcoded low values
+            console.log(`Sending withdraw transaction...`);
+            txResponse = await shieldedContract.withdraw(
+              datn[0],
+              datn[1],
+              datn[2],
+              expectedCommitment,
+              nullifierBytes,
+              withdrawAmount,
+              recipient,
             );
           } else if (
             selectedNetwork == "paseo_assethub2" ||
@@ -1778,7 +1968,7 @@ export function App() {
                   rel="noopener noreferrer"
                   style={{ color: "#58a6ff", textDecoration: "underline" }}
                 >
-                  View on Explorer
+                  {txResponse.hash}
                 </a>
               ) : (
                 txResponse.hash

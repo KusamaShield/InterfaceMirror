@@ -156,17 +156,16 @@ export async function zkDeposit({
   };
 }
 
-export async function generateCommitment(secret: string) {
-  // const poseidon = await circomlibjs.buildPoseidon();
-  //  const hash = poseidon.F.toString(poseidon([10]));
-  //console.log(hash);
+export async function generateCommitment(secret: string, nullifierInput: string = "1") {
+  // Circuit expects in[2] = [secret, nullifier_value]
+  // The output is Poseidon(secret, nullifier_value)
 
   const { proof, publicSignals } = await snarkjs.groth16.fullProve(
     {
-      in: [secret, "67890"],
+      in: [secret, nullifierInput],
     },
-    "possy.wasm",
-    "possy_0000.zkey",
+    "asset.wasm",
+    "asset_0001.zkey",
   );
 
   const calldata = await snarkjs.groth16.exportSolidityCallData(
