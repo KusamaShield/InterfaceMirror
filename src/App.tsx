@@ -1079,7 +1079,7 @@ export function App() {
                 rel="noopener noreferrer"
                 style={{ color: "#58a6ff", textDecoration: "underline" }}
               >
-                View on Explorer
+                {txResponse.hash}
               </a>
             ) : (
               txResponse.hash
@@ -1301,7 +1301,7 @@ export function App() {
               rel="noopener noreferrer"
               style={{ color: "#58a6ff", textDecoration: "underline" }}
             >
-              View on Explorer
+              {txResponse2.hash}
             </a>
           ) : (
             txResponse2.hash
@@ -1733,8 +1733,8 @@ export function App() {
               await zkpService.generateWithdrawalPayload(
                 mockCommitment,
                 evmAddress || "", // selected browser wallet address
-                "asset.wasm", // circuit WASM path
-                "asset_0001.zkey", // circuit zkey path
+                "/asset.wasm", // circuit WASM path
+                "/asset_0001.zkey", // circuit zkey path
                 ethers.ZeroAddress, // asset
               );
             console.log(`got throw`);
@@ -1778,7 +1778,7 @@ export function App() {
                   rel="noopener noreferrer"
                   style={{ color: "#58a6ff", textDecoration: "underline" }}
                 >
-                  View on Explorer
+                  {txResponse.hash}
                 </a>
               ) : (
                 txResponse.hash

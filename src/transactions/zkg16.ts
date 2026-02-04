@@ -33,8 +33,8 @@ export async function g2c(
 
   const { proof, publicSignals } = await snarkjs.groth16.fullProve(
       inputs,
-    "asset.wasm",
-    "asset_0001.zkey",
+    "/asset.wasm",
+    "/asset_0001.zkey",
   );
 
   const calldata = await snarkjs.groth16.exportSolidityCallData(
@@ -165,8 +165,8 @@ export async function generateCommitment(secret: string) {
     {
       in: [secret, "67890"],
     },
-    "possy.wasm",
-    "possy_0000.zkey",
+    "/possy.wasm",
+    "/possy_0000.zkey",
   );
 
   const calldata = await snarkjs.groth16.exportSolidityCallData(
