@@ -3,13 +3,131 @@
  */
 
 import { decodeAddress, encodeAddress } from "@polkadot/util-crypto";
-import { u8aToHex, hexToU8a, isHex } from "@polkadot/util";
+import { u8aToHex, hexToU8a, isHex, hexToBn } from "@polkadot/util";
 
 export default function getaccounid32(inputen: string) {
   const publicKey = decodeAddress(inputen);
 
   // Convert to hex string (0x prefixed)
   return u8aToHex(publicKey);
+}
+
+// polkadot api, name of asset
+export async function get_foreign_simple(api, assetname, address){
+
+  var asset;
+  const usdt = {
+  "parents": 2,
+  "interior": {
+    "X4": [
+      {
+        "GlobalConsensus": {
+          "Polkadot": "NULL"
+        }
+      },
+      {
+        "Parachain": 1000
+      },
+      {
+        "PalletInstance": 50
+      },
+      {
+        "GeneralIndex": "1984"
+      }
+    ]
+  }
+};
+
+
+const usdc = {
+  "parents": 2,
+  "interior": {
+    "X4": [
+      {
+        "GlobalConsensus": {
+          "Polkadot": null
+        }
+      },
+      {
+        "Parachain": 1000
+      },
+      {
+        "PalletInstance": 50
+      },
+      {
+        "GeneralIndex": "1337"
+      }
+    ]
+  }
+};
+
+const dot = {
+  "parents": 2,
+  "interior": {
+    "X1": [
+      {
+        "GlobalConsensus": {
+          "Polkadot": "NULL"
+        }
+      }
+    ]
+  }
+};
+
+
+const wbtc = {
+  "parents": 2,
+  "interior": {
+    "X2": [
+      {
+        "GlobalConsensus": {
+          "Ethereum": 1
+        }
+      },
+      {
+        "AccountKey20": {
+          "key": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+          "network": null
+        }
+      }
+    ]
+  }
+};
+
+
+  switch (assetname) {
+    case "wbtc":
+      asset = wbtc
+    case "dot":
+      asset = dot
+    case "usdt":
+      asset = usdt
+    case "usdc":
+      asset = usdc
+  }
+  
+
+  return await getforeignAssetBalance(api, asset, address);
+
+}
+
+
+/// foreign asset pallet:
+async function getforeignAssetBalance(api, asset, address) {
+    try {
+        let query = await api.query.foreignAssets.account(asset, address);
+        let x = query.toJSON();
+        if (!x) return 0;
+        let balanceRaw = x.balance;
+        const balanceBn = hexToBn(balanceRaw, {
+            isLe: false,
+            isNegative: false
+        });
+        return balanceBn.toString();
+    } catch (error) {
+        console.error(`Error fetching asset balance for ${address}:`, error);
+        return 0;
+    }
 }
 
 
