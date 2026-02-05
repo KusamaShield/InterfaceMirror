@@ -6,7 +6,7 @@ import "./App.css";
 import { useState, useEffect, useRef } from "react";
 import { WalletSelect } from "@talismn/connect-components";
 import { shieldTokens } from "./transactions/shield";
-import { isEvmAddress, ispolkadotaddress, get_blockexplorer } from "./transactions/adresses";
+import { isEvmAddress, ispolkadotaddress, get_foreign_simple, get_blockexplorer } from "./transactions/adresses";
 import SHIELD_CONTRACT_ADDRESS from "./transactions/shield";
 import fakeerc20asset from "./transactions/shield";
 //import { make_deposit_tx, gen_tx_no_sig } from "./transactions/txgen";
