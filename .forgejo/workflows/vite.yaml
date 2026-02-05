@@ -21,4 +21,6 @@ jobs:
 
       - name: Building repo
         run: cd Interface && npm run build
-  
+
+      - name: check foreign balance on Kusama 
+        run: cd Interface && npm run check_foreign_balance
