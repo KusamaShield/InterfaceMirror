@@ -1,13 +1,14 @@
 {
   "name": "kusama-shield",
   "private": true,
-  "version": "0.0.43",
+  "version": "0.0.44",
   "type": "module",
   "scripts": {
     "dev": "vite --host",
     "local": "vite",
     "txgen": "node src/tests/txtest.js",
     "check_balance": "npx tsx src/tests/balance.ts",
+    "check_foreign_balance": "npx tsx src/tests/foreign_asset_balance.ts",
     "format": "npx prettier --write src/*/*.ts && npx prettier --write src/*.tsx",
     "txtest": "npx tsx  src/tests/txtest.ts",
     "prooftest": "npx tsx  src/tests/proof_test.ts",

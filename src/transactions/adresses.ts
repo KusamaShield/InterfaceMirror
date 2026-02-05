@@ -97,13 +97,17 @@ const wbtc = {
 
   switch (assetname) {
     case "wbtc":
-      asset = wbtc
+      asset = wbtc;
+      break;
     case "dot":
-      asset = dot
+      asset = dot;
+      break;
     case "usdt":
-      asset = usdt
+      asset = usdt;
+      break;
     case "usdc":
-      asset = usdc
+      asset = usdc;
+      break;
   }
   
 
@@ -115,8 +119,15 @@ const wbtc = {
 /// foreign asset pallet:
 async function getforeignAssetBalance(api, asset, address) {
     try {
-        let query = await api.query.foreignAssets.account(asset, address);
+        console.log(`asset: `, asset);
+        console.log(`address: `, address);
+       // const asset = ;
+        const bal = await api.query.foreignAssets.account(asset, "0xfe65a1a2841217761050ef9c15109755d710cee689f764e8270c3e11292bcd10");
+        console.log(`bal: `, bal.toHuman());
+        const query = await api.query.foreignAssets.account(asset, address);
+        console.log(`query:`, query.toHuman())
         let x = query.toJSON();
+        console.log(`x query:`, x);
         if (!x) return 0;
         let balanceRaw = x.balance;
         const balanceBn = hexToBn(balanceRaw, {
