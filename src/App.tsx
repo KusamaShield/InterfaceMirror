@@ -273,6 +273,42 @@ export function App() {
     }
   }, [wagmiConnected, isWalletConnected, evmAddress]);
 
+  // Fetch native token balance from RPC
+  useEffect(() => {
+    const fetchNativeBalance = async () => {
+      if (!evmAddress || !NETWORKS[selectedNetwork]?.rpcEndpoint) {
+        setUserBalance("0");
+        return;
+      }
+
+      try {
+        const response = await fetch(NETWORKS[selectedNetwork].rpcEndpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            method: "eth_getBalance",
+            params: [evmAddress, "latest"],
+            id: 1,
+            jsonrpc: "2.0",
+          }),
+        });
+
+        const data = await response.json();
+        if (data.result) {
+          // Convert hex balance to decimal and format (18 decimals for native token)
+          const balanceWei = BigInt(data.result);
+          const balanceEth = Number(balanceWei) / 1e18;
+          setUserBalance(balanceEth.toFixed(4));
+        }
+      } catch (error) {
+        console.error("Failed to fetch balance:", error);
+        setUserBalance("0");
+      }
+    };
+
+    fetchNativeBalance();
+  }, [evmAddress, selectedNetwork]);
+
   // Available currencies - only currencies that can be swapped TO DOT
   const availableCurrencies = [
     {
@@ -3635,7 +3671,7 @@ export function App() {
                       onChange={(e) => setSelectedToken(e.target.value)}
                     >
                       <option title="native Currency">
-                        {NETWORKS[selectedNetwork].asset}
+                      {NETWORKS[selectedNetwork].asset}
                       </option>
 
                       {/* Alternative assets */}
@@ -3651,6 +3687,9 @@ export function App() {
                         </option>
                       ))}
                     </select>
+                    <div className="balance" style={{ marginLeft: "auto", textAlign: "right" }}>
+                      Balance: {userBalance} {NETWORKS[selectedNetwork].asset}
+                    </div>
                   </div>
                 )}
 
