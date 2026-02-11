@@ -22,10 +22,11 @@ export interface FormattedProof {
 
 export interface DepositInfo {
   secret: string;
+  nullifier: string;
   asset: string;
   amount: bigint;
   commitment: string;
-  nullifier: string;
+  nullifierHash: string;
 }
 
 export interface ZKProofResult {
@@ -54,7 +55,7 @@ export class ZKPService {
     // poseidon-lite doesn't need initialization
   }
 
-  // Generate commitment for deposit
+  // Legacy commitment: Poseidon3(secret, asset, amount) — for Kusama/Westend
   generateCommitment(secret: string, asset: string, amount: bigint): string {
     const secretBN = BigInt(secret);
     const assetBN = asset === ethers.ZeroAddress ? 0n : BigInt(asset);
@@ -64,7 +65,27 @@ export class ZKPService {
     return hash.toString();
   }
 
-  // Generate nullifier
+  // New FixedIlop commitment: Poseidon3(value, asset, Poseidon2(nullifier, secret))
+  generateFixedIlopCommitment(nullifier: string, secret: string, asset: string, amount: bigint): string {
+    const nullifierBN = BigInt(nullifier);
+    const secretBN = BigInt(secret);
+    const assetBN = asset === ethers.ZeroAddress ? 0n : BigInt(asset);
+    const amountBN = BigInt(amount);
+
+    const innerHash = poseidon2([nullifierBN, secretBN]);
+    const hash = poseidon3([amountBN, assetBN, innerHash]);
+    return hash.toString();
+  }
+
+  // Generate nullifier hash (Poseidon of the nullifier value)
+  // nullifierHash = Poseidon(nullifier) — used to prevent double-spend
+  generateNullifierHash(nullifier: string): string {
+    const nullifierBN = BigInt(nullifier);
+    const hash = poseidon2([nullifierBN, 0n]);
+    return hash.toString();
+  }
+
+  // Legacy nullifier generation for non-Paseo networks
   generateNullifier(secret: string): string {
     const secretBN = BigInt(secret);
     const hash = poseidon2([secretBN, 1n]);
@@ -75,22 +96,52 @@ export class ZKPService {
     return ethers.zeroPadValue(ethers.toBeHex(BigInt(value)), 32);
   }
 
-  // Generate deposit payload
+  // Generate deposit payload for new FixedIlop contract
+  generateFixedIlopDepositPayload(
+    nullifier: string,
+    secret: string,
+    asset: string,
+    amount: bigint,
+  ): { asset: string; amount: bigint; commitment: string } {
+    const commitment = this.generateFixedIlopCommitment(nullifier, secret, asset, amount);
+
+    // Store deposit info for later withdrawal
+    this.deposits.set(commitment, {
+      secret,
+      nullifier,
+      asset,
+      amount,
+      commitment,
+      nullifierHash: this.generateNullifierHash(nullifier),
+    });
+
+    return {
+      asset,
+      amount,
+      commitment, // uint256 as decimal string — no bytes32 padding needed
+    };
+  }
+
+  // Legacy deposit payload for non-Paseo networks
   generateDepositPayload(
     secret: string,
     asset: string,
     amount: bigint,
   ): DepositPayload {
-    const commitment = this.generateCommitment(secret, asset, amount);
+    const secretBN = BigInt(secret);
+    const assetBN = asset === ethers.ZeroAddress ? 0n : BigInt(asset);
+    const amountBN = BigInt(amount);
+    const hash = poseidon3([secretBN, assetBN, amountBN]);
+    const commitment = hash.toString();
     const commitmentBytes32 = this.toBytes32(commitment);
 
-    // Store deposit info for later withdrawal
     this.deposits.set(commitment, {
       secret,
+      nullifier: "",
       asset,
       amount,
       commitment,
-      nullifier: this.generateNullifier(secret),
+      nullifierHash: this.generateNullifier(secret),
     });
 
     return {
