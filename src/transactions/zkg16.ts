@@ -60,39 +60,58 @@ export async function g2c(
   };
 }
 
-// WITHDRAW FUNCTION (generates full zk proof for withdraw)
+// WITHDRAW FUNCTION for new FixedIlop contract (withdraw.circom Withdraw(254))
+// Generates full Groth16 proof for withdrawal with UTXO model
 export async function zkWithdraw({
-  secret,
+  withdrawnValue,
+  root,
+  treeDepth,
+  context,
   asset,
-  amount,
-  recipient,
-  leafIndex,
+  existingValue,
+  existingNullifier,
+  existingSecret,
+  newNullifier,
+  newSecret,
   siblings,
+  leafIndex,
 }: {
-  secret: string;
+  withdrawnValue: string;
+  root: string;
+  treeDepth: string;
+  context: string;
   asset: string;
-  amount: string;
-  recipient: string; // Ethereum address in numeric string format (BigInt)
-  leafIndex: string;
+  existingValue: string;
+  existingNullifier: string;
+  existingSecret: string;
+  newNullifier: string;
+  newSecret: string;
   siblings: string[];
+  leafIndex: string;
 }) {
-  if (siblings.length !== 256) {
-    throw new Error("Siblings array must have exactly 256 elements.");
+  if (siblings.length !== 254) {
+    throw new Error("Siblings array must have exactly 254 elements.");
   }
 
   const input = {
-    secret,
+    withdrawnValue,
+    root,
+    treeDepth,
+    context,
     asset,
-    amount,
-    recipient,
-    leafIndex,
+    existingValue,
+    existingNullifier,
+    existingSecret,
+    newNullifier,
+    newSecret,
     siblings,
+    leafIndex,
   };
 
   const { proof, publicSignals } = await snarkjs.groth16.fullProve(
     input,
-    "main.wasm",
-    "main_0000.zkey",
+    "withdraw.wasm",
+    "withdraw_0001.zkey",
   );
 
   const calldata = await snarkjs.groth16.exportSolidityCallData(
@@ -117,7 +136,49 @@ export async function zkWithdraw({
   };
 }
 
-// DEPOSIT FUNCTION (generate commitment + nullifier)
+// TRANSFER PROOF (same circuit with withdrawnValue=0) — for future use
+export async function zkTransferProof({
+  root,
+  treeDepth,
+  context,
+  asset,
+  existingValue,
+  existingNullifier,
+  existingSecret,
+  newNullifier,
+  newSecret,
+  siblings,
+  leafIndex,
+}: {
+  root: string;
+  treeDepth: string;
+  context: string;
+  asset: string;
+  existingValue: string;
+  existingNullifier: string;
+  existingSecret: string;
+  newNullifier: string;
+  newSecret: string;
+  siblings: string[];
+  leafIndex: string;
+}) {
+  return zkWithdraw({
+    withdrawnValue: "0",
+    root,
+    treeDepth,
+    context,
+    asset,
+    existingValue,
+    existingNullifier,
+    existingSecret,
+    newNullifier,
+    newSecret,
+    siblings,
+    leafIndex,
+  });
+}
+
+// DEPOSIT FUNCTION (generate commitment + nullifier) — legacy for non-Paseo networks
 export async function zkDeposit({
   secret,
   asset,
