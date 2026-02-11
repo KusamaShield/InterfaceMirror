@@ -148,7 +148,7 @@ export function get_blockexplorer(network: string, transactionid: string){
     case "bitcoincash":
       return "https://blockchair.com/bitcoin-cash/transaction/"+transactionid
     case "paseohub":
-      return "https://blockscout-testnet.polkadot.io/tx/"+transactionid
+      return "https://testnet.routescan.io/tx/"+transactionid
     case "ripple":
       return "https://xrpscan.com/tx/"+transactionid
     case "dash":
