@@ -20,7 +20,7 @@ import {
 } from "./transactions/xcm";
 import { ZKPService } from "./transactions/zklib";
 import { buildMerkleTreeFromContract } from "./transactions/merkle";
-import { poseidon2, poseidon3 } from "poseidon-lite";
+import { poseidon1, poseidon2, poseidon3 } from "poseidon-lite";
 import {
   westend_pool,
   generateCommitment,
@@ -99,8 +99,8 @@ const NETWORKS = {
     chain_id: 420420417,
     rpcEndpoint: "https://services.polkadothub-rpc.com/testnet/",
     faucet: "https://faucet.polkadot.io",
-    block_explorer: "https://blockscout-testnet.polkadot.io/",
-    shield_address: "0x9A5c6957C0A682C29f1995033291A56b7de08B40",
+    block_explorer: "https://testnet.routescan.io",
+    shield_address: "0x73082Ac2833afD07D035c512031E6Af72B1bDEBD",
     abi: [
       "function deposit(address asset, uint256 amount, uint256 commitment) external payable",
       "function withdraw(uint256[2] calldata a, uint256[2][2] calldata b, uint256[2] calldata c, uint256[6] calldata pubSignals, address asset, address recipient) external",
@@ -852,7 +852,7 @@ export function App() {
           //   console.log(`set worker!`);
           // Store the worker functions in state or ref for later use
           setProofWorker(wasmPackage);
-          setNetwork("kusama");
+          setNetwork("paseo_assethub");
           setIsWasmLoaded(true);
         } catch (err) {
           setError("Failed to load WASM module");
@@ -1116,7 +1116,7 @@ export function App() {
                 rel="noopener noreferrer"
                 style={{ color: "#58a6ff", textDecoration: "underline" }}
               >
-                View on Explorer
+               {txResponse.hash} 
               </a>
             ) : (
               txResponse.hash
@@ -1346,7 +1346,7 @@ export function App() {
               rel="noopener noreferrer"
               style={{ color: "#58a6ff", textDecoration: "underline" }}
             >
-              View on Explorer
+              {txResponse2.hash}
             </a>
           ) : (
             txResponse2.hash
@@ -1766,7 +1766,8 @@ export function App() {
             );
 
             // Pre-check: check nullifier hasn't been spent
-            const nullifierHash = poseidon2([BigInt(existingNullifier), 0n]);
+            // Circuit uses PoseidonBN254(1) — single-input Poseidon, not Poseidon(nullifier, 0)
+            const nullifierHash = poseidon1([BigInt(existingNullifier)]);
             const nullifierSpent = await checkContract.spentNullifiers(nullifierHash);
             if (nullifierSpent) {
               toast(`Already withdrawn! This nullifier has been spent.`, { position: "top-right", autoClose: 5000, theme: "dark" });
@@ -1806,18 +1807,31 @@ export function App() {
               throw new Error("Commitment not found in tree");
             }
 
-            const merkleProof = merkleTree.getProof(leafIdx);
+            const merkleProof = await merkleTree.getProof(leafIdx);
             console.log(`Merkle proof obtained. Leaf index: ${leafIdx}, Tree depth: ${merkleProof.depth}`);
 
             // Get tree state from contract
             const currentRoot = await checkContract.currentRoot();
-            const treeDepth = await checkContract.treeDepth();
-            console.log(`Contract root: ${currentRoot}, depth: ${treeDepth}`);
+            const contractTreeSize = await checkContract.treeSize();
+            console.log(`Contract root: ${currentRoot}, size: ${contractTreeSize}, local root: ${merkleTree.root}, local size: ${merkleTree.size}`);
 
-            // Verify our local root matches the contract
-            if (merkleTree.root.toString() !== currentRoot.toString()) {
-              console.warn(`Root mismatch! Local: ${merkleTree.root}, Contract: ${currentRoot}`);
+            // Validate local tree size matches contract
+            if (merkleTree.size !== Number(contractTreeSize)) {
+              console.error(`Tree size mismatch! Local: ${merkleTree.size}, Contract: ${contractTreeSize}. Events may be missing or incorrectly parsed.`);
+              toast(`Tree reconstruction error: expected ${contractTreeSize} leaves but found ${merkleTree.size}. Please try again.`, { position: "top-right", autoClose: 8000, theme: "dark" });
+              throw new Error(`Tree size mismatch: local ${merkleTree.size} vs contract ${contractTreeSize}`);
             }
+
+            // Use the LOCAL root (consistent with local siblings) and verify it's a valid historical root on-chain
+            const localRoot = merkleTree.root;
+            const localDepth = merkleTree.size <= 1 ? 0 : Math.ceil(Math.log2(merkleTree.size));
+            const isValidRoot = await checkContract.validRoots(localRoot);
+            if (!isValidRoot) {
+              console.error(`Local root ${localRoot} is not a valid root on-chain. Tree reconstruction is incorrect.`);
+              toast(`Merkle tree reconstruction failed — root not recognized by contract.`, { position: "top-right", autoClose: 8000, theme: "dark" });
+              throw new Error("Local Merkle root not valid on-chain");
+            }
+            console.log(`Local root ${localRoot} is valid on-chain. Depth: ${localDepth}`);
 
             // Compute context = keccak256(abi.encodePacked(recipient, asset)) % SNARK_SCALAR_FIELD
             const SNARK_SCALAR_FIELD = 21888242871839275222246405745257275088548364400416034343698204186575808495617n;
@@ -1832,11 +1846,11 @@ export function App() {
 
             toast(`Generating ZK proof...`, { position: "top-right", autoClose: 6000, theme: "dark" });
 
-            // Generate the Groth16 proof
+            // Generate the Groth16 proof — use LOCAL root & depth (consistent with local siblings)
             const proofResult = await zkWithdraw({
               withdrawnValue: existingValue.toString(), // withdraw full amount
-              root: currentRoot.toString(),
-              treeDepth: treeDepth.toString(),
+              root: localRoot.toString(),
+              treeDepth: localDepth.toString(),
               context,
               asset: "0", // native token
               existingValue: existingValue.toString(),

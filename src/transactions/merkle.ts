@@ -3,6 +3,14 @@
  *
  * Client-side LeanIMT reconstruction from on-chain events/calldata.
  * Used to generate Merkle proofs for the FixedIlop withdraw circuit.
+ *
+ * The insert() logic is a direct 1:1 port of InternalLeanIMT.sol _insert().
+ * Uses poseidon-lite for hashing (matches circomlib Poseidon used by the circuit).
+ *
+ * IMPORTANT: The on-chain Poseidon contract MUST use the same Poseidon as
+ * circomlib (i.e. PoseidonT3 from poseidon-solidity). If it doesn't, the
+ * locally-computed root will not match the on-chain root, and proofs will
+ * fail on-chain validation.
  */
 
 import { ethers } from "ethers";
@@ -15,118 +23,100 @@ export interface MerkleProof {
   leafIndex: number;
 }
 
-// LeanIMT — mirrors InternalLeanIMT.sol logic
-// Binary Merkle tree with Poseidon2 hashing, dynamic depth, no zero-hashes.
+// ---------------------------------------------------------------------------
+// LeanIMT — mirrors InternalLeanIMT.sol exactly
+// Uses poseidon-lite (matches circomlib / poseidon-solidity PoseidonT3)
+// ---------------------------------------------------------------------------
+
 export class LeanIMT {
   private leaves: bigint[] = [];
-  private sideNodes: bigint[] = [];
-  private depth: number = 0;
+  // sideNodes mirrors the Solidity mapping(uint256 => uint256).
+  // Unset positions are implicitly 0n.
+  private _sideNodes = new Map<number, bigint>();
+  private _depth: number = 0;
   private _root: bigint = 0n;
 
-  get root(): bigint {
-    return this._root;
+  get root(): bigint { return this._root; }
+  get size(): number { return this.leaves.length; }
+
+  private sn(level: number): bigint {
+    return this._sideNodes.get(level) ?? 0n;
   }
 
-  get size(): number {
-    return this.leaves.length;
-  }
-
-  // Insert a leaf into the tree (mirrors _insert in InternalLeanIMT.sol)
+  /**
+   * Insert a leaf — direct port of InternalLeanIMT.sol _insert().
+   *
+   *   uint256 index = self.size;
+   *   if (2**treeDepth < index+1) ++treeDepth;
+   *   for level in 0..treeDepth:
+   *       if right child: node = hash(sideNodes[level], node)
+   *       else:           sideNodes[level] = node
+   *   sideNodes[treeDepth] = node;          // ← root
+   */
   insert(leaf: bigint): void {
+    const index = this.leaves.length;
+    let treeDepth = this._depth;
+
+    // Depth increase check (matches Solidity 2**treeDepth < index+1)
+    if ((1 << treeDepth) < index + 1) {
+      treeDepth++;
+    }
+    this._depth = treeDepth;
+
     let node = leaf;
-    let index = this.leaves.length;
 
-    // If tree was empty, just set root
-    if (index === 0) {
-      this.leaves.push(leaf);
-      this._root = leaf;
-      this.sideNodes = [];
-      this.depth = 0;
-      return;
-    }
-
-    // Check if we need to increase depth
-    // Tree can hold 2^depth leaves. If index >= 2^depth, we need more depth.
-    let currentCapacity = 1 << this.depth;
-    if (index >= currentCapacity) {
-      // Need to increase depth — the old root becomes a side node
-      this.sideNodes.push(this._root);
-      this.depth += 1;
-    }
-
-    // Walk up the tree, hashing with side nodes
-    for (let level = 0; level < this.depth; level++) {
+    for (let level = 0; level < treeDepth; level++) {
       if ((index >> level) & 1) {
         // Right child: hash(sideNode, node)
-        node = poseidon2([this.sideNodes[level], node]);
+        node = poseidon2([this.sn(level), node]);
       } else {
-        // Left child: update side node and propagate
-        this.sideNodes[level] = node;
-        // The rest of the path just propagates node upward
-        // For a left insertion, remaining levels use the node as-is
-        // until we reach a level where the bit is 1
-        // Actually, for left child at this level, we need to just set sideNode
-        // and continue — but the node stays as-is for next level
-        // This is because the right subtree doesn't exist yet at this position
-        // In the LeanIMT, if a node has no sibling, it propagates up directly
-        let remaining = node;
-        for (let j = level + 1; j < this.depth; j++) {
-          if ((index >> j) & 1) {
-            remaining = poseidon2([this.sideNodes[j], remaining]);
-          } else {
-            this.sideNodes[j] = remaining;
-            // Keep going up
-          }
-        }
-        this._root = remaining;
-        this.leaves.push(leaf);
-        return;
+        // Left child: store side node, propagate node upward unchanged
+        this._sideNodes.set(level, node);
       }
     }
 
+    this._sideNodes.set(treeDepth, node);
     this._root = node;
     this.leaves.push(leaf);
   }
 
-  // Get Merkle proof for a given leaf index (for the withdraw circuit)
-  // Returns 254 siblings (padded with 0s for unused levels)
+  /**
+   * Get Merkle proof for a given leaf index.
+   * Rebuilds the tree layer-by-layer from the stored leaves to extract
+   * the sibling at each level.  Pads to 254 siblings for the circuit.
+   */
   getProof(leafIndex: number): MerkleProof {
     if (leafIndex < 0 || leafIndex >= this.leaves.length) {
-      throw new Error(`Leaf index ${leafIndex} out of range (tree has ${this.leaves.length} leaves)`);
+      throw new Error(
+        `Leaf index ${leafIndex} out of range (tree has ${this.leaves.length} leaves)`,
+      );
     }
 
     const siblings: bigint[] = [];
-    const treeSize = this.leaves.length;
-
-    // Rebuild the full tree layer by layer to extract the proof path
     let currentLayer = [...this.leaves];
+    let idx = leafIndex;
 
-    for (let level = 0; level < this.depth; level++) {
-      const nextLayer: bigint[] = [];
-      let proofIndex = leafIndex >> level;
-      const siblingIndex = proofIndex ^ 1; // XOR to get sibling
-
-      if (siblingIndex < currentLayer.length) {
-        siblings.push(currentLayer[siblingIndex]);
-      } else {
-        // No sibling (odd node) — in LeanIMT, node propagates up
-        siblings.push(0n);
-      }
+    for (let level = 0; level < this._depth; level++) {
+      // Sibling of idx at this level
+      const sibIdx = (idx % 2 === 0) ? idx + 1 : idx - 1;
+      siblings.push(
+        sibIdx >= 0 && sibIdx < currentLayer.length ? currentLayer[sibIdx] : 0n,
+      );
 
       // Build next layer
+      const nextLayer: bigint[] = [];
       for (let i = 0; i < currentLayer.length; i += 2) {
         if (i + 1 < currentLayer.length) {
           nextLayer.push(poseidon2([currentLayer[i], currentLayer[i + 1]]));
         } else {
-          // Odd node propagates up directly
-          nextLayer.push(currentLayer[i]);
+          nextLayer.push(currentLayer[i]); // odd node propagates
         }
       }
-
       currentLayer = nextLayer;
+      idx = Math.floor(idx / 2);
     }
 
-    // Pad siblings to 254
+    // Pad to 254 for the Withdraw(254) circuit
     while (siblings.length < 254) {
       siblings.push(0n);
     }
@@ -134,19 +124,20 @@ export class LeanIMT {
     return {
       siblings: siblings.map((s) => s.toString()),
       root: this._root.toString(),
-      depth: this.depth,
+      depth: this._depth,
       leafIndex,
     };
   }
 
-  // Find the index of a leaf value
   findLeafIndex(leaf: bigint): number {
     return this.leaves.findIndex((l) => l === leaf);
   }
 }
 
-// Build Merkle tree by parsing all contract transactions in block order
-// Extracts commitments from deposit() calls and newCommitmentHash from withdraw() pubSignals[0]
+// ---------------------------------------------------------------------------
+// Build tree from contract events
+// ---------------------------------------------------------------------------
+
 export async function buildMerkleTreeFromContract(
   provider: ethers.Provider,
   contractAddress: string,
@@ -155,14 +146,12 @@ export async function buildMerkleTreeFromContract(
   const tree = new LeanIMT();
   const iface = new ethers.Interface(abi);
 
-  // Get all transactions to the contract from genesis
-  // We use getLogs to find Deposit and Withdrawal events, then decode calldata
+  // Fetch all relevant events
   const depositTopic = ethers.id("Deposit(address,uint256,uint256)");
   const withdrawalTopic = ethers.id("Withdrawal(address,uint256,address,uint256)");
 
   const currentBlock = await provider.getBlockNumber();
 
-  // Query all relevant events
   const logs = await provider.getLogs({
     address: contractAddress,
     fromBlock: 0,
@@ -176,26 +165,41 @@ export async function buildMerkleTreeFromContract(
     return a.index - b.index;
   });
 
+  // Process events in order
+  let insertionIndex = 0;
+
   for (const log of logs) {
     if (log.topics[0] === depositTopic) {
       // Deposit(address indexed asset, uint256 amount, uint256 indexed commitment)
-      // Only asset and commitment are indexed — amount is in data
-      // topics[0]=sig, topics[1]=asset, topics[2]=commitment
+      // topics[0]=sig  topics[1]=asset  topics[2]=commitment
       const commitment = BigInt(log.topics[2]);
       tree.insert(commitment);
+      console.log(
+        `Merkle insert #${insertionIndex}: deposit commitment=${commitment} → root=${tree.root}`,
+      );
+      insertionIndex++;
     } else if (log.topics[0] === withdrawalTopic) {
-      // Withdrawal event — we need to get the newCommitmentHash from tx calldata
-      // Withdrawal(address indexed asset, address indexed recipient, uint256 indexed amount)
-      // The newCommitment is pubSignals[0] from the withdraw() call
+      // Withdrawal — extract newCommitmentHash from the withdraw() calldata
       const tx = await provider.getTransaction(log.transactionHash);
       if (tx) {
         try {
           const decoded = iface.parseTransaction({ data: tx.data, value: tx.value });
           if (decoded && decoded.name === "withdraw") {
-            // pubSignals is the 4th argument (index 3), and newCommitmentHash is pubSignals[0]
+            // withdraw(uint256[2] a, uint256[2][2] b, uint256[2] c,
+            //          uint256[6] pubSignals, address asset, address recipient)
             const pubSignals = decoded.args[3];
-            const newCommitmentHash = BigInt(pubSignals[0]);
-            tree.insert(newCommitmentHash);
+            if (pubSignals && pubSignals.length >= 1) {
+              const newCommitmentHash = BigInt(pubSignals[0]);
+              tree.insert(newCommitmentHash);
+              console.log(
+                `Merkle insert #${insertionIndex}: withdrawal newCommitment=${newCommitmentHash} → root=${tree.root}`,
+              );
+              insertionIndex++;
+            } else {
+              console.error(
+                `Could not extract pubSignals from withdraw tx ${log.transactionHash}`,
+              );
+            }
           }
         } catch (e) {
           console.error(`Failed to decode withdraw tx ${log.transactionHash}:`, e);
@@ -203,6 +207,10 @@ export async function buildMerkleTreeFromContract(
       }
     }
   }
+
+  console.log(
+    `Merkle tree built: ${tree.size} leaves, depth=${tree.size <= 1 ? 0 : Math.ceil(Math.log2(tree.size))}, root=${tree.root}`,
+  );
 
   return tree;
 }
