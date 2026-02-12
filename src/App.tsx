@@ -26,6 +26,10 @@ import {
   generateCommitment,
   zkDeposit,
   zkWithdraw,
+  preloadZkey,
+  preloadWasm,
+  preloadWasmsnark,
+  USE_WASMSNARK,
 } from "./transactions/zkg16";
 import { ToastContainer, toast } from "react-toastify";
 import { ApiPromise, WsProvider } from "@polkadot/api";
@@ -97,7 +101,7 @@ const NETWORKS = {
     name: "Paseo Assethub",
     asset: "PAS",
     chain_id: 420420417,
-    rpcEndpoint: "https://services.polkadothub-rpc.com/testnet/",
+    rpcEndpoint: "https://eth-asset-hub-paseo.ibp.network/",
     faucet: "https://faucet.polkadot.io",
     block_explorer: "https://testnet.routescan.io",
     shield_address: "0x73082Ac2833afD07D035c512031E6Af72B1bDEBD",
@@ -308,7 +312,31 @@ export function App() {
     };
 
     fetchNativeBalance();
+    const interval = setInterval(fetchNativeBalance, 5000);
+    return () => clearInterval(interval);
   }, [evmAddress, selectedNetwork]);
+
+  // Pre-load circuit artifacts when Paseo network is selected
+  useEffect(() => {
+    if (selectedNetwork === "paseo_assethub") {
+      // Pre-load WASM into worker memory (avoids re-fetch on proof generation)
+      preloadWasm("/withdraw.wasm").catch((e) =>
+        console.warn("Failed to pre-load withdraw wasm:", e),
+      );
+
+      if (USE_WASMSNARK) {
+        // Warm wasmsnark bn128 instance + binary proving key
+        preloadWasmsnark().catch((e) =>
+          console.warn("Failed to pre-load wasmsnark:", e),
+        );
+      } else {
+        // Warm the worker's zkey cache (66MB) so proof generation is faster
+        preloadZkey("/withdraw_0001.zkey").catch((e) =>
+          console.warn("Failed to pre-load withdraw zkey:", e),
+        );
+      }
+    }
+  }, [selectedNetwork]);
 
   // Available currencies - only currencies that can be swapped TO DOT
   const availableCurrencies = [
@@ -1844,23 +1872,30 @@ export function App() {
             const newNullifier = BigInt(ethers.toBigInt(ethers.randomBytes(16))).toString();
             const newSecret = BigInt(ethers.toBigInt(ethers.randomBytes(16))).toString();
 
-            toast(`Generating ZK proof...`, { position: "top-right", autoClose: 6000, theme: "dark" });
+            const proofToastId = toast.loading(`🔐 Generating ZK proof — this may take up to a minute...`, { position: "top-right", theme: "dark" });
 
             // Generate the Groth16 proof — use LOCAL root & depth (consistent with local siblings)
-            const proofResult = await zkWithdraw({
-              withdrawnValue: existingValue.toString(), // withdraw full amount
-              root: localRoot.toString(),
-              treeDepth: localDepth.toString(),
-              context,
-              asset: "0", // native token
-              existingValue: existingValue.toString(),
-              existingNullifier,
-              existingSecret,
-              newNullifier,
-              newSecret,
-              siblings: merkleProof.siblings,
-              leafIndex: leafIdx.toString(),
-            });
+            let proofResult;
+            try {
+              proofResult = await zkWithdraw({
+                withdrawnValue: existingValue.toString(), // withdraw full amount
+                root: localRoot.toString(),
+                treeDepth: localDepth.toString(),
+                context,
+                asset: "0", // native token
+                existingValue: existingValue.toString(),
+                existingNullifier,
+                existingSecret,
+                newNullifier,
+                newSecret,
+                siblings: merkleProof.siblings,
+                leafIndex: leafIdx.toString(),
+              });
+              toast.update(proofToastId, { render: `✅ ZK proof generated!`, type: "success", isLoading: false, autoClose: 5000 });
+            } catch (proofErr) {
+              toast.update(proofToastId, { render: `❌ Proof generation failed`, type: "error", isLoading: false, autoClose: 8000 });
+              throw proofErr;
+            }
 
             console.log(`ZK proof generated. Public signals:`, proofResult.publicSignals);
 
