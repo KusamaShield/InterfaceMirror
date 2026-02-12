@@ -4,7 +4,6 @@
 
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
-import path from 'path'
 //import { NodeGlobalsPolyfillPlugin } from '@esbuild-plugins/node-globals-polyfill';
 
 
@@ -17,11 +16,7 @@ export default defineConfig({
   worker: {
     format: 'es',
   },
-  resolve: {
-    alias: {
-      'wasmsnark': path.resolve(__dirname, '../wasmsnark'),
-    },
-  },
+  resolve: {},
   // Cross-Origin-Isolation headers enable SharedArrayBuffer, which lets
   // snarkjs/ffjavascript use multi-threaded WASM for multiexponentiation.
   // Without these, groth16.prove() runs single-threaded (~40s → ~5-10s).
