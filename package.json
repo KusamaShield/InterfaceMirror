@@ -1,7 +1,7 @@
 {
   "name": "kusama-shield",
   "private": true,
-  "version": "0.0.45",
+  "version": "0.0.51",
   "type": "module",
   "scripts": {
     "dev": "vite --host",
@@ -15,6 +15,7 @@
     "testwasm": "npx tsx src/tests/testing.ts",
     "build": "vite build",
     "typecheck": "tsc --noEmit",
+    "convert-pkey": "node scripts/convert-pkey-to-wasmsnark.cjs public/withdraw_0001.zkey public/withdraw_pkey.bin",
     "preview": "vite preview"
   },
   "dependencies": {
