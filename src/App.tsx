@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Kusama Shield Developers on behalf of the Kusama DAO, see LICENSE in main folder.
+ * Copyright 2025-2026 Kusama Shield Developers on behalf of the Kusama DAO, see LICENSE in main folder.
  */
 
 import "./App.css";
@@ -3797,10 +3797,12 @@ export function App() {
               fill="currentColor"
             />
           </svg>
-          By using this website you agree to the Terms of Service. App has
-          <u>NOT BEEN AUDITED yet</u>
+          By using this website you agree to the Terms of Service. 
         </button>
-        <div
+<a href="https://kusamashield.codeberg.page/deploy.html" title="run Kusama Shield locally">
+<img src="/run_locally.gif" alt="run with ipfs" />
+</a>
+<div
           style={{
             display: "flex",
             justifyContent: "center",
