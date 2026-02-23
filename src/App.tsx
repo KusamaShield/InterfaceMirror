@@ -59,6 +59,14 @@ import {
 import { ethers, Network } from "ethers";
 import UnifiedWalletSelector from "./components/UnifiedWalletSelector";
 import { useAccount, useSwitchChain } from "wagmi";
+import {
+  connectTor,
+  disconnectTor,
+  isTorConnected,
+  torFetch,
+  onTorStatusChange,
+  type TorStatus,
+} from "./services/torService";
 
 // input token amounts
 const amountOptions = [0.5, 1, 5, 10, 100, 500, 1000, 10000];
@@ -262,6 +270,10 @@ export function App() {
   // Destination address for non-KSM swaps
   const [destinationAddress, setDestinationAddress] = useState<string>("");
 
+  // Tor state
+  const [torStatus, setTorStatus] = useState<TorStatus>("disconnected");
+  const torToastIdRef = useRef<any>(null);
+
   // Monitor wagmi account state for external disconnects (e.g., user disconnects from MetaMask)
   const { isConnected: wagmiConnected, address: wagmiAddress, chain: connectedChain } = useAccount();
 
@@ -287,7 +299,8 @@ export function App() {
       }
 
       try {
-        const response = await fetch(NETWORKS[selectedNetwork].rpcEndpoint, {
+        const rpcFetch = isTorConnected() ? torFetch : fetch;
+        const response = await rpcFetch(NETWORKS[selectedNetwork].rpcEndpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -315,6 +328,82 @@ export function App() {
     const interval = setInterval(fetchNativeBalance, 5000);
     return () => clearInterval(interval);
   }, [evmAddress, selectedNetwork]);
+
+  // Tor status listener
+  useEffect(() => {
+    const unsub = onTorStatusChange((status, message) => {
+      setTorStatus(status);
+
+      if (status === "loading_wasm") {
+        torToastIdRef.current = toast.loading("Loading Tor module...", {
+          position: "top-right",
+          theme: "dark",
+        });
+      } else if (status === "creating_circuit") {
+        if (torToastIdRef.current) {
+          toast.update(torToastIdRef.current, {
+            render: message || "Creating Tor circuit...",
+            isLoading: true,
+          });
+        }
+      } else if (status === "connected") {
+        if (torToastIdRef.current) {
+          toast.update(torToastIdRef.current, {
+            render: message || "Tor circuit established",
+            type: "success",
+            isLoading: false,
+            autoClose: 5000,
+          });
+          torToastIdRef.current = null;
+        }
+      } else if (status === "error") {
+        if (torToastIdRef.current) {
+          toast.update(torToastIdRef.current, {
+            render: message || "Tor connection failed",
+            type: "error",
+            isLoading: false,
+            autoClose: 6000,
+          });
+          torToastIdRef.current = null;
+        }
+      } else if (status === "disconnected") {
+        if (torToastIdRef.current) {
+          toast.dismiss(torToastIdRef.current);
+          torToastIdRef.current = null;
+        }
+        toast.info("Disconnected from Tor", {
+          position: "top-right",
+          autoClose: 3000,
+          theme: "dark",
+        });
+      }
+    });
+    return unsub;
+  }, []);
+
+  const handleTorToggle = async () => {
+    if (torStatus === "connected") {
+      await disconnectTor();
+    } else if (torStatus === "disconnected" || torStatus === "error") {
+      try {
+        await connectTor((level, target, message) => {
+          if (level === "INFO" || level === "WARN") {
+            console.log(`[Tor ${level}] ${target}: ${message}`);
+            // Update the loading toast with circuit progress
+            if (torToastIdRef.current && message) {
+              const short = message.length > 80 ? message.slice(0, 77) + "..." : message;
+              toast.update(torToastIdRef.current, {
+                render: short,
+                isLoading: true,
+              });
+            }
+          }
+        });
+      } catch (err) {
+        console.error("Tor connection error:", err);
+      }
+    }
+  };
 
   // Pre-load circuit artifacts when Paseo network is selected
   useEffect(() => {
@@ -4029,6 +4118,24 @@ export function App() {
             </div>
           </div>
         )}
+
+        {/* Tor Footer */}
+        <div className="tor-footer">
+          <button
+            className={`tor-button ${torStatus === "loading_wasm" || torStatus === "creating_circuit" ? "tor-pulsating" : ""} ${torStatus === "connected" ? "tor-connected" : ""}`}
+            onClick={handleTorToggle}
+            disabled={torStatus === "loading_wasm" || torStatus === "creating_circuit"}
+            title={
+              torStatus === "connected"
+                ? "Connected to Tor - click to disconnect"
+                : torStatus === "loading_wasm" || torStatus === "creating_circuit"
+                  ? "Establishing Tor circuit..."
+                  : "Route RPC requests through Tor"
+            }
+          >
+            <img src="/tor_button.jpg" alt="Tor" className="tor-button-img" />
+          </button>
+        </div>
       </div>
     </div>
   );

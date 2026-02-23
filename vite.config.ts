@@ -35,5 +35,6 @@ export default defineConfig({
   assetsInclude: ['**/*.wasm'],
   optimizeDeps: {
     include: ['dayjs', 'dayjs/plugin/relativeTime', 'dayjs/locale/en'],
+    exclude: ['webtor-wasm'],
   },
 })

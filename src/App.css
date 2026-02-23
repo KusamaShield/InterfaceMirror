@@ -2084,3 +2084,79 @@ body {
         max-width: 150px;
     }
 }
+
+/* Tor Footer */
+.tor-footer {
+  position: fixed;
+  bottom: 0;
+  right: 0;
+  padding: 1rem 1.5rem;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+.tor-button {
+  pointer-events: all;
+  background: none;
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  border-radius: 50%;
+  padding: 0;
+  cursor: pointer;
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease, transform 0.2s ease;
+  overflow: hidden;
+  opacity: 0.7;
+}
+
+.tor-button:hover {
+  opacity: 1;
+  border-color: rgba(124, 58, 237, 0.6);
+  box-shadow: 0 0 16px rgba(124, 58, 237, 0.3);
+  transform: scale(1.08);
+}
+
+.tor-button:disabled {
+  cursor: wait;
+  opacity: 1;
+}
+
+.tor-button-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+/* Pulsating animation while connecting */
+.tor-pulsating {
+  opacity: 1;
+  animation: torPulse 1.5s ease-in-out infinite;
+  border-color: rgba(124, 58, 237, 0.6);
+}
+
+@keyframes torPulse {
+  0%, 100% {
+    box-shadow: 0 0 8px rgba(124, 58, 237, 0.3);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 24px rgba(124, 58, 237, 0.7), 0 0 48px rgba(124, 58, 237, 0.2);
+    transform: scale(1.1);
+  }
+}
+
+/* Connected state - steady glow */
+.tor-connected {
+  opacity: 1;
+  border-color: rgba(34, 197, 94, 0.6);
+  box-shadow: 0 0 12px rgba(34, 197, 94, 0.3);
+}
+
+.tor-connected:hover {
+  border-color: rgba(34, 197, 94, 0.8);
+  box-shadow: 0 0 20px rgba(34, 197, 94, 0.5);
+}
