@@ -165,6 +165,101 @@ mod wasm {
             })
         }
 
+        /// Connect to a Snowflake proxy using an existing BrokerClient (supports fallback)
+        pub async fn connect_with_broker(broker: &BrokerClient) -> Result<Self> {
+            info!("Creating WebRTC connection for Snowflake with broker fallback");
+
+            // 1. Create RTCPeerConnection with STUN servers
+            let config = create_rtc_config()?;
+            let pc = RtcPeerConnection::new_with_configuration(&config).map_err(|e| {
+                TorError::Network(format!("Failed to create RTCPeerConnection: {:?}", e))
+            })?;
+
+            debug!("RTCPeerConnection created");
+
+            // 2. Create DataChannel (must be before creating offer)
+            let dc_init = RtcDataChannelInit::new();
+            // ordered and reliable by default (like TCP)
+            let dc = pc.create_data_channel_with_data_channel_dict(DATA_CHANNEL_LABEL, &dc_init);
+
+            debug!("DataChannel created: {}", DATA_CHANNEL_LABEL);
+
+            // 3. Setup channel for receiving messages
+            let (tx, rx) = mpsc::unbounded();
+            let tx_msg = tx.clone();
+            let tx_err = tx.clone();
+            let tx_close = tx;
+
+            // Set binary type
+            dc.set_binary_type(web_sys::RtcDataChannelType::Arraybuffer);
+
+            // onmessage handler
+            let on_message = Closure::wrap(Box::new(move |e: web_sys::MessageEvent| {
+                if let Ok(abuf) = e.data().dyn_into::<js_sys::ArrayBuffer>() {
+                    let array = js_sys::Uint8Array::new(&abuf);
+                    let data = array.to_vec();
+                    trace!("WebRTC receives {} bytes", data.len());
+                    let _ = tx_msg.unbounded_send(Ok(data));
+                }
+            }) as Box<dyn FnMut(web_sys::MessageEvent)>);
+            dc.set_onmessage(Some(on_message.as_ref().unchecked_ref()));
+
+            // onerror handler
+            let on_error = Closure::wrap(Box::new(move |_e: web_sys::Event| {
+                warn!("WebRTC DataChannel error");
+                let _ = tx_err.unbounded_send(Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    "DataChannel error",
+                )));
+            }) as Box<dyn FnMut(web_sys::Event)>);
+            dc.set_onerror(Some(on_error.as_ref().unchecked_ref()));
+
+            // onclose handler
+            let on_close = Closure::wrap(Box::new(move |_e: web_sys::Event| {
+                debug!("WebRTC DataChannel closed");
+                // Send EOF by closing the channel
+                tx_close.close_channel();
+            }) as Box<dyn FnMut(web_sys::Event)>);
+            dc.set_onclose(Some(on_close.as_ref().unchecked_ref()));
+
+            // 4. Wait for ICE gathering to complete
+            let offer_sdp = create_and_gather_offer(&pc).await?;
+            info!("SDP offer created ({} bytes)", offer_sdp.len());
+
+            // 5. Exchange offer/answer via broker (with fallback support)
+            let answer_json = broker.negotiate(&offer_sdp).await?;
+            info!("Got SDP answer from broker");
+
+            // 6. Parse and set remote description
+            // Answer is JSON: {"type":"answer","sdp":"..."}
+            let answer_sdp = parse_sdp_answer(&answer_json)?;
+            let answer_init = RtcSessionDescriptionInit::new(RtcSdpType::Answer);
+            answer_init.set_sdp(&answer_sdp);
+
+            let set_remote = pc.set_remote_description(&answer_init);
+            wasm_bindgen_futures::JsFuture::from(set_remote)
+                .await
+                .map_err(|e| {
+                    TorError::Network(format!("Failed to set remote description: {:?}", e))
+                })?;
+
+            debug!("Remote description set");
+
+            // 7. Wait for DataChannel to open
+            wait_for_channel_open(&dc).await?;
+            info!("WebRTC DataChannel opened!");
+
+            Ok(Self {
+                peer_connection: pc,
+                data_channel: dc,
+                rx,
+                buffer: Vec::new(),
+                _on_message: on_message,
+                _on_error: on_error,
+                _on_close: on_close,
+            })
+        }
+
         /// Send data over the DataChannel
         pub fn send(&self, data: &[u8]) -> Result<()> {
             if self.data_channel.ready_state() != RtcDataChannelState::Open {

@@ -20,7 +20,7 @@ use tor_proto::client::circuit::TimeoutEstimator;
 use tor_proto::client::stream::DataStream;
 use tor_proto::{CellCount, ClientTunnel, FlowCtrlParameters};
 use tor_units::Percentage;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 /// Circuit status
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -218,8 +218,34 @@ impl CircuitManager {
         &self,
         isolation_key: Option<IsolationKey>,
     ) -> Result<Arc<RwLock<Circuit>>> {
+        const MAX_CIRCUIT_ATTEMPTS: usize = 5;
+        let mut last_error = None;
+
+        for circuit_attempt in 1..=MAX_CIRCUIT_ATTEMPTS {
+            match self.try_create_circuit(isolation_key.clone(), circuit_attempt).await {
+                Ok(circuit) => return Ok(circuit),
+                Err(e) => {
+                    warn!(
+                        "Circuit creation attempt {}/{} failed: {}",
+                        circuit_attempt, MAX_CIRCUIT_ATTEMPTS, e
+                    );
+                    last_error = Some(e);
+                }
+            }
+        }
+
+        Err(last_error.unwrap_or_else(|| {
+            TorError::Internal("Circuit creation failed".to_string())
+        }))
+    }
+
+    async fn try_create_circuit(
+        &self,
+        isolation_key: Option<IsolationKey>,
+        attempt: usize,
+    ) -> Result<Arc<RwLock<Circuit>>> {
         let circuit_id = format!("circuit_{}", uuid::Uuid::new_v4());
-        info!("Creating new circuit: {}", circuit_id);
+        info!("Creating new circuit: {} (attempt {})", circuit_id, attempt);
 
         // Log relay manager state
         let relay_manager = self.relay_manager.read().await;
@@ -269,22 +295,16 @@ impl CircuitManager {
         info!("First hop created (FAST)");
 
         // Construct Relay object for the bridge from the channel target
-        // Note: The channel target might not have all relay info (like ntor key for fast handshake),
-        // but we construct a best-effort representation for the circuit info.
         let channel_target = channel.target();
         let bridge_fingerprint = channel_target
             .rsa_identity()
             .map(|id| hex::encode(id.as_bytes()))
             .unwrap_or_else(|| "0000000000000000000000000000000000000000".to_string());
 
-        // We don't have the real address easily accessible in string format from OwnedChanTarget without some work,
-        // or the ntor key if it wasn't known.
-        // For visual consistency in the circuit list, we create a placeholder if needed.
-        // For Snowflake, we use WebRTC so there's no traditional IP address.
         let bridge_relay = Relay::new(
             bridge_fingerprint.clone(),
-            "Snowflake".to_string(), // More meaningful name for the proxy
-            "0.0.0.0".to_string(),   // Placeholder - will be shown as "Snowflake (WebRTC)" in UI
+            "Snowflake".to_string(),
+            "0.0.0.0".to_string(),
             0,
             std::collections::HashSet::new(),
             "0000000000000000000000000000000000000000000000000000000000000000".to_string(),
@@ -298,7 +318,6 @@ impl CircuitManager {
         );
 
         // Middle
-        // Ensure we don't select the bridge as middle
         let middle_criteria =
             crate::relay::selection::middle_relays().without_fingerprint(&bridge_fingerprint);
         debug!("Middle relay criteria: {:?}", middle_criteria);
@@ -335,7 +354,6 @@ impl CircuitManager {
             .map_err(|e| TorError::Internal(format!("Failed to extend to middle: {}", e)))?;
 
         // Exit
-        // Ensure we don't select bridge or middle as exit
         let exit_criteria = crate::relay::selection::exit_relays()
             .without_fingerprint(&bridge_fingerprint)
             .without_fingerprint(&middle.fingerprint);

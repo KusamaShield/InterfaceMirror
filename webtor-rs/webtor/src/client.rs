@@ -405,7 +405,7 @@ impl TorClient {
     async fn establish_channel_impl(&self) -> Result<()> {
         self.log("Establishing channel", LogType::Info);
 
-        let timeout = self.options.connection_timeout_duration();
+        let _timeout = self.options.connection_timeout_duration();
 
         // Get fingerprint - use default for Snowflake if not provided
         let fingerprint = match &self.options.bridge {
@@ -471,7 +471,7 @@ impl TorClient {
                     ));
                 }
             }
-            BridgeType::SnowflakeWebRtc { broker_url } => {
+            BridgeType::SnowflakeWebRtc { broker_url: _ } => {
                 self.log("Connecting via Snowflake (WebRTC)", LogType::Info);
                 self.log(
                     "Using WebRTC -> Turbo -> KCP -> SMUX -> TLS stack",
@@ -483,8 +483,16 @@ impl TorClient {
                 );
                 #[cfg(target_arch = "wasm32")]
                 {
-                    // Use WebRTC-based Snowflake (proper architecture)
-                    let config = SnowflakeConfig::with_broker(broker_url.clone())
+                    use crate::snowflake_broker::DEFAULT_BROKER_LIST;
+
+                    // Use WebRTC-based Snowflake with broker fallback
+                    // Try Tor Project broker first, then fall back to Triplebit brokers
+                    let broker_urls: Vec<String> = DEFAULT_BROKER_LIST
+                        .iter()
+                        .map(|s| s.to_string())
+                        .collect();
+
+                    let config = SnowflakeConfig::with_broker_list(broker_urls)
                         .with_fingerprint(fingerprint.clone());
                     let bridge = SnowflakeBridge::with_config(config);
                     let stream = bridge.connect().await?;

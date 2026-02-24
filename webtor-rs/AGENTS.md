@@ -60,6 +60,28 @@ cd subtle-tls/fuzz && cargo +nightly fuzz run fuzz_server_hello
 - Snowflake bridge is WASM-only; WebTunnel is available for both WASM and native builds
 - `ring` crate doesn't compile to WASM, so `subtle-tls` provides TLS via SubtleCrypto
 
+## Snowflake Broker Fallback
+
+The Snowflake WebRTC implementation supports broker fallback for improved censorship resistance:
+
+**Default fallback order:**
+1. `https://snowflake-broker.torproject.net/` (Tor Project - primary)
+2. `https://snowflake-broker.triplebit.dev/` (Triplebit - backup 1)
+3. `https://triplebit-snowflake-broker.b-cdn.net/` (Triplebit via Bunny.net - backup 2)
+
+**Usage:**
+```rust
+// Use default fallback (Tor Project -> Triplebit)
+let client = TorClient::new(TorClientOptions::snowflake_webrtc()).await?;
+
+// The fallback is automatic - if the primary broker is blocked or unavailable,
+// the client will try the backup brokers in order.
+```
+
+**Constants** (in `webtor/src/snowflake_broker.rs`):
+- `DEFAULT_BROKER_LIST` - Array of all broker URLs
+- `TRIPLEBIT_FINGERPRINT_1`, `TRIPLEBIT_FINGERPRINT_2` - Triplebit bridge fingerprints
+
 ## WASM Time Handling
 
 **CRITICAL**: `std::time::Instant::now()` panics on WASM with "time not implemented on this platform".

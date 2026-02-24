@@ -3858,6 +3858,23 @@ export function App() {
           )}
         </div>{" "}
         {/* Close swap-box */}
+        {/* Tor Button */}
+        <div className="tor-footer">
+          <button
+            className={`tor-button ${torStatus === "loading_wasm" || torStatus === "creating_circuit" ? "tor-pulsating" : ""} ${torStatus === "connected" ? "tor-connected" : ""}`}
+            onClick={handleTorToggle}
+            disabled={torStatus === "loading_wasm" || torStatus === "creating_circuit"}
+            title={
+              torStatus === "connected"
+                ? "Connected to Tor - click to disconnect"
+                : torStatus === "loading_wasm" || torStatus === "creating_circuit"
+                  ? "Establishing Tor circuit..."
+                  : "Route RPC requests through Tor"
+            }
+          >
+            <img src="/tor_button.jpg" alt="Tor" className="tor-button-img" />
+          </button>
+        </div>
         <button className="help-button" onClick={() => setShowHelp(true)}>
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -4119,23 +4136,6 @@ export function App() {
           </div>
         )}
 
-        {/* Tor Footer */}
-        <div className="tor-footer">
-          <button
-            className={`tor-button ${torStatus === "loading_wasm" || torStatus === "creating_circuit" ? "tor-pulsating" : ""} ${torStatus === "connected" ? "tor-connected" : ""}`}
-            onClick={handleTorToggle}
-            disabled={torStatus === "loading_wasm" || torStatus === "creating_circuit"}
-            title={
-              torStatus === "connected"
-                ? "Connected to Tor - click to disconnect"
-                : torStatus === "loading_wasm" || torStatus === "creating_circuit"
-                  ? "Establishing Tor circuit..."
-                  : "Route RPC requests through Tor"
-            }
-          >
-            <img src="/tor_button.jpg" alt="Tor" className="tor-button-img" />
-          </button>
-        </div>
       </div>
     </div>
   );

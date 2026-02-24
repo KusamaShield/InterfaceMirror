@@ -131,7 +131,7 @@ impl Default for TorClientOptions {
 }
 
 fn default_connection_timeout() -> u64 {
-    15_000 // 15 seconds
+    45_000 // 45 seconds — ICE gathering alone can take 10s
 }
 
 fn default_circuit_timeout() -> u64 {
@@ -198,6 +198,20 @@ impl TorClientOptions {
         Self {
             bridge: BridgeType::SnowflakeWebRtc {
                 broker_url: "https://snowflake-broker.torproject.net/".to_string(),
+            },
+            bridge_fingerprint: Some(SNOWFLAKE_FINGERPRINT_PRIMARY.to_string()),
+            ..Default::default()
+        }
+    }
+
+    /// Create options for Snowflake bridge via WebRTC with broker fallback
+    /// Tries Tor Project broker first, then falls back to Triplebit brokers
+    pub fn snowflake_webrtc_fallback() -> Self {
+        use crate::snowflake_broker::DEFAULT_BROKER_LIST;
+        // Use the first broker URL as the primary, but the client will try all in order
+        Self {
+            bridge: BridgeType::SnowflakeWebRtc {
+                broker_url: DEFAULT_BROKER_LIST[0].to_string(),
             },
             bridge_fingerprint: Some(SNOWFLAKE_FINGERPRINT_PRIMARY.to_string()),
             ..Default::default()

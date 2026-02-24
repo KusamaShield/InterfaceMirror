@@ -13,7 +13,7 @@
 use crate::error::{Result, TorError};
 use crate::retry::{retry_with_backoff, RetryPolicy};
 use serde::{Deserialize, Serialize};
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 /// Snowflake broker URL (direct - has CORS support)
 pub const BROKER_URL: &str = "https://snowflake-broker.torproject.net/";
@@ -24,11 +24,30 @@ pub const BROKER_FRONT_DOMAINS: &[&str] = &["www.cdn77.com", "www.phpmyadmin.net
 /// Direct broker URL (doesn't work from browsers due to CORS)
 pub const BROKER_URL_DIRECT: &str = "https://snowflake-broker.torproject.net/";
 
+/// Triplebit broker URL (backup - private Snowflake broker)
+pub const TRIPLEBIT_BROKER_URL: &str = "https://snowflake-broker.triplebit.dev/";
+
+/// Triplebit broker URL via Bunny.net CDN (alternative backup)
+pub const TRIPLEBIT_BUNNY_BROKER_URL: &str = "https://triplebit-snowflake-broker.b-cdn.net/";
+
 /// Client protocol version
 const CLIENT_VERSION: &str = "1.0";
 
 /// Default bridge fingerprint (Tor Project's primary Snowflake bridge)
 pub const DEFAULT_BRIDGE_FINGERPRINT: &str = "2B280B23E1107BB62ABFC40DDCC8824814F80A72";
+
+/// Triplebit Snowflake1 bridge fingerprint
+pub const TRIPLEBIT_FINGERPRINT_1: &str = "53B65F538F5E9A5FA6DFE5D75C78CB66C5515EF7";
+
+/// Triplebit Snowflake2 bridge fingerprint
+pub const TRIPLEBIT_FINGERPRINT_2: &str = "A478B32B16FC1F371677F9F41D9C5272B8EBB0F7";
+
+/// Default broker list for fallback (Tor Project first, then Triplebit backups)
+pub const DEFAULT_BROKER_LIST: &[&str] = &[
+    BROKER_URL,
+    TRIPLEBIT_BROKER_URL,
+    TRIPLEBIT_BUNNY_BROKER_URL,
+];
 
 /// NAT type for the client
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -119,17 +138,36 @@ impl ClientPollResponse {
     }
 }
 
-/// Snowflake broker client
+/// Snowflake broker client with support for multiple brokers and fallback
 pub struct BrokerClient {
-    broker_url: String,
+    broker_urls: Vec<String>,
     fingerprint: String,
     nat_type: NatType,
 }
 
 impl BrokerClient {
+    /// Create a new broker client with a single broker URL
     pub fn new(broker_url: &str) -> Self {
         Self {
-            broker_url: broker_url.to_string(),
+            broker_urls: vec![broker_url.to_string()],
+            fingerprint: DEFAULT_BRIDGE_FINGERPRINT.to_string(),
+            nat_type: NatType::Unknown,
+        }
+    }
+
+    /// Create a new broker client with multiple broker URLs for fallback
+    pub fn with_broker_list(broker_urls: Vec<String>) -> Self {
+        Self {
+            broker_urls,
+            fingerprint: DEFAULT_BRIDGE_FINGERPRINT.to_string(),
+            nat_type: NatType::Unknown,
+        }
+    }
+
+    /// Create a broker client with default fallback list (Tor Project -> Triplebit)
+    pub fn with_default_fallback() -> Self {
+        Self {
+            broker_urls: DEFAULT_BROKER_LIST.iter().map(|s| s.to_string()).collect(),
             fingerprint: DEFAULT_BRIDGE_FINGERPRINT.to_string(),
             nat_type: NatType::Unknown,
         }
@@ -147,8 +185,57 @@ impl BrokerClient {
 
     /// Exchange SDP offer for SDP answer via broker
     /// Returns the SDP answer from a volunteer proxy
-    /// Retries using RetryPolicy::network() if no proxy is available
+    /// Tries each broker in order until one succeeds
     pub async fn negotiate(&self, sdp_offer: &str) -> Result<String> {
+        let mut last_error: Option<TorError> = None;
+
+        // Try each broker in order
+        for (broker_index, broker_url) in self.broker_urls.iter().enumerate() {
+            let broker_name = if broker_index == 0 {
+                "primary".to_string()
+            } else {
+                format!("fallback #{}", broker_index)
+            };
+
+            info!(
+                "Trying {} Snowflake broker: {} (attempt {} of {})",
+                broker_name,
+                broker_url,
+                broker_index + 1,
+                self.broker_urls.len()
+            );
+
+            match self.negotiate_with_single_broker(sdp_offer, broker_url).await {
+                Ok(answer) => {
+                    info!(
+                        "Successfully got SDP answer from {} broker: {}",
+                        broker_name, broker_url
+                    );
+                    return Ok(answer);
+                }
+                Err(e) => {
+                    warn!(
+                        "Failed to get answer from {} broker ({}): {}",
+                        broker_name, broker_url, e
+                    );
+                    last_error = Some(e);
+                    // Continue to next broker
+                }
+            }
+        }
+
+        // All brokers failed
+        Err(last_error.unwrap_or_else(|| {
+            TorError::Network("No Snowflake brokers available".to_string())
+        }))
+    }
+
+    /// Internal method to negotiate with a single broker (with retry logic)
+    async fn negotiate_with_single_broker(
+        &self,
+        sdp_offer: &str,
+        broker_url: &str,
+    ) -> Result<String> {
         let mut request = ClientPollRequest::new(sdp_offer.to_string())
             .with_fingerprint(self.fingerprint.clone());
 
@@ -157,7 +244,7 @@ impl BrokerClient {
         }
 
         let body = request.encode()?;
-        let proxy_url = format!("{}/client", self.broker_url.trim_end_matches('/'));
+        let proxy_url = format!("{}/client", broker_url.trim_end_matches('/'));
 
         retry_with_backoff(
             "snowflake_broker_negotiate",

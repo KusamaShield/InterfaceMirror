@@ -47,6 +47,7 @@ interface WebTorModule {
   default: () => Promise<void>; // init wasm
   init: () => void;
   TorClientOptions: {
+    snowflake(): any;
     snowflakeWebRtc(): any;
     new(snowflakeUrl: string): any;
   };
@@ -92,9 +93,9 @@ async function loadWasmModule(): Promise<WebTorModule> {
   if (wasmModule) return wasmModule;
 
   // Dynamic import from the webtor-wasm pkg directory (built by wasm-pack)
-  const mod = await import("../../webtor-rs/webtor-wasm/pkg/webtor_wasm.js");
-  // Initialize the WASM module
-  await mod.default();
+  const mod = await import(/* @vite-ignore */ "../../webtor-rs/webtor-wasm/pkg/webtor_wasm.js");
+  // Initialize the WASM module, pointing to the .wasm in public/
+  await mod.default('/webtor_wasm_bg.wasm');
   mod.init();
   wasmModule = mod as unknown as WebTorModule;
   return wasmModule;
@@ -116,9 +117,9 @@ export async function connectTor(logCallback?: (level: string, target: string, m
       mod.setLogCallback(logCallback);
     }
 
-    // Step 2: Create Tor client with Snowflake WebRTC
+    // Step 2: Create Tor client with Snowflake WebSocket (direct connection)
     notifyStatus("creating_circuit", "Connecting to Tor network via Snowflake...");
-    const options = mod.TorClientOptions.snowflakeWebRtc();
+    const options = mod.TorClientOptions.snowflake();
     torClient = await new mod.TorClient(options);
 
     // Step 3: Wait for circuit to be ready

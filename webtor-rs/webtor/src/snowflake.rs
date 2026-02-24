@@ -40,8 +40,8 @@ use subtle_tls::{TlsConfig, TlsConnector, TlsStream};
 /// Snowflake bridge configuration
 #[derive(Debug, Clone)]
 pub struct SnowflakeConfig {
-    /// Broker URL for WebRTC signaling
-    pub broker_url: String,
+    /// Broker URLs for WebRTC signaling (tried in order with fallback)
+    pub broker_urls: Vec<String>,
     /// Bridge fingerprint for verification
     pub fingerprint: String,
     /// Connection timeout
@@ -56,7 +56,19 @@ impl SnowflakeConfig {
     /// Create a new Snowflake config with default Tor Project broker
     pub fn new() -> Self {
         Self {
-            broker_url: BROKER_URL.to_string(),
+            broker_urls: vec![BROKER_URL.to_string()],
+            fingerprint: DEFAULT_BRIDGE_FINGERPRINT.to_string(),
+            connection_timeout: Duration::from_secs(60),
+            kcp_conv: None,
+            smux_stream_id: None,
+        }
+    }
+
+    /// Create a new Snowflake config with default fallback brokers (Tor Project -> Triplebit)
+    pub fn with_default_fallback() -> Self {
+        use crate::snowflake_broker::DEFAULT_BROKER_LIST;
+        Self {
+            broker_urls: DEFAULT_BROKER_LIST.iter().map(|s| s.to_string()).collect(),
             fingerprint: DEFAULT_BRIDGE_FINGERPRINT.to_string(),
             connection_timeout: Duration::from_secs(60),
             kcp_conv: None,
@@ -67,7 +79,15 @@ impl SnowflakeConfig {
     /// Create config with custom broker URL
     pub fn with_broker(broker_url: String) -> Self {
         Self {
-            broker_url,
+            broker_urls: vec![broker_url],
+            ..Self::new()
+        }
+    }
+
+    /// Create config with custom broker URLs (tried in order)
+    pub fn with_broker_list(broker_urls: Vec<String>) -> Self {
+        Self {
+            broker_urls,
             ..Self::new()
         }
     }
@@ -120,12 +140,20 @@ impl SnowflakeBridge {
     #[cfg(target_arch = "wasm32")]
     pub async fn connect(&self) -> Result<SnowflakeStream> {
         use crate::error::TorError;
+        use crate::snowflake_broker::BrokerClient;
 
         const MAX_WEBRTC_RETRIES: u32 = 3;
 
-        info!("Connecting to Snowflake via WebRTC");
-        info!("Broker: {}", self.config.broker_url);
+        info!(
+            "Connecting to Snowflake via WebRTC with {} broker(s)",
+            self.config.broker_urls.len()
+        );
+        info!("Brokers: {:?}", self.config.broker_urls);
         info!("Fingerprint: {}", self.config.fingerprint);
+
+        // Create broker client with fallback support
+        let broker_client = BrokerClient::with_broker_list(self.config.broker_urls.clone())
+            .with_fingerprint(self.config.fingerprint.clone());
 
         // 1. Establish WebRTC connection via broker (with retry for unreliable proxies)
         let mut webrtc = None;
@@ -137,7 +165,7 @@ impl SnowflakeBridge {
                 attempt, MAX_WEBRTC_RETRIES
             );
 
-            match WebRtcStream::connect(&self.config.broker_url, &self.config.fingerprint).await {
+            match WebRtcStream::connect_with_broker(&broker_client).await {
                 Ok(stream) => {
                     info!("WebRTC DataChannel established on attempt {}", attempt);
                     webrtc = Some(stream);
@@ -362,13 +390,20 @@ impl AsyncWrite for SnowflakeStream {
     }
 }
 
-/// Create a new Snowflake stream using WebRTC (convenience function)
+/// Create a new Snowflake stream using WebRTC with default broker fallback
 pub async fn create_snowflake_stream(
     _broker_url: &str, // Kept for API compatibility but ignored
     _connection_timeout: Duration,
 ) -> Result<SnowflakeStream> {
-    // Use default config with WebRTC
+    // Use default config with broker fallback
     let bridge = SnowflakeBridge::new();
+    bridge.connect().await
+}
+
+/// Create a new Snowflake stream using WebRTC with broker fallback (Tor Project -> Triplebit)
+pub async fn create_snowflake_stream_with_fallback() -> Result<SnowflakeStream> {
+    let config = SnowflakeConfig::with_default_fallback();
+    let bridge = SnowflakeBridge::with_config(config);
     bridge.connect().await
 }
 

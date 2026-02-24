@@ -47,7 +47,7 @@ serde_json = "1.0"
 wasm-bindgen-test = { workspace = true }
 
 [package.metadata.wasm-pack.profile.release]
-wasm-opt = ["-Oz", "--enable-bulk-memory", "--enable-nontrapping-float-to-int"]
+wasm-opt = false  # system wasm-opt v108 is too old for externref tables from wasm-bindgen 0.2.106
 
 [package.metadata.wasm-pack.profile.dev]
 wasm-opt = false

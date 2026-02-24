@@ -2088,7 +2088,7 @@ body {
 /* Tor Footer */
 .tor-footer {
   position: fixed;
-  bottom: 0;
+  bottom: 29%;
   right: 0;
   padding: 1rem 1.5rem;
   z-index: 1000;
