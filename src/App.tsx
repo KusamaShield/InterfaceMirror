@@ -6,7 +6,12 @@ import "./App.css";
 import { useState, useEffect, useRef } from "react";
 import { WalletSelect } from "@talismn/connect-components";
 import { shieldTokens } from "./transactions/shield";
-import { isEvmAddress, ispolkadotaddress, get_foreign_simple, get_blockexplorer } from "./transactions/adresses";
+import {
+  isEvmAddress,
+  ispolkadotaddress,
+  get_foreign_simple,
+  get_blockexplorer,
+} from "./transactions/adresses";
 import SHIELD_CONTRACT_ADDRESS from "./transactions/shield";
 import fakeerc20asset from "./transactions/shield";
 //import { make_deposit_tx, gen_tx_no_sig } from "./transactions/txgen";
@@ -38,13 +43,11 @@ import { Transaction, parseEther, parseUnits } from "ethers";
 import { WalletAccount } from "@talismn/connect-wallets";
 import QRCode from "qrcode";
 import SwapStatusTracker from "./components/SwapStatusTracker";
+import NetworkSelect from "./components/NetworkSelect";
+import OfframpWidget from "./components/OfframpWidget";
 //import init, { generate_commitment, test_console, test_proofo, generate_proof_data } from '../pkg/generate_zk_wasm'; // adjust path as needed
 import { Buffer } from "buffer";
 
-// Polyfill for the global Buffer object
-if (typeof window !== "undefined") {
-  (window as any).Buffer = Buffer;
-}
 import {
   AlephZeroWallet,
   EnkryptWallet,
@@ -58,7 +61,7 @@ import {
 } from "@talismn/connect-wallets";
 import { ethers, Network } from "ethers";
 import UnifiedWalletSelector from "./components/UnifiedWalletSelector";
-import { useAccount, useSwitchChain } from "wagmi";
+import { useAccount, useSwitchChain, useWalletClient } from "wagmi";
 
 // input token amounts
 const amountOptions = [0.5, 1, 5, 10, 100, 500, 1000, 10000];
@@ -97,11 +100,100 @@ const NETWORKS = {
     faucet: "https://faucet.polkadot.io/westend?parachain=1000",
     docs: "https://kusamashield.codeberg.page/networks/WestendAH.html",
   },
+  paseo_assethub_v3: {
+    name: "Paseo AssetHub v4 (Fresh)",
+    asset: "PAS",
+    logo: "/paseo-icon.png",
+    chain_id: 420420417,
+    rpcEndpoint: "https://eth-asset-hub-paseo.ibp.network/",
+    faucet: "https://faucet.polkadot.io",
+    block_explorer: "https://testnet.routescan.io",
+    shield_address: "0x3099889C1538f0200B831181cbfb532a4e9A418F",
+    verifier_address: "0xeb5ef0863A83CBAaeA103841C4FADE3b5284c196",
+    leanIMT_address: "0x20EAE9e1683816Bb6299f133696F4cBd841E3F12",
+    poseidonT3_address: "0x1d165f6fE5A30422E0E2140e91C8A9B800380637",
+    abi: [
+      "function depositNative(bytes32 commitment, bytes32 nullifierHash) external payable",
+      "function depositAsset(uint256 assetId, uint256 amount, bytes32 commitment, bytes32 nullifierHash) external",
+      "function depositAssetDirect(uint256 assetId, uint256 amount, bytes32 commitment, bytes32 nullifierHash) external",
+      "function withdraw(uint256[2] calldata pA, uint256[2][2] calldata pB, uint256[2] calldata pC, uint[6] calldata pubSignals, address asset, uint256 amount, address recipient) external",
+      "function withdrawNative(uint256[2] calldata pA, uint256[2][2] calldata pB, uint256[2] calldata pC, uint[6] calldata pubSignals, uint256 amount) external",
+      "function withdrawAsset(uint256[2] calldata pA, uint256[2][2] calldata pB, uint256[2] calldata pC, uint[6] calldata pubSignals, uint256 assetId, uint256 amount) external",
+      "function currentRoot() external view returns (uint256)",
+      "function treeSize() external view returns (uint256)",
+      "function escrow(address) external view returns (uint256)",
+      "function deposits(bytes32 nullifierHash) external view returns (address asset, uint256 assetId, uint256 amount, bool isSpent)",
+      "function usedCommitments(bytes32 commitment) external view returns (bool)",
+      "function isDepositSpent(bytes32 nullifierHash) external view returns (bool)",
+      "function getPrecompileAddress(uint256 assetId) external pure returns (address)",
+    ],
+    docs: "https://kusamashield.codeberg.page/networks/PaseoAH.html",
+  },
+  polkadot: {
+    name: "Polkadot Assethub",
+    asset: "DOT",
+    logo: "/favicon-dark.svg",
+    chain_id: 420420419,
+    rpcEndpoint: "https://eth-rpc.polkadot.io/",
+    wsEndpoint: "wss://statemint-rpc.polkadot.io",
+    faucet: "",
+    block_explorer: "https://blockscout.polkadot.io/",
+    shield_address: "0xe55B85441Bc39532f279Cf24059f02DFbcf87051",
+    verifier_address: "0x0F5Cd32b2157992d268EbA8EcF6aeF0A661986E8",
+    leanIMT_address: "0x3d92Af838f117C9Bbc9a1641980b14431E5DD04a",
+    poseidonT3_address: "0x4faE22c018839D60Ab6dB3863528F9C8526f5333",
+    abi: [
+      "function depositNative(bytes32 commitment, bytes32 nullifierHash) external payable",
+      "function depositAsset(uint256 assetId, uint256 amount, bytes32 commitment, bytes32 nullifierHash) external",
+      "function depositAssetDirect(uint256 assetId, uint256 amount, bytes32 commitment, bytes32 nullifierHash) external",
+      "function withdraw(uint256[2] calldata pA, uint256[2][2] calldata pB, uint256[2] calldata pC, uint[6] calldata pubSignals, address asset, uint256 amount, address recipient) external",
+      "function withdrawNative(uint256[2] calldata pA, uint256[2][2] calldata pB, uint256[2] calldata pC, uint[6] calldata pubSignals, uint256 amount) external",
+      "function withdrawAsset(uint256[2] calldata pA, uint256[2][2] calldata pB, uint256[2] calldata pC, uint[6] calldata pubSignals, uint256 assetId, uint256 amount) external",
+      "function currentRoot() external view returns (uint256)",
+      "function treeSize() external view returns (uint256)",
+      "function escrow(address) external view returns (uint256)",
+      "function deposits(bytes32 nullifierHash) external view returns (address asset, uint256 assetId, uint256 amount, bool isSpent)",
+      "function usedCommitments(bytes32 commitment) external view returns (bool)",
+      "function isDepositSpent(bytes32 nullifierHash) external view returns (bool)",
+      "function getPrecompileAddress(uint256 assetId) external pure returns (address)",
+    ],
+    docs: "https://kusamashield.codeberg.page/",
+  },
+
+  paseo_assethub_v2: {
+    name: "Paseo AssetHub v2",
+    asset: "PAS",
+    logo: "/paseo-icon.png",
+    chain_id: 420420417,
+    rpcEndpoint: "https://eth-asset-hub-paseo.ibp.network/", // IBP endpoint (should work without CORS)
+    faucet: "https://faucet.polkadot.io",
+    block_explorer: "https://testnet.routescan.io",
+    shield_address: "0xb3A95dc1c03282D5AC9Fd786f183c0AeF221EdA2",
+    verifier_address: "0x4236937F57A2322C80fa4ea9AD4031C5D8993F00",
+    leanIMT_address: "0xf9B1a281B4d0F5d5aE09fe16936879671c1452A2",
+    poseidonT3_address: "0x1d165f6fE5A30422E0E2140e91C8A9B800380637",
+    abi: [
+      "function depositNative(bytes32 commitment, bytes32 nullifierHash) external payable",
+      "function depositAsset(uint256 assetId, uint256 amount, bytes32 commitment, bytes32 nullifierHash) external",
+      "function depositAssetDirect(uint256 assetId, uint256 amount, bytes32 commitment, bytes32 nullifierHash) external",
+      "function withdraw(uint256[2] calldata pA, uint256[2][2] calldata pB, uint256[2] calldata pC, uint[7] calldata pubSignals, address asset, uint256 amount, address recipient) external",
+      "function withdrawNative(uint256[2] calldata pA, uint256[2][2] calldata pB, uint256[2] calldata pC, uint[7] calldata pubSignals, uint256 amount) external",
+      "function withdrawAsset(uint256[2] calldata pA, uint256[2][2] calldata pB, uint256[2] calldata pC, uint[7] calldata pubSignals, uint256 assetId, uint256 amount) external",
+      "function currentRoot() external view returns (uint256)",
+      "function treeSize() external view returns (uint256)",
+      "function escrow(address) external view returns (uint256)",
+      "function deposits(bytes32 nullifierHash) external view returns (address asset, uint256 assetId, uint256 amount, bool isSpent)",
+      "function usedCommitments(bytes32 commitment) external view returns (bool)",
+      "function isDepositSpent(bytes32 nullifierHash) external view returns (bool)",
+      "function getPrecompileAddress(uint256 assetId) external pure returns (address)",
+    ],
+    docs: "https://kusamashield.codeberg.page/networks/PaseoAH.html",
+  },
   paseo_assethub: {
     name: "Paseo Assethub",
     asset: "PAS",
     chain_id: 420420417,
-    rpcEndpoint: "https://eth-asset-hub-paseo.ibp.network/",
+    rpcEndpoint: "https://eth-asset-hub-paseo.ibp.network/", // IBP endpoint (should work without CORS)
     faucet: "https://faucet.polkadot.io",
     block_explorer: "https://testnet.routescan.io",
     shield_address: "0x73082Ac2833afD07D035c512031E6Af72B1bDEBD",
@@ -119,7 +211,7 @@ const NETWORKS = {
   },
 
   kusama: {
-    name: "Kusama Assethub Mainnet",
+    name: "Kusama Assethub",
     type: "mainnet",
     wsEndpoint: "wss://statemine-rpc-tn.dwellir.com",
     rpcEndpoint: "https://eth-rpc-kusama.polkadot.io/", //"https://kusama-asset-hub-rpc.polkadot.io",//"http://eth-asset-hub-kusama.dotters.network/",//"http://eth-pas-hub.laissez-faire.trade:8545",
@@ -136,9 +228,15 @@ const NETWORKS = {
       "function isNullifierUsed(uint256 nullifier) external view returns (bool)",
       "function getNullifierInfo(uint256 nullifier) external view returns (address asset, uint256 amount, bytes32 commitment, bool isUsed)",
     ],
-    block_explorer:
-      "https://blockscout-kusama.polkadot.io/",
+    block_explorer: "https://blockscout-kusama.polkadot.io/",
     docs: "https://kusamashield.codeberg.page/networks/kusama.html",
+  },
+  base: {
+    name: "Base",
+    rpcEndpoint: "https://mainnet.base.org",
+    asset: "ETH",
+    chain_id: 8453,
+    block_explorer: "https://basescan.org",
   },
 };
 
@@ -218,13 +316,25 @@ export function App() {
   const [selectedWalletEVM, setSelectedWalletEVM] = useState<any>(null);
   const [evmAddress, setEvmAddress] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<
-    "shield" | "unshield" | "bridge" | "crosschainbridge"
+    "shield" | "unshield" | "bridge" | "offramp"
   >("shield");
   const [secret, setSecret] = useState("");
   const [amount, setAmount] = useState("");
   const [selectedToken, setSelectedToken] = useState<any>(null); //('KSM')
+  const [userAssets, setUserAssets] = useState<
+    {
+      symbol: string;
+      name: string;
+      assetId: number;
+      balance: string;
+      decimals: number;
+      precompile: string;
+    }[]
+  >([]);
+  const [isLoadingAssets, setIsLoadingAssets] = useState(false);
   const [selectedNetwork, setSelectedNetwork] =
     useState<keyof typeof NETWORKS>("moonbase");
+  const [isNetworkDropdownOpen, setIsNetworkDropdownOpen] = useState(false);
   const [fromNetwork, setfromNetwork] = useState<any>(null);
   const [toNetwork, settoNetwork] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -263,10 +373,17 @@ export function App() {
   const [destinationAddress, setDestinationAddress] = useState<string>("");
 
   // Monitor wagmi account state for external disconnects (e.g., user disconnects from MetaMask)
-  const { isConnected: wagmiConnected, address: wagmiAddress, chain: connectedChain } = useAccount();
+  const {
+    isConnected: wagmiConnected,
+    address: wagmiAddress,
+    chain: connectedChain,
+  } = useAccount();
 
   // Wagmi network switching for MetaMask/WalletConnect
   const { switchChain } = useSwitchChain();
+
+  // Viem wallet client for Offramp (requires viem WalletClient)
+  const { data: viemWalletClient } = useWalletClient();
 
   useEffect(() => {
     // If wagmi disconnects but app still thinks it's connected, sync the state
@@ -284,6 +401,19 @@ export function App() {
       if (!evmAddress || !NETWORKS[selectedNetwork]?.rpcEndpoint) {
         setUserBalance("0");
         return;
+      }
+
+      // For networks that support asset hub (paseo, polkadot), use userAssets balance as primary source
+      if (
+        (selectedNetwork.includes("paseo") || selectedNetwork === "polkadot") &&
+        userAssets.length > 0
+      ) {
+        const nativeSymbol = NETWORKS[selectedNetwork].asset;
+        const nativeAsset = userAssets.find((a) => a.symbol === nativeSymbol);
+        if (nativeAsset) {
+          setUserBalance(formatBalance(nativeAsset));
+          return;
+        }
       }
 
       try {
@@ -307,13 +437,26 @@ export function App() {
         }
       } catch (error) {
         console.error("Failed to fetch balance:", error);
+        // Fallback: use userAssets balance if available
+        if (
+          (selectedNetwork.includes("paseo") ||
+            selectedNetwork === "polkadot") &&
+          userAssets.length > 0
+        ) {
+          const nativeSymbol = NETWORKS[selectedNetwork].asset;
+          const nativeAsset = userAssets.find((a) => a.symbol === nativeSymbol);
+          if (nativeAsset) {
+            setUserBalance(formatBalance(nativeAsset));
+            return;
+          }
+        }
         setUserBalance("0");
       }
     };
 
     fetchNativeBalance();
-    const interval = setInterval(fetchNativeBalance, 5000);
-    return () => clearInterval(interval);
+    const balanceInterval = setInterval(fetchNativeBalance, 20000);
+    return () => clearInterval(balanceInterval);
   }, [evmAddress, selectedNetwork]);
 
   // Pre-load circuit artifacts when Paseo network is selected
@@ -561,7 +704,7 @@ export function App() {
 
   // Network-specific configurations
   const getNetworkType = (networkKey: string) => {
-    if (networkKey === "kusama") return "mainnet";
+    if (networkKey === "kusama" || networkKey === "polkadot") return "mainnet";
     return "testnet";
   };
 
@@ -580,7 +723,7 @@ export function App() {
   // Network-specific currency lists
   const getAvailableCurrencies = (networkKey: string) => {
     if (isMainnet(networkKey)) {
-      // Kusama AssetHub - all swap currencies including cross-chain DOT→KSM
+      // Mainnet networks: all cross-chain swap currencies (DOT, KSM, and others)
       return availableCurrencies;
     } else {
       // Testnets - only PAS, WND, and DEV routes (no KSM or DOT)
@@ -593,6 +736,136 @@ export function App() {
           logo: "/coin_logos/images/dev.svg",
         },
       ];
+    }
+  };
+
+  // Format balance from wei to human readable
+  const formatBalance = (asset: { balance: string; decimals: number }) => {
+    const balanceWei = BigInt(asset.balance);
+    const balance = Number(balanceWei) / Math.pow(10, asset.decimals);
+    return balance.toFixed(4);
+  };
+
+  // Query user's token balances from Paseo Asset Hub
+  const queryUserAssets = async (address: string, networkKey: string) => {
+    if (!address || !address.startsWith("0x")) return;
+
+    // Only query for networks that support Asset Hub EVM (paseo, polkadot)
+    if (!networkKey.includes("paseo") && networkKey !== "polkadot") {
+      setUserAssets([]);
+      return;
+    }
+
+    setIsLoadingAssets(true);
+    try {
+      const { ApiPromise, WsProvider } = await import("@polkadot/api");
+      const { ethers: ethersLib } = await import("ethers");
+
+      // Convert EVM address to Substrate AccountId32
+      // Standard mapping: EVM address + 12 bytes of 0xee
+      const substrateAddress = address + "eeeeeeeeeeeeeeeeeeeeeeee";
+
+      const wsUrl =
+        NETWORKS[networkKey]?.wsEndpoint ||
+        (networkKey === "polkadot"
+          ? "wss://statemint-rpc.polkadot.io"
+          : "wss://asset-hub-paseo-rpc.n.dwellir.com");
+      const wsProvider = new WsProvider(wsUrl);
+      const api = await ApiPromise.create({
+        provider: wsProvider,
+        noInitWarn: true,
+      });
+
+      const assets: {
+        symbol: string;
+        name: string;
+        assetId: number;
+        balance: string;
+        decimals: number;
+        precompile: string;
+      }[] = [];
+
+      // Determine native asset info from network config
+      const networkConfig = NETWORKS[networkKey];
+      const nativeSymbol = networkConfig.asset; // e.g., 'PAS', 'DOT', 'KSM', 'WND'
+      const nativeName = networkConfig.name || nativeSymbol;
+
+      // Always add native balance (Asset Hub uses 10 decimals for native tokens, like DOT/KSM)
+      try {
+        const nativeBalance = (await api.query.system.account(
+          substrateAddress,
+        )) as any;
+        const nativeFree = nativeBalance.data.free.toString();
+        console.log(
+          `${nativeSymbol} Balance for`,
+          substrateAddress,
+          ":",
+          nativeFree,
+        );
+        // Always add native balance (even if 0)
+        assets.push({
+          symbol: nativeSymbol,
+          name: nativeName,
+          assetId: 0,
+          balance: nativeFree,
+          decimals: 18, // Use 18 for UI consistency with EVM representation
+          precompile: "native",
+        });
+      } catch (e) {
+        console.error("Failed to query native balance:", e);
+      }
+
+      // Query all asset.account entries and filter by user
+      const allAccounts = (await api.query.assets.account.entries()) as any;
+      const substrateHex = substrateAddress.toLowerCase();
+      const myAccounts = allAccounts.filter(([key]: [any, any]) => {
+        const accountId = key.args[1].toHex();
+        return accountId.toLowerCase() === substrateHex;
+      });
+
+      // Batch query metadata
+      const assetIds = myAccounts.map(([key]: [any, any]) =>
+        key.args[0].toNumber(),
+      );
+      if (assetIds.length > 0) {
+        const metadataResults = await api.query.assets.metadata.multi(assetIds);
+
+        for (let i = 0; i < myAccounts.length; i++) {
+          const [key, accountInfo] = myAccounts[i];
+          const assetId = key.args[0].toNumber();
+          const balance = (accountInfo as any).unwrap().balance.toString();
+
+          if (balance === "0") continue;
+
+          const meta = metadataResults[i].toJSON() as any;
+          let decimals = 0,
+            name = "Unknown",
+            symbol = "???";
+          if (meta && meta.name) {
+            decimals = meta.decimals;
+            name =
+              Buffer.from(meta.name.slice(2), "hex").toString("utf8") ||
+              "Unknown";
+            symbol =
+              Buffer.from(meta.symbol.slice(2), "hex").toString("utf8") ||
+              "???";
+          }
+
+          const assetIdHex = assetId.toString(16).padStart(8, "0");
+          const precompile = `0x${assetIdHex}00000000000000000000000001200000`;
+
+          assets.push({ symbol, name, assetId, balance, decimals, precompile });
+        }
+      }
+
+      await api.disconnect();
+      setUserAssets(assets);
+      console.log(`Found ${assets.length} tokens for ${address}`);
+    } catch (e) {
+      console.error("Failed to query user assets:", e);
+      setUserAssets([]);
+    } finally {
+      setIsLoadingAssets(false);
     }
   };
 
@@ -745,7 +1018,7 @@ export function App() {
   };
 
   // Swap API base URL - will be deployed to public endpoint
-  const SWAP_API_BASE = "http://localhost:5000"; //"https://proxyswap.laissez-faire.trade";//;
+  const SWAP_API_BASE = "https://proxyswap.laissez-faire.trade";
 
   // DOT/KSM price checker function
   const getDotToKsmRate = async () => {
@@ -880,7 +1153,7 @@ export function App() {
           //   console.log(`set worker!`);
           // Store the worker functions in state or ref for later use
           setProofWorker(wasmPackage);
-          setNetwork("paseo_assethub");
+          setNetwork("polkadot");
           setIsWasmLoaded(true);
         } catch (err) {
           setError("Failed to load WASM module");
@@ -989,17 +1262,25 @@ export function App() {
 
     // Check if connected to the correct chain for EVM wallets
     const expectedChainId = NETWORKS[selectedNetwork]?.chain_id;
-    if (selectedWalletEVM && connectedChain && expectedChainId && connectedChain.id !== expectedChainId) {
-      toast(`❌ Wrong network! Please switch to ${NETWORKS[selectedNetwork].name} (Chain ID: ${expectedChainId}). You are on chain ${connectedChain.id}.`, {
-        position: "top-right",
-        autoClose: 8000,
-        hideProgressBar: false,
-        closeOnClick: false,
-        pauseOnHover: true,
-        draggable: true,
-        progress: undefined,
-        theme: "dark",
-      });
+    if (
+      selectedWalletEVM &&
+      connectedChain &&
+      expectedChainId &&
+      connectedChain.id !== expectedChainId
+    ) {
+      toast(
+        `❌ Wrong network! Please switch to ${NETWORKS[selectedNetwork].name} (Chain ID: ${expectedChainId}). You are on chain ${connectedChain.id}.`,
+        {
+          position: "top-right",
+          autoClose: 8000,
+          hideProgressBar: false,
+          closeOnClick: false,
+          pauseOnHover: true,
+          draggable: true,
+          progress: undefined,
+          theme: "dark",
+        },
+      );
       // Try to switch chain automatically
       try {
         await switchChain({ chainId: expectedChainId });
@@ -1027,8 +1308,7 @@ export function App() {
         generatedSecret,
         selectedWallet || selectedWalletEVM,
       );
-      if (!isWalletConnected || !amount || !selectedToken || !hasWallet)
-        return;
+      if (!isWalletConnected || !amount || !selectedToken || !hasWallet) return;
 
       console.log(`sign sign`);
 
@@ -1062,6 +1342,17 @@ export function App() {
           NETWORKS[selectedNetwork].abi, //["function deposit(address,uint256,bytes32) payable"],
           ETHsigner,
         );
+      } else if (selectedNetwork == "paseo_assethub_v2") {
+        console.log(
+          `paseo assethub v2 (Phase 2 ZK): `,
+          NETWORKS[selectedNetwork].shield_address,
+        );
+        shieldedContract = new ethers.Contract(
+          NETWORKS[selectedNetwork].shield_address,
+          NETWORKS[selectedNetwork].abi,
+          ETHsigner,
+        );
+        console.log(`paseo v2 contract initialized`);
       } else if (selectedNetwork == "paseo_assethub2") {
         //	NETWORKS["paseo_assethub"].shield_address,
 
@@ -1092,6 +1383,16 @@ export function App() {
         shieldedContract = new ethers.Contract(
           NETWORKS["paseo_assethub"].shield_address,
           NETWORKS["paseo_assethub"].abi,
+          ETHsigner,
+        );
+      } else if (
+        selectedNetwork == "paseo_assethub_v3" ||
+        selectedNetwork == "polkadot"
+      ) {
+        console.log(`paseo v3/polkadot contract initialized`);
+        shieldedContract = new ethers.Contract(
+          NETWORKS[selectedNetwork].shield_address,
+          NETWORKS[selectedNetwork].abi,
           ETHsigner,
         );
       } else {
@@ -1144,7 +1445,7 @@ export function App() {
                 rel="noopener noreferrer"
                 style={{ color: "#58a6ff", textDecoration: "underline" }}
               >
-               {txResponse.hash} 
+                {txResponse.hash}
               </a>
             ) : (
               txResponse.hash
@@ -1159,7 +1460,7 @@ export function App() {
             draggable: true,
             progress: undefined,
             theme: "dark",
-          }
+          },
         );
         // 8. Wait for confirmation
         const receipt = await txResponse.wait();
@@ -1189,22 +1490,97 @@ export function App() {
         theme: "dark",
       });
       let x;
+      let nullifierVal, secretVal, nullifierHash;
       if (selectedNetwork == "westend_assethub") {
         x = ProofWorker.generate_commitment(secret); //await generateCommitment(secret);
+      } else if (selectedNetwork == "paseo_assethub_v2") {
+        // FixedIlopPhase2Paseo_v3: commitment = Poseidon3(secret, asset, amount)
+        // nullifier = Poseidon2(secret, 1) - domain separator
+        const assetNumeric = 0n; // native token = 0
+        const amountWei = BigInt(ethers.parseEther(amount));
+        secretVal = BigInt(secret);
+        nullifierVal = poseidon2([secretVal, 1n]);
+        const commitmentBigInt = poseidon3([
+          secretVal,
+          assetNumeric,
+          amountWei,
+        ]);
+        x = ethers.toBeHex(commitmentBigInt);
+        nullifierHash = ethers.toBeHex(nullifierVal);
+        console.log(`paseo v2 commitment:`, x);
+        console.log(`paseo v2 nullifierHash:`, nullifierHash);
+        console.log(`Save for withdrawal - secret: ${secretVal.toString()}`);
+      } else if (
+        selectedNetwork == "paseo_assethub_v3" ||
+        selectedNetwork == "polkadot"
+      ) {
+        // FixedIlop v3 deposit: uses CommitmentHasher circuit logic
+        const selectedAsset = userAssets.find(
+          (a) => a.symbol === selectedToken,
+        );
+        const assetNumeric = selectedAsset ? BigInt(selectedAsset.assetId) : 0n;
+        const decimals = selectedAsset ? selectedAsset.decimals : 18;
+        const depositAmount = BigInt(ethers.parseUnits(amount, decimals));
+        // Derive nullifier and secret from user secret
+        const nullifierVal = BigInt(
+          ethers.keccak256(ethers.toUtf8Bytes(secret + "_nullifier")),
+        );
+        const secretVal = BigInt(
+          ethers.keccak256(ethers.toUtf8Bytes(secret + "_secret")),
+        );
+        // Compute commitment: Poseidon( Poseidon(amount, asset), Poseidon(nullifier, secret) )
+        const precommitment = poseidon2([nullifierVal, secretVal]);
+        const valueAssetHash = poseidon2([depositAmount, assetNumeric]);
+        const commitmentBigInt = poseidon2([valueAssetHash, precommitment]);
+        // Compute nullifierHash = Poseidon(nullifier) — this is the key stored in deposits mapping
+        const nullifierHashBN = poseidon1([nullifierVal]);
+        const BN254_R =
+          21888242871839275222246405745257275088548364400416034343698204186575808495617n;
+        const commitment = ethers.toBeHex(commitmentBigInt % BN254_R, 32);
+        nullifierHash = ethers.toBeHex(nullifierHashBN % BN254_R, 32);
+        console.log(`paseo v3/polkadot deposit - commitment:`, commitment);
+        console.log(
+          `paseo v3/polkadot deposit - nullifierHash:`,
+          nullifierHash,
+        );
+        console.log(
+          `paseo v3/polkadot deposit - depositAmount:`,
+          depositAmount.toString(),
+          "decimals:",
+          decimals,
+        );
+        console.log(
+          `paseo v3/polkadot deposit - assetId:`,
+          assetNumeric.toString(),
+        );
+        x = commitment;
       } else if (selectedNetwork == "paseo_assethub") {
         // FixedIlop: commitment = Poseidon3(value, asset, Poseidon2(nullifier, secret))
         // Generate nullifier and secret from the user-provided secret
         // We derive both from the single secret input for UX simplicity
         const nullifierVal = BigInt(secret);
-        const secretVal = BigInt(ethers.keccak256(ethers.toUtf8Bytes(secret + "_secret"))) % (2n ** 250n);
+        const secretVal =
+          BigInt(ethers.keccak256(ethers.toUtf8Bytes(secret + "_secret"))) %
+          2n ** 250n;
         const assetNumeric = 0n; // native token = ZeroAddress = 0
         const amountWei = BigInt(ethers.parseEther(amount));
         const innerHash = poseidon2([nullifierVal, secretVal]);
-        const commitmentBigInt = poseidon3([amountWei, assetNumeric, innerHash]);
+        const commitmentBigInt = poseidon3([
+          amountWei,
+          assetNumeric,
+          innerHash,
+        ]);
         x = ethers.toBeHex(commitmentBigInt);
         console.log(`paseo FixedIlop commitment:`, x);
-        console.log(`nullifier:`, nullifierVal.toString(), `derived secret:`, secretVal.toString());
-        console.log(`Save these for withdrawal — nullifier: ${nullifierVal.toString()}, secret: ${secretVal.toString()}`);
+        console.log(
+          `nullifier:`,
+          nullifierVal.toString(),
+          `derived secret:`,
+          secretVal.toString(),
+        );
+        console.log(
+          `Save these for withdrawal — nullifier: ${nullifierVal.toString()}, secret: ${secretVal.toString()}`,
+        );
       } else {
         x = ProofWorker.generate_commitment(secret);
       }
@@ -1249,7 +1625,72 @@ export function App() {
             */
         console.log(`calling abi66`);
         console.log(`sending paseo deposit`);
-        if (selectedNetwork == "paseo_assethub") {
+        if (
+          selectedNetwork == "paseo_assethub_v3" ||
+          selectedNetwork == "polkadot"
+        ) {
+          const commitmentBytes = ethers.toBeArray(BigInt(x));
+          const nullifierBytes = ethers.toBeArray(BigInt(nullifierHash));
+          const depositAmount = ethers.parseEther(amount);
+          console.log(
+            `Sending v3 depositNative on ${selectedNetwork} with params:`,
+            {
+              commitment: x,
+              nullifierHash: nullifierHash,
+              amount: depositAmount.toString(),
+            },
+          );
+          var gasEstimate;
+          try {
+            gasEstimate = await shieldedContract.depositNative.estimateGas(
+              commitmentBytes,
+              nullifierBytes,
+              { value: depositAmount },
+            );
+            console.log("Gas estimate:", gasEstimate);
+          } catch (e) {
+            console.error("Estimation failed:", e);
+          }
+          txResponse2 = await shieldedContract.depositNative(
+            commitmentBytes,
+            nullifierBytes,
+            {
+              value: depositAmount,
+              gasLimit: gasEstimate || 5000000,
+            },
+          );
+        } else if (selectedNetwork == "paseo_assethub_v2") {
+          // FixedIlopPhase2Paseo_v3: depositNative(bytes32 commitment, bytes32 nullifierHash)
+          const commitmentBytes = ethers.toBeArray(BigInt(x));
+          const nullifierBytes = ethers.toBeArray(BigInt(nullifierHash));
+          const depositAmount = ethers.parseEther(amount);
+          console.log("Sending paseo v2 depositNative with params:", {
+            commitment: x,
+            nullifierHash: nullifierHash,
+            amount: depositAmount.toString(),
+          });
+
+          var gasEstimate;
+          try {
+            gasEstimate = await shieldedContract.depositNative.estimateGas(
+              commitmentBytes,
+              nullifierBytes,
+              { value: depositAmount },
+            );
+            console.log("Gas estimate:", gasEstimate);
+          } catch (e) {
+            console.error("Estimation failed:", e);
+          }
+
+          txResponse2 = await shieldedContract.depositNative(
+            commitmentBytes,
+            nullifierBytes,
+            {
+              value: depositAmount,
+              gasLimit: gasEstimate,
+            },
+          );
+        } else if (selectedNetwork == "paseo_assethub") {
           // FixedIlop: deposit(address asset, uint256 amount, uint256 commitment)
           const commitmentUint256 = BigInt(x);
           const depositAmount = ethers.parseEther(amount);
@@ -1354,6 +1795,85 @@ export function App() {
         }
 
         console.log(`deposit ok`);
+      } else if (
+        selectedNetwork == "paseo_assethub_v3" ||
+        selectedNetwork == "paseo_assethub_v2" ||
+        selectedNetwork == "polkadot"
+      ) {
+        // Pallet asset deposit for Paseo v3/v2 and Polkadot
+        const selectedAsset = userAssets.find(
+          (a) => a.symbol === selectedToken,
+        );
+        if (!selectedAsset) {
+          throw new Error(
+            `Asset ${selectedToken} not found. Please connect wallet on ${NETWORKS[selectedNetwork].name} and ensure you hold the asset.`,
+          );
+        }
+
+        const assetId = selectedAsset.assetId;
+        const decimals = selectedAsset.decimals;
+        const depositAmount = ethers.parseUnits(amount, decimals);
+        const commitmentBytes = ethers.toBeArray(BigInt(x));
+        const nullifierBytes = ethers.toBeArray(BigInt(nullifierHash));
+
+        console.log(
+          `Sending paseo ${selectedNetwork.includes("v3") ? "v3" : "v2"} depositAsset:`,
+          {
+            assetId,
+            amount: depositAmount.toString(),
+            decimals,
+            commitment: x,
+            nullifierHash: nullifierHash,
+          },
+        );
+
+        // Get precompile address
+        const assetIdHex = assetId.toString(16).padStart(8, "0");
+        const precompileAddress = `0x${assetIdHex}00000000000000000000000001200000`;
+
+        // Approve pool to spend tokens
+        const ERC20_ABI = ["function approve(address, uint256) returns (bool)"];
+        const tokenContract = new ethers.Contract(
+          precompileAddress,
+          ERC20_ABI,
+          ETHsigner,
+        );
+
+        toast(`Approving ${selectedToken}...`, {
+          position: "top-right",
+          autoClose: 3000,
+          theme: "dark",
+        });
+        const approveTx = await tokenContract.approve(
+          NETWORKS[selectedNetwork].shield_address,
+          depositAmount,
+          { gasLimit: 500000 },
+        );
+        await approveTx.wait();
+        console.log(`✅ ${selectedToken} approved`);
+
+        // Deposit
+        var gasEstimate;
+        try {
+          gasEstimate = await shieldedContract.depositAsset.estimateGas(
+            assetId,
+            depositAmount,
+            commitmentBytes,
+            nullifierBytes,
+          );
+          console.log("Gas estimate:", gasEstimate);
+        } catch (e) {
+          console.error("Estimation failed:", e);
+        }
+
+        txResponse2 = await shieldedContract.depositAsset(
+          assetId,
+          depositAmount,
+          commitmentBytes,
+          nullifierBytes,
+          { gasLimit: gasEstimate || 2000000 },
+        );
+        console.log(`pallet asset deposit ok`);
       } else {
         console.log(`merp merp`);
         txResponse2 = await shieldedContract.deposit(
@@ -1389,7 +1909,7 @@ export function App() {
           draggable: true,
           progress: undefined,
           theme: "dark",
-        }
+        },
       );
       // 8. Wait for confirmation
       const receipt2 = await txResponse2.wait();
@@ -1545,7 +2065,11 @@ export function App() {
             );
           }
         }
-      } else if (isWalletConnected && wagmiConnected && NETWORKS[networkKey].chain_id) {
+      } else if (
+        isWalletConnected &&
+        wagmiConnected &&
+        NETWORKS[networkKey].chain_id
+      ) {
         // Use wagmi's switchChain for MetaMask/WalletConnect connections
         console.log("Attempting to switch network via wagmi...");
         try {
@@ -1636,7 +2160,10 @@ export function App() {
             selectedNetwork == "westend_assethub" ||
             selectedNetwork == "paseo_assethub2" ||
             selectedNetwork == "kusama" ||
-            selectedNetwork == "paseo_assethub"
+            selectedNetwork == "paseo_assethub" ||
+            selectedNetwork == "paseo_assethub_v2" ||
+            selectedNetwork == "paseo_assethub_v3" ||
+            selectedNetwork == "polkadot"
           ) {
             proofBytes = "not set ";
           } else {
@@ -1647,6 +2174,17 @@ export function App() {
             console.log("Params length:", p.length);
 
             console.log(`generating proof`);
+
+            toast(`🔐 Generating ZK proof...`, {
+              position: "top-right",
+              autoClose: false,
+              hideProgressBar: false,
+              closeOnClick: false,
+              pauseOnHover: true,
+              draggable: true,
+              progress: undefined,
+              theme: "dark",
+            });
 
             proofBytes = await ProofWorker.generate_proof_data(secret, p);
           }
@@ -1689,6 +2227,27 @@ export function App() {
               ],
               ETHsigner,
             );
+          } else if (
+            selectedNetwork == "paseo_assethub_v3" ||
+            selectedNetwork == "polkadot"
+          ) {
+            console.log(
+              `paseo assethub v3/polkadot (Phase 2 ZK - 6 signals): `,
+              NETWORKS[selectedNetwork].shield_address,
+            );
+            shieldedContract = new ethers.Contract(
+              NETWORKS[selectedNetwork].shield_address,
+              NETWORKS[selectedNetwork].abi,
+              ETHsigner,
+            );
+            console.log(`paseo v3/polkadot contract initialized`);
+          } else if (selectedNetwork == "paseo_assethub_v2") {
+            console.log(`paseo v2 (Phase 2 ZK) withdraw`);
+            shieldedContract = new ethers.Contract(
+              NETWORKS["paseo_assethub_v2"].shield_address,
+              NETWORKS["paseo_assethub_v2"].abi,
+              ETHsigner,
+            );
           } else if (selectedNetwork == "paseo_assethub") {
             console.log(`set shielded contract to paseo`);
             shieldedContract = new ethers.Contract(
@@ -1697,7 +2256,7 @@ export function App() {
               ETHsigner,
             );
           } else if (
-        //    selectedNetwork == "paseo_assethub" ||
+            //    selectedNetwork == "paseo_assethub" ||
             selectedNetwork == "kusama"
           ) {
             console.log(`doubel shield`);
@@ -1784,7 +2343,10 @@ export function App() {
 
             // Derive nullifier and secret from user input (same derivation as deposit)
             const existingNullifier = BigInt(secret).toString();
-            const existingSecret = (BigInt(ethers.keccak256(ethers.toUtf8Bytes(secret + "_secret"))) % (2n ** 250n)).toString();
+            const existingSecret = (
+              BigInt(ethers.keccak256(ethers.toUtf8Bytes(secret + "_secret"))) %
+              2n ** 250n
+            ).toString();
 
             // Connect to contract for pre-checks and tree data
             const checkContract = new ethers.Contract(
@@ -1796,22 +2358,37 @@ export function App() {
             // Pre-check: check nullifier hasn't been spent
             // Circuit uses PoseidonBN254(1) — single-input Poseidon, not Poseidon(nullifier, 0)
             const nullifierHash = poseidon1([BigInt(existingNullifier)]);
-            const nullifierSpent = await checkContract.spentNullifiers(nullifierHash);
+            const nullifierSpent =
+              await checkContract.spentNullifiers(nullifierHash);
             if (nullifierSpent) {
-              toast(`Already withdrawn! This nullifier has been spent.`, { position: "top-right", autoClose: 5000, theme: "dark" });
+              toast(`Already withdrawn! This nullifier has been spent.`, {
+                position: "top-right",
+                autoClose: 5000,
+                theme: "dark",
+              });
               throw new Error("Nullifier already spent");
             }
 
             // Check escrow has funds
-            const escrowBalance = await checkContract.escrow(ethers.ZeroAddress);
+            const escrowBalance = await checkContract.escrow(
+              ethers.ZeroAddress,
+            );
             console.log(`Escrow balance:`, ethers.formatEther(escrowBalance));
             if (escrowBalance < withdrawAmount) {
-              toast(`Insufficient pool balance for withdrawal`, { position: "top-right", autoClose: 5000, theme: "dark" });
+              toast(`Insufficient pool balance for withdrawal`, {
+                position: "top-right",
+                autoClose: 5000,
+                theme: "dark",
+              });
               throw new Error("Insufficient escrow balance");
             }
 
             // Build Merkle tree from contract events
-            toast(`Rebuilding Merkle tree from on-chain data...`, { position: "top-right", autoClose: 4000, theme: "dark" });
+            toast(`Rebuilding Merkle tree from on-chain data...`, {
+              position: "top-right",
+              autoClose: 4000,
+              theme: "dark",
+            });
             const provider = ETHsigner.provider;
             if (!provider) throw new Error("No provider available");
 
@@ -1819,60 +2396,104 @@ export function App() {
               provider,
               NETWORKS["paseo_assethub"].shield_address,
               NETWORKS["paseo_assethub"].abi,
+              false,
+              NETWORKS["paseo_assethub"].rpcEndpoint,
             );
 
             // Find our commitment in the tree
             // We need to reconstruct the commitment to find the leaf
             // For a full withdrawal, existingValue = withdrawAmount (withdraw everything)
             const assetNumeric = 0n; // native token
-            const innerHash = poseidon2([BigInt(existingNullifier), BigInt(existingSecret)]);
+            const innerHash = poseidon2([
+              BigInt(existingNullifier),
+              BigInt(existingSecret),
+            ]);
             const existingValue = withdrawAmount; // assume full withdrawal for now
-            const commitment = poseidon3([existingValue, assetNumeric, innerHash]);
+            const commitment = poseidon3([
+              existingValue,
+              assetNumeric,
+              innerHash,
+            ]);
 
             const leafIdx = merkleTree.findLeafIndex(commitment);
             if (leafIdx === -1) {
-              toast(`Commitment not found in Merkle tree. Verify your secret and amount.`, { position: "top-right", autoClose: 8000, theme: "dark" });
+              toast(
+                `Commitment not found in Merkle tree. Verify your secret and amount.`,
+                { position: "top-right", autoClose: 8000, theme: "dark" },
+              );
               throw new Error("Commitment not found in tree");
             }
 
             const merkleProof = await merkleTree.getProof(leafIdx);
-            console.log(`Merkle proof obtained. Leaf index: ${leafIdx}, Tree depth: ${merkleProof.depth}`);
+            console.log(
+              `Merkle proof obtained. Leaf index: ${leafIdx}, Tree depth: ${merkleProof.depth}`,
+            );
 
             // Get tree state from contract
             const currentRoot = await checkContract.currentRoot();
             const contractTreeSize = await checkContract.treeSize();
-            console.log(`Contract root: ${currentRoot}, size: ${contractTreeSize}, local root: ${merkleTree.root}, local size: ${merkleTree.size}`);
+            console.log(
+              `Contract root: ${currentRoot}, size: ${contractTreeSize}, local root: ${merkleTree.root}, local size: ${merkleTree.size}`,
+            );
 
             // Validate local tree size matches contract
             if (merkleTree.size !== Number(contractTreeSize)) {
-              console.error(`Tree size mismatch! Local: ${merkleTree.size}, Contract: ${contractTreeSize}. Events may be missing or incorrectly parsed.`);
-              toast(`Tree reconstruction error: expected ${contractTreeSize} leaves but found ${merkleTree.size}. Please try again.`, { position: "top-right", autoClose: 8000, theme: "dark" });
-              throw new Error(`Tree size mismatch: local ${merkleTree.size} vs contract ${contractTreeSize}`);
+              console.error(
+                `Tree size mismatch! Local: ${merkleTree.size}, Contract: ${contractTreeSize}. Events may be missing or incorrectly parsed.`,
+              );
+              toast(
+                `Tree reconstruction error: expected ${contractTreeSize} leaves but found ${merkleTree.size}. Please try again.`,
+                { position: "top-right", autoClose: 8000, theme: "dark" },
+              );
+              throw new Error(
+                `Tree size mismatch: local ${merkleTree.size} vs contract ${contractTreeSize}`,
+              );
             }
 
             // Use the LOCAL root (consistent with local siblings) and verify it's a valid historical root on-chain
             const localRoot = merkleTree.root;
-            const localDepth = merkleTree.size <= 1 ? 0 : Math.ceil(Math.log2(merkleTree.size));
+            const localDepth =
+              merkleTree.size <= 1 ? 0 : Math.ceil(Math.log2(merkleTree.size));
             const isValidRoot = await checkContract.validRoots(localRoot);
             if (!isValidRoot) {
-              console.error(`Local root ${localRoot} is not a valid root on-chain. Tree reconstruction is incorrect.`);
-              toast(`Merkle tree reconstruction failed — root not recognized by contract.`, { position: "top-right", autoClose: 8000, theme: "dark" });
+              console.error(
+                `Local root ${localRoot} is not a valid root on-chain. Tree reconstruction is incorrect.`,
+              );
+              toast(
+                `Merkle tree reconstruction failed — root not recognized by contract.`,
+                { position: "top-right", autoClose: 8000, theme: "dark" },
+              );
               throw new Error("Local Merkle root not valid on-chain");
             }
-            console.log(`Local root ${localRoot} is valid on-chain. Depth: ${localDepth}`);
+            console.log(
+              `Local root ${localRoot} is valid on-chain. Depth: ${localDepth}`,
+            );
 
             // Compute context = keccak256(abi.encodePacked(recipient, asset)) % SNARK_SCALAR_FIELD
-            const SNARK_SCALAR_FIELD = 21888242871839275222246405745257275088548364400416034343698204186575808495617n;
+            const SNARK_SCALAR_FIELD =
+              21888242871839275222246405745257275088548364400416034343698204186575808495617n;
             const contextHash = ethers.keccak256(
-              ethers.solidityPacked(["address", "address"], [recipient, ethers.ZeroAddress])
+              ethers.solidityPacked(
+                ["address", "address"],
+                [recipient, ethers.ZeroAddress],
+              ),
             );
-            const context = (BigInt(contextHash) % SNARK_SCALAR_FIELD).toString();
+            const context = (
+              BigInt(contextHash) % SNARK_SCALAR_FIELD
+            ).toString();
 
             // Generate fresh nullifier+secret for change UTXO
-            const newNullifier = BigInt(ethers.toBigInt(ethers.randomBytes(16))).toString();
-            const newSecret = BigInt(ethers.toBigInt(ethers.randomBytes(16))).toString();
+            const newNullifier = BigInt(
+              ethers.toBigInt(ethers.randomBytes(16)),
+            ).toString();
+            const newSecret = BigInt(
+              ethers.toBigInt(ethers.randomBytes(16)),
+            ).toString();
 
-            const proofToastId = toast.loading(`🔐 Generating ZK proof — this may take up to a minute...`, { position: "top-right", theme: "dark" });
+            const proofToastId = toast.loading(
+              `🔐 Generating ZK proof — this may take up to a minute...`,
+              { position: "top-right", theme: "dark" },
+            );
 
             // Generate the Groth16 proof — use LOCAL root & depth (consistent with local siblings)
             let proofResult;
@@ -1891,30 +2512,661 @@ export function App() {
                 siblings: merkleProof.siblings,
                 leafIndex: leafIdx.toString(),
               });
-              toast.update(proofToastId, { render: `✅ ZK proof generated!`, type: "success", isLoading: false, autoClose: 5000 });
+              toast.update(proofToastId, {
+                render: `✅ ZK proof generated!`,
+                type: "success",
+                isLoading: false,
+                autoClose: 5000,
+              });
             } catch (proofErr) {
-              toast.update(proofToastId, { render: `❌ Proof generation failed`, type: "error", isLoading: false, autoClose: 8000 });
+              toast.update(proofToastId, {
+                render: `❌ Proof generation failed`,
+                type: "error",
+                isLoading: false,
+                autoClose: 8000,
+              });
               throw proofErr;
             }
 
-            console.log(`ZK proof generated. Public signals:`, proofResult.publicSignals);
+            console.log(
+              `ZK proof generated. Public signals:`,
+              proofResult.publicSignals,
+            );
 
             // calldata format: [a, b, c, pubSignals]
             const [a, b, c, pubSignals] = proofResult.calldata;
 
             // staticCall pre-check
             try {
-              await shieldedContract.withdraw.staticCall(a, b, c, pubSignals, ethers.ZeroAddress, recipient);
+              await shieldedContract.withdraw.staticCall(
+                a,
+                b,
+                c,
+                pubSignals,
+                ethers.ZeroAddress,
+                recipient,
+              );
               console.log(`staticCall succeeded`);
             } catch (staticError: any) {
-              console.error(`staticCall failed:`, staticError.reason || staticError.message);
+              console.error(
+                `staticCall failed:`,
+                staticError.reason || staticError.message,
+              );
             }
 
             txResponse = await shieldedContract.withdraw(
-              a, b, c, pubSignals,
+              a,
+              b,
+              c,
+              pubSignals,
               ethers.ZeroAddress,
               recipient,
             );
+          } else if (selectedNetwork === "paseo_assethub_v2") {
+            // FixedIlopPhase2Paseo_v3 withdraw: UTXO model with 7 public signals
+            const recipient = evmAddress;
+            if (!recipient) throw new Error("No wallet address connected");
+            const withdrawAmount = ethers.parseEther(amount);
+
+            // Derive nullifier and secret from user input (same derivation as deposit)
+            // v2 uses: commitment = Poseidon3(secret, asset, amount), nullifierHash = Poseidon2(secret, 1)
+            const secretVal = BigInt(secret);
+            const assetNumeric = 0n; // native token = 0
+
+            // Calculate nullifier hash the same way as deposit
+            const nullifierHash = poseidon2([secretVal, 1n]);
+
+            // Connect to contract for pre-checks
+            const checkContract = new ethers.Contract(
+              NETWORKS["paseo_assethub_v2"].shield_address,
+              NETWORKS["paseo_assethub_v2"].abi,
+              ETHsigner,
+            );
+
+            // Pre-check: check deposit hasn't been spent (using nullifierHash)
+            const depositInfo = await checkContract.deposits(
+              ethers.zeroPadValue(ethers.toBeArray(nullifierHash), 32),
+            );
+            if (depositInfo.isSpent) {
+              toast(`Already withdrawn! This deposit has been spent.`, {
+                position: "top-right",
+                autoClose: 5000,
+                theme: "dark",
+              });
+              throw new Error("Deposit already spent");
+            }
+
+            // Check escrow has funds
+            const escrowBalance = await checkContract.escrow(
+              ethers.ZeroAddress,
+            );
+            console.log(`Escrow balance:`, ethers.formatEther(escrowBalance));
+            if (escrowBalance < withdrawAmount) {
+              toast(`Insufficient pool balance for withdrawal`, {
+                position: "top-right",
+                autoClose: 5000,
+                theme: "dark",
+              });
+              throw new Error("Insufficient escrow balance");
+            }
+
+            // Build Merkle tree from contract events
+            toast(`Rebuilding Merkle tree from on-chain data...`, {
+              position: "top-right",
+              autoClose: 4000,
+              theme: "dark",
+            });
+            const provider = ETHsigner.provider;
+            if (!provider) throw new Error("No provider available");
+
+            // For v2, we need to use the v3 contract's events - they use different event signature
+            // The v3 contract emits: event Deposit(address indexed asset, bytes32 commitment, uint256 nullifierHash);
+            // So commitment is Poseidon3(secret, asset, amount) and nullifierHash is Poseidon2(secret, 1)
+
+            const merkleTree = await buildMerkleTreeFromContract(
+              provider,
+              NETWORKS["paseo_assethub_v2"].shield_address,
+              NETWORKS["paseo_assethub_v2"].abi,
+              false,
+              NETWORKS["paseo_assethub_v2"].rpcEndpoint,
+            );
+
+            // Find our commitment in the tree
+            // v2 commitment structure: Poseidon3(secret, asset, amount)
+            const existingValue = withdrawAmount;
+            const commitmentBigInt = poseidon3([
+              secretVal,
+              assetNumeric,
+              existingValue,
+            ]);
+
+            const leafIdx = merkleTree.findLeafIndex(commitmentBigInt);
+            if (leafIdx === -1) {
+              toast(
+                `Commitment not found in Merkle tree. Verify your secret and amount.`,
+                { position: "top-right", autoClose: 8000, theme: "dark" },
+              );
+              throw new Error("Commitment not found in tree");
+            }
+
+            const merkleProof = await merkleTree.getProof(leafIdx);
+            console.log(
+              `Merkle proof obtained. Leaf index: ${leafIdx}, Tree depth: ${merkleProof.depth}`,
+            );
+
+            // Get tree state from contract
+            const currentRoot = await checkContract.currentRoot();
+            const contractTreeSize = await checkContract.treeSize();
+            console.log(
+              `Contract root: ${currentRoot}, size: ${contractTreeSize}, local root: ${merkleTree.root}, local size: ${merkleTree.size}`,
+            );
+
+            // Validate local tree size matches contract
+            if (merkleTree.size !== Number(contractTreeSize)) {
+              console.error(
+                `Tree size mismatch! Local: ${merkleTree.size}, Contract: ${contractTreeSize}`,
+              );
+              throw new Error(
+                `Tree size mismatch: local ${merkleTree.size} vs contract ${contractTreeSize}`,
+              );
+            }
+
+            const localRoot = merkleTree.root;
+            const localDepth =
+              merkleProof.depth ||
+              (merkleTree.size <= 1
+                ? 0
+                : Math.ceil(Math.log2(merkleTree.size)));
+
+            // For v3 contract, use getPrecompileAddress for asset
+            const assetAddress = ethers.ZeroAddress; // native token
+
+            // Compute context = keccak256(recipient) % SNARK_SCALAR_FIELD
+            const SNARK_SCALAR_FIELD =
+              21888242871839275222246405745257275088548364400416034343698204186575808495617n;
+            const contextHash = ethers.keccak256(
+              ethers.solidityPacked(["address"], [recipient]),
+            );
+            const context = (
+              BigInt(contextHash) % SNARK_SCALAR_FIELD
+            ).toString();
+
+            // Generate fresh nullifier+secret for change UTXO
+            const newNullifier = BigInt(
+              ethers.toBigInt(ethers.randomBytes(16)),
+            ).toString();
+            const newSecret = BigInt(
+              ethers.toBigInt(ethers.randomBytes(16)),
+            ).toString();
+
+            // Generate ZK proof using v3 circuit (7 public signals: newCommitmentHash, existingNullifierHash, contextHash, withdrawnValue, treeDepth, context, assetId)
+            const proofToastId = toast.loading(
+              `🔐 Generating ZK proof — this may take up to a minute...`,
+              { position: "top-right", theme: "dark" },
+            );
+
+            let proofResult;
+            try {
+              proofResult = await zkWithdraw({
+                withdrawnValue: existingValue.toString(),
+                root: localRoot.toString(),
+                treeDepth: localDepth.toString(),
+                context,
+                asset: "0", // native token asset ID = 0
+                existingValue: existingValue.toString(),
+                existingNullifier: nullifierHash.toString(),
+                existingSecret: secretVal.toString(),
+                newNullifier,
+                newSecret,
+                siblings: merkleProof.siblings,
+                leafIndex: leafIdx.toString(),
+              });
+              toast.update(proofToastId, {
+                render: `✅ ZK proof generated!`,
+                type: "success",
+                isLoading: false,
+                autoClose: 5000,
+              });
+            } catch (proofErr) {
+              toast.update(proofToastId, {
+                render: `❌ Proof generation failed`,
+                type: "error",
+                isLoading: false,
+                autoClose: 8000,
+              });
+              throw proofErr;
+            }
+
+            console.log(
+              `ZK proof generated. Public signals:`,
+              proofResult.publicSignals,
+            );
+
+            // calldata format: [a, b, c, pubSignals]
+            const [a, b, c, pubSignals] = proofResult.calldata;
+
+            // Use withdrawNative since we're withdrawing native tokens
+            txResponse = await shieldedContract.withdrawNative(
+              a,
+              b,
+              c,
+              pubSignals,
+              withdrawAmount,
+            );
+          } else if (
+            selectedNetwork === "paseo_assethub_v3" ||
+            selectedNetwork === "polkadot"
+          ) {
+            // FixedIlopPhase2Paseo_v4 withdraw: UTXO model with 6 public signals
+            const recipient = evmAddress;
+            if (!recipient) throw new Error("No wallet address connected");
+
+            // Find selected asset info
+            const selectedAsset = userAssets.find(
+              (a) => a.symbol === selectedToken,
+            );
+            const isNative =
+              !selectedAsset ||
+              selectedToken === NETWORKS[selectedNetwork].asset;
+            const assetNumeric = isNative ? 0n : BigInt(selectedAsset.assetId);
+            const decimals = isNative ? 18 : selectedAsset.decimals;
+            const withdrawAmount = ethers.parseUnits(amount, decimals);
+
+            // Derive nullifier and secret from user input (same derivation as deposit)
+            const nullifierVal = BigInt(
+              ethers.keccak256(ethers.toUtf8Bytes(secret + "_nullifier")),
+            );
+            const secretVal = BigInt(
+              ethers.keccak256(ethers.toUtf8Bytes(secret + "_secret")),
+            );
+
+            // Connect to contract for pre-checks
+            const checkContract = new ethers.Contract(
+              NETWORKS[selectedNetwork].shield_address,
+              NETWORKS[selectedNetwork].abi,
+              ETHsigner,
+            );
+
+            // Pre-check: check deposit hasn't been spent
+            // The deposit is indexed by Poseidon(nullifier), not raw nullifier
+            const BN254_R =
+              21888242871839275222246405745257275088548364400416034343698204186575808495617n;
+            const nullifierHashBN = poseidon1([nullifierVal]);
+            const nullifierHashBytes32 = ethers.zeroPadValue(
+              ethers.toBeArray(nullifierHashBN % BN254_R),
+              32,
+            );
+            const depositInfo =
+              await checkContract.deposits(nullifierHashBytes32);
+            if (depositInfo.isSpent) {
+              toast(`Already withdrawn! This deposit has been spent.`, {
+                position: "top-right",
+                autoClose: 5000,
+                theme: "dark",
+              });
+              throw new Error("Deposit already spent");
+            }
+
+            // Check escrow has funds
+            const escrowAsset = isNative
+              ? ethers.ZeroAddress
+              : `0x${assetNumeric.toString(16).padStart(8, "0")}00000000000000000000000001200000`;
+            const escrowBalance = await checkContract.escrow(escrowAsset);
+            console.log(
+              `Escrow balance (${selectedToken}):`,
+              ethers.formatUnits(escrowBalance, decimals),
+            );
+            if (escrowBalance < withdrawAmount) {
+              toast(`Insufficient pool balance for withdrawal`, {
+                position: "top-right",
+                autoClose: 5000,
+                theme: "dark",
+              });
+              throw new Error("Insufficient escrow balance");
+            }
+
+            // Build Merkle tree from contract events
+            toast(`Rebuilding Merkle tree from on-chain data...`, {
+              position: "top-right",
+              autoClose: 4000,
+              theme: "dark",
+            });
+            const provider = ETHsigner.provider;
+            if (!provider) throw new Error("No provider available");
+
+            const merkleTree = await buildMerkleTreeFromContract(
+              provider,
+              NETWORKS[selectedNetwork].shield_address,
+              NETWORKS[selectedNetwork].abi,
+              true, // Force refresh to get latest deposits
+              NETWORKS[selectedNetwork].rpcEndpoint,
+            );
+
+            // IMPORTANT: If we just made a deposit, our leaf is at index = treeSize - 1
+            // But the local tree might not have it yet due to RPC issues
+            // Try both: search for commitment AND use expected index
+
+            console.log("Searching for commitment with:");
+            console.log(
+              "  withdrawAmount:",
+              withdrawAmount.toString(),
+              "decimals:",
+              decimals,
+            );
+            console.log("  assetNumeric:", assetNumeric.toString());
+            console.log("  nullifierVal:", nullifierVal.toString());
+            console.log("  secretVal:", secretVal.toString());
+
+            const precommitment = poseidon2([nullifierVal, secretVal]);
+            console.log("  precommitment:", precommitment.toString());
+
+            // Reuse existingValue from deposit lookup above
+            const existingValue = depositInfo.amount;
+            console.log(
+              "  existingValue (from contract):",
+              existingValue.toString(),
+            );
+
+            // Try multiple amount possibilities due to decimal issues
+            const possibleAmounts = [];
+
+            // 1. Use contract amount (might be 0 if deposit failed)
+            if (existingValue > 0n) {
+              possibleAmounts.push({
+                amount: existingValue,
+                desc: "contract amount",
+              });
+            }
+
+            // 2. Try with withdrawAmount (user input)
+            possibleAmounts.push({
+              amount: withdrawAmount,
+              desc: "withdraw amount",
+            });
+
+            // 3. Try with 18 decimals (PAS uses 18 decimals on ETH RPC)
+            const amount18Decimals = ethers.parseUnits(amount, 18);
+            possibleAmounts.push({
+              amount: amount18Decimals,
+              desc: "18 decimals",
+            });
+
+            // 4. Try with 10 decimals (old wrong setting)
+            const amount10Decimals = ethers.parseUnits(amount, 10);
+            possibleAmounts.push({
+              amount: amount10Decimals,
+              desc: "10 decimals",
+            });
+
+            let leafIdx = -1;
+            let foundAmount = 0n;
+
+            for (const { amount: testAmount, desc } of possibleAmounts) {
+              const valueAssetHash = poseidon2([testAmount, assetNumeric]);
+              const commitmentBigInt = poseidon2([
+                valueAssetHash,
+                precommitment,
+              ]);
+              const BN254_R =
+                21888242871839275222246405745257275088548364400416034343698204186575808495617n;
+              const maskedCommitment = commitmentBigInt % BN254_R;
+
+              console.log(
+                `  Testing ${desc}: amount=${testAmount}, commitment=${maskedCommitment}`,
+              );
+
+              leafIdx = merkleTree.findLeafIndex(maskedCommitment);
+              if (leafIdx !== -1) {
+                foundAmount = testAmount;
+                console.log(
+                  `  ✅ Found commitment with ${desc}! Leaf index: ${leafIdx}`,
+                );
+                break;
+              }
+            }
+
+            if (leafIdx === -1) {
+              console.log("  Merkle tree root:", merkleTree.root.toString());
+              console.log("  Merkle tree leaves count:", merkleTree.size);
+              console.log("  All tested commitments not found.");
+
+              // FALLBACK: If Merkle tree is empty due to CORS/RPC issues, use contract tree size
+              if (merkleTree.size === 0) {
+                console.log(
+                  "  ⚠️ Merkle tree empty (likely due to CORS blocking RPC). Trying fallback...",
+                );
+
+                // Get contract tree size
+                const contractTreeSize = await checkContract.treeSize();
+                console.log(`  Contract tree size: ${contractTreeSize}`);
+
+                if (contractTreeSize > 0n) {
+                  // For new deposit, leaf index should be treeSize - 1
+                  leafIdx = Number(contractTreeSize) - 1;
+                  foundAmount = withdrawAmount; // Use withdraw amount
+
+                  console.log(
+                    `  ✅ Using fallback: leafIdx=${leafIdx} (last leaf in contract tree)`,
+                  );
+                  console.log(
+                    `  ⚠️ Warning: Using mock siblings (all zeros) due to CORS`,
+                  );
+                } else {
+                  toast(
+                    `Commitment not found in Merkle tree (tree empty). Deposit may have failed.`,
+                    { position: "top-right", autoClose: 8000, theme: "dark" },
+                  );
+                  throw new Error("Commitment not found in tree (empty)");
+                }
+              } else {
+                toast(
+                  `Commitment not found in Merkle tree. Deposit may have failed or wrong secret.`,
+                  { position: "top-right", autoClose: 8000, theme: "dark" },
+                );
+                throw new Error("Commitment not found in tree");
+              }
+            }
+
+            const currentRoot = await checkContract.currentRoot();
+            const contractTreeSize = await checkContract.treeSize();
+            console.log(
+              `Contract root: ${currentRoot}, size: ${contractTreeSize}, local root: ${merkleTree.root}, local size: ${merkleTree.size}`,
+            );
+
+            // IMPORTANT: If local tree doesn't match contract (due to RPC/CORS issues),
+            // we need to handle it gracefully
+            let merkleProof;
+            if (merkleTree.size !== Number(contractTreeSize)) {
+              console.warn(
+                `Tree size mismatch! Local: ${merkleTree.size}, Contract: ${contractTreeSize}`,
+              );
+              console.warn(
+                "This is likely due to RPC/CORS issues preventing event fetching.",
+              );
+              console.warn("Trying to continue with local tree...");
+            }
+
+            // Check if leafIdx is valid for local tree
+            if (leafIdx < 0 || leafIdx >= merkleTree.size) {
+              console.warn(
+                `Leaf index ${leafIdx} out of bounds for local tree size ${merkleTree.size}`,
+              );
+
+              // If local tree is empty due to CORS, generate mock proof with all-zero siblings
+              if (merkleTree.size === 0) {
+                console.warn(
+                  "Local tree empty due to CORS. Generating mock proof with zero siblings.",
+                );
+
+                // Generate VALID mock siblings for circuit
+                // Siblings should be hash(0,0) for empty positions, not just 0
+                // Calculate: sibling at each level depends on leaf index
+                console.log(
+                  "Generating valid mock siblings for leaf index",
+                  leafIdx,
+                  "depth 128",
+                );
+
+                const validSiblings = [];
+                for (let level = 0; level < 128; level++) {
+                  // For empty tree positions, sibling should be hash(0,0)
+                  // In LeanIMT, empty positions hash to 0, but circuit might expect hash(0,0)
+                  // Try both: start with 0 (hash of empty)
+                  validSiblings.push("0");
+                }
+
+                merkleProof = {
+                  siblings: validSiblings,
+                  root: currentRoot.toString(), // Use contract root
+                  depth: 128, // Fixed depth for v4 circuit
+                  leafIndex: leafIdx,
+                };
+                console.log(
+                  `Using mock proof with ${validSiblings.length} siblings (trying 0 for empty)`,
+                );
+              } else {
+                console.error(
+                  "Local tree might be stale. Try waiting for block confirmation or check RPC.",
+                );
+                throw new Error(
+                  `Invalid leaf index ${leafIdx} for tree size ${merkleTree.size}`,
+                );
+              }
+            } else {
+              merkleProof = await merkleTree.getProof(leafIdx);
+            }
+            console.log(
+              `Merkle proof obtained. Leaf index: ${leafIdx}, Tree depth: ${merkleProof.depth}`,
+            );
+
+            const localRoot = merkleTree.root;
+            // FixedIlopPhase2Paseo_v4 uses depth 128
+            const localDepth = 128;
+
+            // Compute context
+            const SNARK_SCALAR_FIELD =
+              21888242871839275222246405745257275088548364400416034343698204186575808495617n;
+            const contextHash = ethers.keccak256(
+              ethers.solidityPacked(["address"], [recipient]),
+            );
+            const context = (
+              BigInt(contextHash) % SNARK_SCALAR_FIELD
+            ).toString();
+
+            // Generate fresh nullifier+secret for change UTXO
+            const newNullifier = BigInt(
+              ethers.toBigInt(ethers.randomBytes(16)),
+            ).toString();
+            const newSecret = BigInt(
+              ethers.toBigInt(ethers.randomBytes(16)),
+            ).toString();
+
+            // Generate ZK proof using v4 circuit (6 public signals)
+            const proofToastId = toast.loading(
+              `🔐 Generating ZK proof — this may take up to a minute...`,
+              { position: "top-right", theme: "dark" },
+            );
+
+            let proofResult;
+            try {
+              proofResult = await zkWithdraw({
+                withdrawnValue: withdrawAmount.toString(),
+                root: localRoot.toString(),
+                treeDepth: localDepth.toString(),
+                context,
+                asset: assetNumeric.toString(),
+                existingValue: foundAmount.toString(), // Use found amount not contract amount
+                existingNullifier: nullifierVal.toString(),
+                existingSecret: secretVal.toString(),
+                newNullifier,
+                newSecret,
+                siblings: merkleProof.siblings,
+                leafIndex: leafIdx.toString(),
+              });
+              toast.update(proofToastId, {
+                render: `✅ ZK proof generated!`,
+                type: "success",
+                isLoading: false,
+                autoClose: 5000,
+              });
+            } catch (proofErr) {
+              toast.update(proofToastId, {
+                render: `❌ Proof generation failed`,
+                type: "error",
+                isLoading: false,
+                autoClose: 8000,
+              });
+              throw proofErr;
+            }
+
+            console.log(
+              `ZK proof generated. Public signals:`,
+              proofResult.publicSignals,
+            );
+            const [a, b, c, pubSignals] = proofResult.calldata;
+
+            console.log(`=== WITHDRAW TX DATA ===`);
+            console.log(
+              `pA:`,
+              a.map((x) => x.toString()),
+            );
+            console.log(
+              `pB:`,
+              b.map((x) => x.map((y) => y.toString())),
+            );
+            console.log(
+              `pC:`,
+              c.map((x) => x.toString()),
+            );
+            console.log(
+              `pubSignals:`,
+              pubSignals.map((s) => s.toString()),
+            );
+            console.log(`withdrawAmount:`, withdrawAmount.toString());
+            console.log(`========================`);
+
+            // Use the correct function based on asset type
+            if (isNative) {
+              // For native token (PAS), use withdrawNative
+              console.log("Calling withdrawNative with:");
+              console.log("  pA:", a);
+              console.log("  pB:", b);
+              console.log("  pC:", c);
+              console.log("  pubSignals:", pubSignals);
+              console.log("  amount:", withdrawAmount.toString());
+
+              txResponse = await shieldedContract.withdrawNative(
+                [a[0], a[1]],
+                [
+                  [b[0][0], b[0][1]],
+                  [b[1][0], b[1][1]],
+                ],
+                [c[0], c[1]],
+                pubSignals,
+                withdrawAmount,
+              );
+            } else {
+              // For pallet assets, use withdrawAsset
+              console.log("Calling withdrawAsset with:");
+              console.log("  pA:", a);
+              console.log("  pB:", b);
+              console.log("  pC:", c);
+              console.log("  pubSignals:", pubSignals);
+              console.log("  assetId:", assetNumeric.toString());
+              console.log("  amount:", withdrawAmount.toString());
+
+              txResponse = await shieldedContract.withdrawAsset(
+                [a[0], a[1]],
+                [
+                  [b[0][0], b[0][1]],
+                  [b[1][0], b[1][1]],
+                ],
+                [c[0], c[1]],
+                pubSignals,
+                assetNumeric,
+                withdrawAmount,
+              );
+            }
           } else if (
             selectedNetwork == "paseo_assethub2" ||
             selectedNetwork == "kusama"
@@ -2000,7 +3252,7 @@ export function App() {
               draggable: true,
               progress: undefined,
               theme: "dark",
-            }
+            },
           );
           // 8. Wait for confirmation
           const receipt2 = await txResponse.wait();
@@ -2163,7 +3415,15 @@ export function App() {
     const unsub = await transacto.signAndSend(
       fromaddress,
       { signer },
-     ({ status, events, dispatchError }: { status: any; events: any; dispatchError: any }) => {
+      ({
+        status,
+        events,
+        dispatchError,
+      }: {
+        status: any;
+        events: any;
+        dispatchError: any;
+      }) => {
         if (status.isInBlock) {
           console.log(`Transaction included in block: ${status.asInBlock}`);
           toast.info(`Transaction included in block: ${status.asInBlock}`, {
@@ -2460,7 +3720,7 @@ export function App() {
           evmAddress,
           calculatedToAmount,
         );
-         if (evmAddress && isEvmAddress(evmAddress))  {
+        if (evmAddress && isEvmAddress(evmAddress)) {
           toast.error("Select a non-evm address");
           return;
         }
@@ -2501,8 +3761,15 @@ export function App() {
         const unsub = await tx.signAndSend(
           evmAddress,
           { signer },
-                   ({ status, events, dispatchError }: { status: any; events: any; dispatchError: any }) => {
-
+          ({
+            status,
+            events,
+            dispatchError,
+          }: {
+            status: any;
+            events: any;
+            dispatchError: any;
+          }) => {
             if (status.isInBlock) {
               console.log(`Transaction included in block: ${status.asInBlock}`);
               toast.info(`Transaction included in block: ${status.asInBlock}`, {
@@ -2648,7 +3915,15 @@ export function App() {
         const unsub2 = await tx2.signAndSend(
           evmAddress,
           { signer },
-          ({ status, events, dispatchError }: { status: any; events: any; dispatchError: any }) => {
+          ({
+            status,
+            events,
+            dispatchError,
+          }: {
+            status: any;
+            events: any;
+            dispatchError: any;
+          }) => {
             if (status.isInBlock) {
               console.log(
                 `🌉Bridge Transaction included in block: ${status.asInBlock}`,
@@ -2974,6 +4249,25 @@ export function App() {
     };
   }, []);
 
+  // Query user's token balances when wallet connects or network changes
+  useEffect(() => {
+    if (
+      evmAddress &&
+      (selectedNetwork.includes("paseo") || selectedNetwork === "polkadot")
+    ) {
+      queryUserAssets(evmAddress, selectedNetwork);
+
+      // Refresh all balances (native + pallet assets) every 20 seconds
+      const balanceInterval = setInterval(() => {
+        queryUserAssets(evmAddress, selectedNetwork);
+      }, 20000);
+
+      return () => clearInterval(balanceInterval);
+    } else {
+      setUserAssets([]);
+    }
+  }, [evmAddress, selectedNetwork]);
+
   // Auto-refresh exchange rate when inputs change (only for mainnet)
   useEffect(() => {
     if (
@@ -3053,30 +4347,12 @@ export function App() {
       <div className="header">
         <script src="/snarkjs.min.js"></script>
         <div className="header-controls">
-          <select
-            className="network-select"
-            value={selectedNetwork}
-            onChange={(e) =>
-              setNetwork(e.target.value as keyof typeof NETWORKS)
+          <NetworkSelect
+            selectedNetwork={selectedNetwork}
+            onNetworkChange={(network) =>
+              setNetwork(network as keyof typeof NETWORKS)
             }
-          >
-            <option value="" disabled className="group-header testnet-header">
-              🧪 Testnet Networks
-            </option>
-            <option value="moonbase">🔗 {NETWORKS.moonbase.name}</option>
-
-            <option value="paseo_assethub">
-              🔗 {NETWORKS.paseo_assethub.name}
-            </option>
-
-            <option value="westend_assethub">
-              🔗 {NETWORKS.westend_assethub.name}
-            </option>
-            <option value="" disabled className="group-header mainnet-header">
-              🌐 Mainnet Networks (👇Live now👇)
-            </option>
-            <option value="kusama">🐦 Kusama Assethub Mainnet</option>
-          </select>
+          />
 
           <UnifiedWalletSelector
             isWalletConnected={isWalletConnected}
@@ -3101,52 +4377,62 @@ export function App() {
 
       <div className="swap-container">
         <div
-          className={`swap-box ${activeTab === "bridge" ? "no-shield-shape" : ""}`}
+          className={`swap-box ${activeTab === "bridge" || activeTab === "offramp" ? "no-shield-shape" : ""}`}
         >
           <div className="tabs">
+            {selectedNetwork !== "base" && (
+              <>
+                <button
+                  className={`tab ${activeTab === "shield" ? "active" : ""}`}
+                  onClick={() => setActiveTab("shield")}
+                >
+                  Shield
+                </button>
+                <button
+                  className={`tab ${activeTab === "send" ? "active" : ""}`}
+                  onClick={() => setActiveTab("send")}
+                  disabled
+                  title="Coming soon"
+                  style={{ opacity: 0.6, cursor: "not-allowed" }}
+                >
+                  Send
+                </button>
+                <button
+                  className={`tab ${activeTab === "unshield" ? "active" : ""}`}
+                  onClick={() => setActiveTab("unshield")}
+                >
+                  Unshield
+                </button>
+                <button
+                  className={`tab ${activeTab === "bridge" ? "active" : ""}`}
+                  onClick={() => setActiveTab("bridge")}
+                >
+                  {getBridgeTitle(selectedNetwork)}
+                </button>
+              </>
+            )}
             <button
-              className={`tab ${activeTab === "shield" ? "active" : ""}`}
-              onClick={() => setActiveTab("shield")}
+              className={`tab ${activeTab === "offramp" ? "active" : ""}`}
+              onClick={() => setActiveTab("offramp")}
             >
-              Shield Tokens
-            </button>
-            <button
-              className={`tab ${activeTab === "unshield" ? "active" : ""}`}
-              onClick={() => setActiveTab("unshield")}
-            >
-              Unshield Tokens
-            </button>
-            <button
-              className={`tab ${activeTab === "bridge" ? "active" : ""}`}
-              onClick={() => setActiveTab("bridge")}
-            >
-              {getBridgeTitle(selectedNetwork)}
+              Offramp
             </button>
           </div>
           {/* Tab content */}
-          {activeTab === "crosschainbridge" ? (
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "center",
-                minHeight: "200px",
-              }}
-            >
-              <button
-                className="swap-button"
-                style={{
-                  maxWidth: 220,
-                  margin: "2rem auto",
-                  fontSize: "1.2rem",
-                  opacity: 0.7,
-                  cursor: "not-allowed",
-                }}
+          {activeTab === "offramp" ? (
+            viemWalletClient ? (
+              <OfframpWidget
+                walletClient={viemWalletClient}
+                selectedNetwork={selectedNetwork}
+              />
+            ) : (
+              <div
+                style={{ textAlign: "center", padding: "2rem", color: "#888" }}
               >
-                🚧 Coming Soon 🚧
-              </button>
-            </div>
+                Please connect an EVM wallet (MetaMask, WalletConnect, etc.) to
+                use Offramp
+              </div>
+            )
           ) : (
             <>
               <div className="input-group">
@@ -3177,16 +4463,22 @@ export function App() {
                               }}
                               className="currency-select"
                             >
-                              {getAvailableCurrencies(selectedNetwork).map(
-                                (currency) => (
+                              {/* Standard currencies */}
+                              {getAvailableCurrencies(selectedNetwork)
+                                .filter(
+                                  (c) =>
+                                    !userAssets.some(
+                                      (a) => a.symbol === c.symbol,
+                                    ),
+                                )
+                                .map((currency) => (
                                   <option
                                     key={currency.symbol}
                                     value={currency.symbol}
                                   >
                                     {currency.symbol} - {currency.name}
                                   </option>
-                                ),
-                              )}
+                                ))}
                             </select>
                             <img
                               src={
@@ -3237,6 +4529,7 @@ export function App() {
                               }}
                               className="currency-select"
                             >
+                              {/* Standard currencies */}
                               {getAvailableCurrencies(selectedNetwork)
                                 .filter(
                                   (currency) =>
@@ -3585,13 +4878,15 @@ export function App() {
                             position: "relative",
                             overflow: "hidden",
                           }}
-                        onMouseEnter={(e) => {
-                            (e.target as HTMLElement).style.transform = "translateY(-2px)";
+                          onMouseEnter={(e) => {
+                            (e.target as HTMLElement).style.transform =
+                              "translateY(-2px)";
                             (e.target as HTMLElement).style.boxShadow =
                               "0 8px 25px rgba(139, 92, 246, 0.4)";
                           }}
                           onMouseLeave={(e) => {
-                            (e.target as HTMLElement).style.transform = "translateY(0)";
+                            (e.target as HTMLElement).style.transform =
+                              "translateY(0)";
                             (e.target as HTMLElement).style.boxShadow =
                               "0 4px 15px rgba(139, 92, 246, 0.3)";
                           }}
@@ -3651,11 +4946,32 @@ export function App() {
                       value={selectedToken}
                       onChange={(e) => setSelectedToken(e.target.value)}
                     >
-                      <option title="native Currency">
-                      {NETWORKS[selectedNetwork].asset}
+                      <option
+                        title="native Currency"
+                        value={NETWORKS[selectedNetwork].asset}
+                      >
+                        {NETWORKS[selectedNetwork].asset} (Native)
                       </option>
 
-                      {/* Alternative assets */}
+                      {/* User's detected assets */}
+                      {isLoadingAssets && (
+                        <option disabled>Loading your assets...</option>
+                      )}
+                      {userAssets
+                        .filter(
+                          (a) => a.symbol !== NETWORKS[selectedNetwork].asset,
+                        )
+                        .map((asset) => (
+                          <option
+                            key={asset.assetId}
+                            title={`${asset.name} (Asset ${asset.assetId})`}
+                            value={asset.symbol}
+                          >
+                            {asset.symbol} - {asset.name} ({asset.assetId})
+                          </option>
+                        ))}
+
+                      {/* Fallback: Alternative assets from config */}
                       {(
                         NETWORKS[selectedNetwork] as any
                       ).alternative_assets?.map((token: any) => (
@@ -3668,38 +4984,66 @@ export function App() {
                         </option>
                       ))}
                     </select>
-                    <div className="balance" style={{ marginLeft: "auto", textAlign: "right" }}>
-                      Balance: {userBalance} {NETWORKS[selectedNetwork].asset}
+                    <div
+                      className="balance"
+                      style={{ marginLeft: "auto", textAlign: "right" }}
+                    >
+                      {(selectedNetwork.includes("paseo") ||
+                        selectedNetwork === "polkadot") &&
+                      userAssets.length > 0 ? (
+                        selectedToken &&
+                        userAssets.find((a) => a.symbol === selectedToken) ? (
+                          <span>
+                            Balance:{" "}
+                            {formatBalance(
+                              userAssets.find(
+                                (a) => a.symbol === selectedToken,
+                              ),
+                            )}{" "}
+                            {selectedToken}
+                          </span>
+                        ) : (
+                          <span>
+                            Balance: 0.0000{" "}
+                            {selectedToken || NETWORKS[selectedNetwork].asset}
+                          </span>
+                        )
+                      ) : (
+                        <span>
+                          Balance: {userBalance}{" "}
+                          {NETWORKS[selectedNetwork].asset}
+                        </span>
+                      )}
                     </div>
                   </div>
                 )}
 
                 {activeTab === "shield" &&
                   (NETWORKS[selectedNetwork] as any).faucet && (
-             <center>
-              <div className="balance">
-                      <a
-                        title="faucet link"
-                        target="_blank"
-                        href={(NETWORKS[selectedNetwork] as any).faucet}
-                      >
-                        {NETWORKS[selectedNetwork].name} faucet link
-                      </a>
-                    </div>
+                    <center>
+                      <div className="balance">
+                        <a
+                          title="faucet link"
+                          target="_blank"
+                          href={(NETWORKS[selectedNetwork] as any).faucet}
+                        >
+                          {NETWORKS[selectedNetwork].name} faucet link
+                        </a>
+                      </div>
                     </center>
                   )}
 
                 {activeTab === "shield" && (
                   <center>
-                  <div className="balance">
-                    <a
-                      title="Documentation link"
-                      target="_blank"
-                      href={(NETWORKS[selectedNetwork] as any).docs}
-                    >
-                      {NETWORKS[selectedNetwork].name} Documentation
-                    </a>
-                  </div>
+                    <div className="balance">
+                      <a
+                        title="Documentation link"
+                        target="_blank"
+                        href={(NETWORKS[selectedNetwork] as any).docs}
+                      >
+                        {NETWORKS[selectedNetwork].name} Documentation
+                      </a>
+                    </div>
                   </center>
                 )}
 
@@ -3720,7 +5064,6 @@ export function App() {
 
                 {activeTab === "unshield" && (
                   <div className="secret-input">
-                  
                     <input
                       type="password"
                       placeholder="Enter withdrawal secret"
@@ -3797,12 +5140,15 @@ export function App() {
               fill="currentColor"
             />
           </svg>
-          By using this website you agree to the Terms of Service. 
+          By using this website you agree to the Terms of Service.
         </button>
-<a href="https://kusamashield.codeberg.page/deploy.html" title="run Kusama Shield locally">
-<img src="/run_locally.gif" alt="run with ipfs" />
-</a>
-<div
+        <a
+          href="https://kusamashield.codeberg.page/deploy.html"
+          title="run Kusama Shield locally"
+        >
+          <img src="/run_locally.gif" alt="run with ipfs" />
+        </a>
+        <div
           style={{
             display: "flex",
             justifyContent: "center",

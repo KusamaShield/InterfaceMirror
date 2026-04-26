@@ -10,7 +10,7 @@ export const projectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID;
 
 if (!projectId) {
   console.warn(
-    "VITE_WALLETCONNECT_PROJECT_ID is not defined. EVM wallet connections may not work properly."
+    "VITE_WALLETCONNECT_PROJECT_ID is not defined. EVM wallet connections may not work properly.",
   );
 }
 
@@ -53,6 +53,28 @@ export const westendAssetHub = defineChain({
     default: {
       name: "Blockscout",
       url: "https://blockscout-asset-hub.parity-chains-scw.parity.io",
+    },
+  },
+  testnet: true,
+});
+
+export const paseoAssetHubV3 = defineChain({
+  id: 420420417,
+  name: "Paseo Asset Hub v3",
+  nativeCurrency: {
+    name: "Paseo",
+    symbol: "PAS",
+    decimals: 18,
+  },
+  rpcUrls: {
+    default: {
+      http: ["https://eth-asset-hub-paseo.dotters.network/"],
+    },
+  },
+  blockExplorers: {
+    default: {
+      name: "Blockscout",
+      url: "https://blockscout-passet-hub.parity-testnet.parity.io",
     },
   },
   testnet: true,
@@ -124,13 +146,58 @@ export const shibuya = defineChain({
   testnet: true,
 });
 
+export const polkadotAssetHub = defineChain({
+  id: 420420419,
+  name: "Polkadot Asset Hub",
+  nativeCurrency: {
+    name: "Polkadot",
+    symbol: "DOT",
+    decimals: 18,
+  },
+  rpcUrls: {
+    default: {
+      http: ["https://eth-rpc.polkadot.io/"],
+    },
+  },
+  blockExplorers: {
+    default: {
+      name: "Blockscout",
+      url: "https://blockscout.polkadot.io/",
+    },
+  },
+});
+
+export const base = defineChain({
+  id: 8453,
+  name: "Base",
+  nativeCurrency: {
+    name: "Ether",
+    symbol: "ETH",
+    decimals: 18,
+  },
+  rpcUrls: {
+    default: {
+      http: ["https://mainnet.base.org"],
+    },
+  },
+  blockExplorers: {
+    default: {
+      name: "Basescan",
+      url: "https://basescan.org",
+    },
+  },
+});
+
 // All supported networks
 export const networks = [
   kusamaAssetHub,
   westendAssetHub,
+  paseoAssetHubV3,
   paseoAssetHub,
   moonbaseAlpha,
   shibuya,
+  polkadotAssetHub,
+  base,
 ];
 
 // Create the Wagmi adapter instance

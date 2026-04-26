@@ -29,7 +29,7 @@ export interface MerkleProof {
 
 interface MerkleCache {
   lastBlockScanned: number;
-  leaves: string[];  // public on-chain commitments, not sensitive
+  leaves: string[]; // public on-chain commitments, not sensitive
 }
 
 const CACHE_KEY_PREFIX = "merkle_cache_";
@@ -69,8 +69,12 @@ export class LeanIMT {
   private _depth: number = 0;
   private _root: bigint = 0n;
 
-  get root(): bigint { return this._root; }
-  get size(): number { return this.leaves.length; }
+  get root(): bigint {
+    return this._root;
+  }
+  get size(): number {
+    return this.leaves.length;
+  }
 
   private sn(level: number): bigint {
     return this._sideNodes.get(level) ?? 0n;
@@ -91,7 +95,7 @@ export class LeanIMT {
     let treeDepth = this._depth;
 
     // Depth increase check (matches Solidity 2**treeDepth < index+1)
-    if ((1 << treeDepth) < index + 1) {
+    if (1 << treeDepth < index + 1) {
       treeDepth++;
     }
     this._depth = treeDepth;
@@ -131,7 +135,7 @@ export class LeanIMT {
 
     for (let level = 0; level < this._depth; level++) {
       // Sibling of idx at this level
-      const sibIdx = (idx % 2 === 0) ? idx + 1 : idx - 1;
+      const sibIdx = idx % 2 === 0 ? idx + 1 : idx - 1;
       siblings.push(
         sibIdx >= 0 && sibIdx < currentLayer.length ? currentLayer[sibIdx] : 0n,
       );
@@ -149,8 +153,9 @@ export class LeanIMT {
       idx = Math.floor(idx / 2);
     }
 
-    // Pad to 254 for the Withdraw(254) circuit
-    while (siblings.length < 254) {
+    // Pad to circuit depth (128 for Paseo v3/v4 circuit)
+    const PADDED_DEPTH = 128;
+    while (siblings.length < PADDED_DEPTH) {
       siblings.push(0n);
     }
 
@@ -162,27 +167,39 @@ export class LeanIMT {
     };
   }
 
+  /**
+   * Find leaf index by value (linear scan).
+   */
   findLeafIndex(leaf: bigint): number {
-    return this.leaves.findIndex((l) => l === leaf);
+    for (let i = 0; i < this.leaves.length; i++) {
+      if (this.leaves[i] === leaf) return i;
+    }
+    return -1;
   }
 }
 
 // ---------------------------------------------------------------------------
-// Build tree from contract events (with incremental caching)
+// Tree reconstruction from contract events (Deposit / Withdrawal)
 // ---------------------------------------------------------------------------
 
 const TX_BATCH_SIZE = 10;
 
+/**
+ * Builds a LeanIMT by scanning Deposit/Withdrawal events from the given contract.
+ * Caches results in localStorage to avoid re-scanning the entire chain each time.
+ */
 export async function buildMerkleTreeFromContract(
   provider: ethers.Provider,
   contractAddress: string,
   abi: string[],
+  forceRefresh = false,
+  rpcEndpoint?: string,
 ): Promise<LeanIMT> {
   const tree = new LeanIMT();
   const iface = new ethers.Interface(abi);
 
   // Try to load cached state
-  const cached = loadCache(contractAddress);
+  const cached = forceRefresh ? null : loadCache(contractAddress);
   let fromBlock = 0;
 
   if (cached && cached.leaves.length > 0) {
@@ -197,8 +214,11 @@ export async function buildMerkleTreeFromContract(
   }
 
   // Fetch events from where we left off
-  const depositTopic = ethers.id("Deposit(address,uint256,uint256)");
-  const withdrawalTopic = ethers.id("Withdrawal(address,uint256,address,uint256)");
+  // Actual deployed contract uses different signatures than source code!
+  // Based on event logs:
+  const depositTopic = ethers.id("Deposit(address,bytes32,uint256)"); // address is indexed (in topics[1])
+  const withdrawalTopic = ethers.id("Withdrawal(address,uint256,address)"); // addresses are indexed
+  const newCommitmentTopic = ethers.id("NewCommitment(bytes32)");
 
   const currentBlock = await provider.getBlockNumber();
 
@@ -208,12 +228,71 @@ export async function buildMerkleTreeFromContract(
     return tree;
   }
 
-  const logs = await provider.getLogs({
-    address: contractAddress,
-    fromBlock,
-    toBlock: currentBlock,
-    topics: [[depositTopic, withdrawalTopic]],
-  });
+  let logs: ethers.Log[] = [];
+  let effectiveProvider = provider;
+  let effectiveBlock = currentBlock;
+
+  // Helper to create a provider with CORS proxy
+  const createProxyProvider = (endpoint: string) => {
+    // Use local CORS proxy if endpoint matches known Paseo endpoint
+    if (endpoint.includes("eth-asset-hub-paseo")) {
+      return new ethers.JsonRpcProvider("http://localhost:3001");
+    }
+    // For other endpoints, try direct
+    return new ethers.JsonRpcProvider(endpoint);
+  };
+
+  // If rpcEndpoint is provided, try using it (with proxy if needed)
+  if (rpcEndpoint) {
+    try {
+      const proxyProvider = createProxyProvider(rpcEndpoint);
+      effectiveProvider = proxyProvider;
+      effectiveBlock = await proxyProvider.getBlockNumber();
+
+      logs = await proxyProvider.getLogs({
+        address: contractAddress,
+        fromBlock,
+        toBlock: effectiveBlock,
+        topics: [[depositTopic, withdrawalTopic, newCommitmentTopic]],
+      });
+      console.log(
+        `Using RPC endpoint ${rpcEndpoint}, fetched ${logs.length} events from blocks ${fromBlock}-${effectiveBlock}`,
+      );
+    } catch (endpointError) {
+      console.error(
+        `Failed with provided RPC endpoint ${rpcEndpoint}:`,
+        (endpointError as Error).message,
+      );
+      // Fall back to original provider
+    }
+  }
+
+  // If logs still empty, try with original provider
+  if (logs.length === 0) {
+    try {
+      logs = await provider.getLogs({
+        address: contractAddress,
+        fromBlock,
+        toBlock: currentBlock,
+        topics: [[depositTopic, withdrawalTopic, newCommitmentTopic]],
+      });
+      console.log(
+        `Fetched ${logs.length} events from blocks ${fromBlock}-${currentBlock} using wallet provider`,
+      );
+    } catch (error) {
+      console.error(
+        "Failed to fetch logs from wallet provider:",
+        (error as Error).message,
+      );
+      console.log("Using cached data only");
+      // Return tree with cached data
+      if (tree.size === 0 && cached) {
+        // If no cache, we're in trouble
+        console.error("No cached data available");
+      }
+      return tree;
+    }
+  }
 
   // Sort by block number, then log index
   logs.sort((a, b) => {
@@ -226,10 +305,24 @@ export async function buildMerkleTreeFromContract(
 
   // Batch-fetch withdrawal transactions with Promise.all in groups
   const txMap = new Map<string, ethers.TransactionResponse | null>();
+
+  // Use effectiveProvider for transaction fetching
+  const getTransactionWithFallback = async (txHash: string) => {
+    try {
+      return await effectiveProvider.getTransaction(txHash);
+    } catch (error) {
+      console.error(
+        `Failed to get transaction ${txHash}:`,
+        (error as Error).message,
+      );
+      return null;
+    }
+  };
+
   for (let i = 0; i < withdrawalLogs.length; i += TX_BATCH_SIZE) {
     const batch = withdrawalLogs.slice(i, i + TX_BATCH_SIZE);
     const results = await Promise.all(
-      batch.map((log) => provider.getTransaction(log.transactionHash)),
+      batch.map((log) => getTransactionWithFallback(log.transactionHash)),
     );
     batch.forEach((log, idx) => {
       txMap.set(log.transactionHash, results[idx]);
@@ -241,20 +334,87 @@ export async function buildMerkleTreeFromContract(
 
   for (const log of logs) {
     if (log.topics[0] === depositTopic) {
-      // Deposit(address indexed asset, uint256 amount, uint256 indexed commitment)
-      // topics[0]=sig  topics[1]=asset  topics[2]=commitment
-      const commitment = BigInt(log.topics[2]);
+      // Deposit(address,bytes32,uint256) - address is indexed (in topics[1])
+      // Data: commitment (32 bytes) + uint256 (32 bytes) = 64 bytes
+
+      let commitment: bigint;
+      if (log.data && log.data.length >= 66) {
+        // 0x + 64 hex chars
+        try {
+          // Try to decode
+          const ifaceDeposit = new ethers.Interface([
+            "event Deposit(address indexed asset, bytes32 commitment, uint256 nullifierHash)",
+          ]);
+          const decoded = ifaceDeposit.decodeEventLog(
+            "Deposit",
+            log.data,
+            log.topics,
+          );
+          commitment = BigInt(decoded[1]); // bytes32 commitment is second parameter
+        } catch (decodeError) {
+          console.error("Failed to decode Deposit event:", decodeError);
+          // Fallback: extract first 32 bytes from data (commitment)
+          const dataHex = log.data.startsWith("0x")
+            ? log.data.slice(2)
+            : log.data;
+          if (dataHex.length >= 64) {
+            const commitmentHex = "0x" + dataHex.slice(0, 64);
+            commitment = BigInt(commitmentHex);
+          } else {
+            console.error("Cannot extract commitment from Deposit event");
+            continue;
+          }
+        }
+      } else {
+        console.error("Deposit event has no data or insufficient data");
+        continue;
+      }
+
       tree.insert(commitment);
       console.log(
         `Merkle insert #${insertionIndex}: deposit commitment=${commitment} → root=${tree.root}`,
       );
       insertionIndex++;
+    } else if (log.topics[0] === newCommitmentTopic) {
+      // NewCommitment(bytes32) - emitted when withdrawing with change
+      if (log.data && log.data.length >= 66) {
+        try {
+          const ifaceNewCommitment = new ethers.Interface([
+            "event NewCommitment(bytes32)",
+          ]);
+          const decoded = ifaceNewCommitment.decodeEventLog(
+            "NewCommitment",
+            log.data,
+            log.topics,
+          );
+          const newCommitment = BigInt(decoded[0]); // bytes32 is first parameter
+          tree.insert(newCommitment);
+          console.log(
+            `Merkle insert #${insertionIndex}: new commitment from withdrawal=${newCommitment} → root=${tree.root}`,
+          );
+          insertionIndex++;
+        } catch (decodeError) {
+          console.error("Failed to decode NewCommitment event:", decodeError);
+          // Fallback
+          const dataHex = log.data.startsWith("0x")
+            ? log.data.slice(2)
+            : log.data;
+          if (dataHex.length >= 64) {
+            const commitmentHex = "0x" + dataHex.slice(0, 64);
+            tree.insert(BigInt(commitmentHex));
+            insertionIndex++;
+          }
+        }
+      }
     } else if (log.topics[0] === withdrawalTopic) {
       // Withdrawal — extract newCommitmentHash from the withdraw() calldata
       const tx = txMap.get(log.transactionHash);
       if (tx) {
         try {
-          const decoded = iface.parseTransaction({ data: tx.data, value: tx.value });
+          const decoded = iface.parseTransaction({
+            data: tx.data,
+            value: tx.value,
+          });
           if (decoded && decoded.name === "withdraw") {
             // withdraw(uint256[2] a, uint256[2][2] b, uint256[2] c,
             //          uint256[6] pubSignals, address asset, address recipient)
@@ -273,7 +433,10 @@ export async function buildMerkleTreeFromContract(
             }
           }
         } catch (e) {
-          console.error(`Failed to decode withdraw tx ${log.transactionHash}:`, e);
+          console.error(
+            `Failed to decode withdraw tx ${log.transactionHash}:`,
+            e,
+          );
         }
       }
     }
@@ -286,19 +449,74 @@ export async function buildMerkleTreeFromContract(
   // Reconstruct from the logs we just processed.
   for (const log of logs) {
     if (log.topics[0] === depositTopic) {
-      newLeaves.push(BigInt(log.topics[2]).toString());
+      // Extract commitment from Deposit event
+      let commitmentStr: string;
+      try {
+        const ifaceDeposit = new ethers.Interface([
+          "event Deposit(address indexed asset, bytes32 commitment, uint256 nullifierHash)",
+        ]);
+        const decoded = ifaceDeposit.decodeEventLog(
+          "Deposit",
+          log.data,
+          log.topics,
+        );
+        commitmentStr = BigInt(decoded[1]).toString(); // bytes32 commitment
+      } catch {
+        // Fallback
+        if (log.data && log.data.length >= 66) {
+          const dataHex = log.data.startsWith("0x")
+            ? log.data.slice(2)
+            : log.data;
+          if (dataHex.length >= 64) {
+            commitmentStr = BigInt("0x" + dataHex.slice(0, 64)).toString();
+          } else {
+            continue;
+          }
+        } else {
+          continue;
+        }
+      }
+      newLeaves.push(commitmentStr);
+    } else if (log.topics[0] === newCommitmentTopic) {
+      // Extract new commitment from NewCommitment event
+      try {
+        const ifaceNewCommitment = new ethers.Interface([
+          "event NewCommitment(bytes32)",
+        ]);
+        const decoded = ifaceNewCommitment.decodeEventLog(
+          "NewCommitment",
+          log.data,
+          log.topics,
+        );
+        newLeaves.push(BigInt(decoded[0]).toString());
+      } catch {
+        // Fallback
+        if (log.data && log.data.length >= 66) {
+          const dataHex = log.data.startsWith("0x")
+            ? log.data.slice(2)
+            : log.data;
+          if (dataHex.length >= 64) {
+            newLeaves.push(BigInt("0x" + dataHex.slice(0, 64)).toString());
+          }
+        }
+      }
     } else if (log.topics[0] === withdrawalTopic) {
       const tx = txMap.get(log.transactionHash);
       if (tx) {
         try {
-          const decoded = iface.parseTransaction({ data: tx.data, value: tx.value });
+          const decoded = iface.parseTransaction({
+            data: tx.data,
+            value: tx.value,
+          });
           if (decoded && decoded.name === "withdraw") {
             const pubSignals = decoded.args[3];
             if (pubSignals && pubSignals.length >= 1) {
               newLeaves.push(BigInt(pubSignals[0]).toString());
             }
           }
-        } catch { /* already logged above */ }
+        } catch {
+          /* already logged above */
+        }
       }
     }
   }
@@ -311,6 +529,5 @@ export async function buildMerkleTreeFromContract(
   console.log(
     `Merkle tree built: ${tree.size} leaves, depth=${tree.size <= 1 ? 0 : Math.ceil(Math.log2(tree.size))}, root=${tree.root}`,
   );
-
   return tree;
 }

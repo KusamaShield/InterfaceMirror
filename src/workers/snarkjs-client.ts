@@ -8,10 +8,9 @@
 import * as Comlink from "comlink";
 import type { SnarkWorkerApi } from "./snarkjs-worker";
 
-const rawWorker = new Worker(
-  new URL("./snarkjs-worker", import.meta.url),
-  { type: "module" },
-);
+const rawWorker = new Worker(new URL("./snarkjs-worker", import.meta.url), {
+  type: "module",
+});
 
 const worker = Comlink.wrap<SnarkWorkerApi>(rawWorker);
 

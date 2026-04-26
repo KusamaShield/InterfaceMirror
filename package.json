@@ -1,7 +1,7 @@
 {
   "name": "kusama-shield",
   "private": true,
-  "version": "0.0.51",
+  "version": "0.0.52",
   "type": "module",
   "scripts": {
     "dev": "vite --host",
@@ -19,6 +19,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@peerlytics/sdk": "^0.5.1",
     "@polkadot/api": "15.9.2",
     "@polkadot/extension-dapp": "0.58.8",
     "@reown/appkit": "^1.8.17",
@@ -31,9 +32,11 @@
     "@tsconfig/svelte": "^5.0.2",
     "@types/qrcode": "^1.5.5",
     "@types/snarkjs": "^0.7.9",
+    "@usdctofiat/offramp": "^1.3.0",
     "@vitejs/plugin-react": "4.4.1",
     "@walletconnect/react-native-compat": "2.23.4",
     "buffer": "^6.0.3",
+    "comlink": "^4.4.2",
     "dayjs": "^1.11.10",
     "dotenv": "16.5.0",
     "ethers": "6.13.5",
@@ -50,8 +53,8 @@
     "vite-node": "^3.1.2",
     "vite-plugin-comlink": "5.1.0",
     "wagmi": "^3.4.2",
-    "wasmsnark": "^0.0.12",
     "wasm-loader": "^1.3.0",
+    "wasmsnark": "^0.0.12",
     "webpack": "^5.99.6",
     "webpack-cli": "^6.0.1"
   },

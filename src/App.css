@@ -100,24 +100,24 @@ body {
   }
 }
 
-.swap-box {
-    background: linear-gradient(145deg, #1a0b2e, #0a0515);
-    padding: 4% 8% 6% 8%;
-    box-shadow: 0 0 20px rgba(147, 51, 234, 0.3);
-    border: 2px solid rgba(147, 51, 234, 0.5);
-    animation: pulsateBorder 3s ease-in-out infinite;
-    position: relative;
-    z-index: 2;
-    margin: 0 auto;
-    width: 100%;
-    max-width: 600px;
-    box-sizing: border-box;
-    clip-path: polygon(50% 0%, 95% 0%, 90% 50%, 80% 90%, 50% 100%, 20% 90%, 10% 50%, 5% 0%);
-    backdrop-filter: blur(5px);
-    overflow: visible;
-    margin-bottom: 60px;
-    border-radius: 0;
-}
+ .swap-box {
+     background: linear-gradient(145deg, #1a0b2e, #0a0515);
+     padding: 4% 8% 6% 8%;
+     box-shadow: 0 0 20px rgba(147, 51, 234, 0.3);
+     border: 2px solid rgba(147, 51, 234, 0.5);
+     animation: pulsateBorder 3s ease-in-out infinite;
+     position: relative;
+     z-index: 2;
+     margin: 0 auto;
+     width: 105%;
+     max-width: 750px;
+     box-sizing: border-box;
+     clip-path: polygon(50% 0%, 95% 0%, 90% 50%, 80% 90%, 50% 100%, 20% 90%, 10% 50%, 5% 0%);
+     backdrop-filter: blur(5px);
+     overflow: visible;
+     margin-bottom: 60px;
+     border-radius: 0;
+ }
 
 .swap-box.no-shield-shape {
     clip-path: none;
@@ -320,6 +320,15 @@ body {
     padding: 0.5rem;
 }
 
+/* Paseo network logo */
+.network-select option.option-paseo {
+    background-image: url('/paseo-icon.png');
+    background-repeat: no-repeat;
+    background-position: 8px center;
+    background-size: 16px 16px;
+    padding-left: 32px;
+}
+
 /* Logo container styling for network options */
 .network-select option.logo-container {
     display: flex;
@@ -370,6 +379,137 @@ body {
 .network-select option.logo-container:checked::before {
     opacity: 1;
     background: linear-gradient(180deg, transparent, #9333ea, transparent);
+}
+
+/* Custom Network Dropdown */
+.network-select-wrapper {
+    position: relative;
+    min-width: 180px;
+}
+
+.selected-network {
+    background: rgba(147, 51, 234, 0.1);
+    border: 1px solid rgba(147, 51, 234, 0.2);
+    color: white;
+    padding: 0.8rem 2.5rem 0.8rem 1rem;
+    border-radius: 12px;
+    cursor: pointer;
+    font-size: 0.95rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: all 0.3s ease;
+    box-shadow: 0 0 10px rgba(147, 51, 234, 0.1);
+}
+
+.selected-network:hover {
+    background-color: rgba(147, 51, 234, 0.15);
+    border-color: rgba(147, 51, 234, 0.3);
+    box-shadow: 0 0 15px rgba(147, 51, 234, 0.2);
+}
+
+.selected-network.open {
+    border-color: #9333ea;
+    box-shadow: 0 0 0 2px rgba(147, 51, 234, 0.2);
+}
+
+.dropdown-arrow {
+    margin-left: auto;
+    font-size: 0.7rem;
+    transition: transform 0.3s ease;
+}
+
+.selected-network.open .dropdown-arrow {
+    transform: rotate(180deg);
+}
+
+.network-select-placeholder-text {
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.network-logo {
+    width: 16px;
+    height: 16px;
+    object-fit: contain;
+}
+
+.network-select-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: #1a0b2e;
+    border: 1px solid rgba(147, 51, 234, 0.2);
+    border-radius: 12px;
+    margin-top: 0.5rem;
+    z-index: 1000;
+    max-height: 300px;
+    overflow-y: auto;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.network-group {
+    padding: 0.5rem 0;
+}
+
+.network-group:first-child {
+    padding-top: 0;
+}
+
+.network-group .group-header {
+    padding: 0.5rem 1rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.testnet-header {
+    color: #9333ea;
+}
+
+.mainnet-header {
+    color: #10b981;
+}
+
+.network-option {
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: all 0.2s ease;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.network-option:hover {
+    background: rgba(147, 51, 234, 0.15);
+    padding-left: 1.25rem;
+}
+
+.network-option.selected {
+    background: rgba(147, 51, 234, 0.25);
+    color: #9333ea;
+    font-weight: 600;
+}
+
+/* Custom scrollbar for dropdown */
+.network-select-dropdown::-webkit-scrollbar {
+    width: 8px;
+}
+
+.network-select-dropdown::-webkit-scrollbar-track {
+    background: rgba(147, 51, 234, 0.1);
+    border-radius: 4px;
+}
+
+.network-select-dropdown::-webkit-scrollbar-thumb {
+    background: rgba(147, 51, 234, 0.3);
+    border-radius: 4px;
+}
+
+.network-select-dropdown::-webkit-scrollbar-thumb:hover {
+    background: rgba(147, 51, 234, 0.5);
 }
 
 .connect-button {

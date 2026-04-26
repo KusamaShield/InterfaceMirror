@@ -15,7 +15,11 @@
 
 import * as snarkjs from "snarkjs";
 import * as Comlink from "comlink";
-import { witnessToBinary, extractPublicSignals, parseWtns } from "../transactions/wasmsnark-prover";
+import {
+  witnessToBinary,
+  extractPublicSignals,
+  parseWtns,
+} from "../transactions/wasmsnark-prover";
 
 // ---------------------------------------------------------------------------
 // Diagnostics: check if multi-threading is available
@@ -41,7 +45,9 @@ async function fetchAndCache(path: string): Promise<ArrayBuffer> {
   if (!resp.ok) throw new Error(`Failed to fetch: ${path} (${resp.status})`);
   const buf = await resp.arrayBuffer();
   console.timeEnd(`[worker] fetch ${path}`);
-  console.log(`[worker] cached ${path} (${(buf.byteLength / 1024 / 1024).toFixed(1)} MB)`);
+  console.log(
+    `[worker] cached ${path} (${(buf.byteLength / 1024 / 1024).toFixed(1)} MB)`,
+  );
   artifactCache.set(path, buf);
   return buf;
 }
@@ -58,7 +64,9 @@ async function getBn128(): Promise<any> {
   // @ts-ignore — wasmsnark has no TS declarations; typed at call sites
   const mod = await import("wasmsnark/src/bn128.js");
   const buildBn128 = mod.default || mod.buildBn128 || mod;
-  bn128Instance = await (typeof buildBn128 === "function" ? buildBn128() : buildBn128);
+  bn128Instance = await (typeof buildBn128 === "function"
+    ? buildBn128()
+    : buildBn128);
   return bn128Instance;
 }
 
@@ -72,10 +80,7 @@ const workerApi = {
    * Proof generation should happen on the main thread where ffjavascript
    * can spawn its own worker threads for multi-threaded multiexp.
    */
-  async calculateWitness(
-    input: any,
-    wasmPath: string,
-  ): Promise<ArrayBuffer> {
+  async calculateWitness(input: any, wasmPath: string): Promise<ArrayBuffer> {
     const t0 = performance.now();
     const wasmBuf = await fetchAndCache(wasmPath);
     const t1 = performance.now();
@@ -184,7 +189,9 @@ const workerApi = {
     // Step 4: Convert witness to wasmsnark binary format
     const witnessBin = witnessToBinary(witnessValues);
     const t2 = performance.now();
-    console.log(`[worker/wasmsnark] witness convert: ${(t2 - t1).toFixed(0)}ms`);
+    console.log(
+      `[worker/wasmsnark] witness convert: ${(t2 - t1).toFixed(0)}ms`,
+    );
 
     // Step 5: Generate proof using wasmsnark (multi-threaded)
     const bn128 = await getBn128();

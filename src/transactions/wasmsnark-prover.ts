@@ -35,7 +35,7 @@ export function witnessToBinary(witnessValues: bigint[]): ArrayBuffer {
     let val = witnessValues[i];
     const baseOffset = i * 32;
     for (let j = 0; j < 8; j++) {
-      view.setUint32(baseOffset + j * 4, Number(val & 0xFFFFFFFFn), true);
+      view.setUint32(baseOffset + j * 4, Number(val & 0xffffffffn), true);
       val >>= 32n;
     }
   }
@@ -73,7 +73,11 @@ export function extractPublicSignals(
  *   - Section 2: witness values (nWitness × fieldSize bytes, little-endian)
  */
 export function parseWtns(wtnsData: Uint8Array): bigint[] {
-  const view = new DataView(wtnsData.buffer, wtnsData.byteOffset, wtnsData.byteLength);
+  const view = new DataView(
+    wtnsData.buffer,
+    wtnsData.byteOffset,
+    wtnsData.byteLength,
+  );
   let offset = 0;
 
   // Magic "wtns"
@@ -84,16 +88,22 @@ export function parseWtns(wtnsData: Uint8Array): bigint[] {
   offset += 4;
 
   // Section 1: header
-  const sec1Type = view.getUint32(offset, true); offset += 4;
-  const sec1Size = Number(view.getBigUint64(offset, true)); offset += 8;
-  const fieldSize = view.getUint32(offset, true); offset += 4;
+  const sec1Type = view.getUint32(offset, true);
+  offset += 4;
+  const sec1Size = Number(view.getBigUint64(offset, true));
+  offset += 8;
+  const fieldSize = view.getUint32(offset, true);
+  offset += 4;
   // Skip prime (fieldSize bytes)
   offset += fieldSize;
-  const nWitness = view.getUint32(offset, true); offset += 4;
+  const nWitness = view.getUint32(offset, true);
+  offset += 4;
 
   // Section 2: witness data
-  const sec2Type = view.getUint32(offset, true); offset += 4;
-  const sec2Size = Number(view.getBigUint64(offset, true)); offset += 8;
+  const sec2Type = view.getUint32(offset, true);
+  offset += 4;
+  const sec2Size = Number(view.getBigUint64(offset, true));
+  offset += 8;
 
   const values: bigint[] = [];
   for (let i = 0; i < nWitness; i++) {
