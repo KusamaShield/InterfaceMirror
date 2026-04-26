@@ -10,7 +10,7 @@ const SHIELD_CONTRACT_ADDRESS = "0x..."; // Replace with actual shield contract 
 // ABI for the shield contract's withdraw function
 const SHIELD_CONTRACT_ABI = [
   "function withdraw(uint256[2] a, uint256[2][2] b, uint256[2] c, bytes32 expectedCommitment, bytes32 nullifier, uint256 amount, address recipient) external",
-  "function withdrawSimple(uint256[2] calldata a, uint256[2][2] calldata b, uint256[2] calldata c, bytes32 expectedCommitment, bytes32 nullifier, uint256 amount, address recipient) external"
+  "function withdrawSimple(uint256[2] calldata a, uint256[2][2] calldata b, uint256[2] calldata c, bytes32 expectedCommitment, bytes32 nullifier, uint256 amount, address recipient) external",
 ];
 
 export const fetchKzgParams = async (url: string) => {

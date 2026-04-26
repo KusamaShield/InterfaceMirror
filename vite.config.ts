@@ -21,6 +21,7 @@ export default defineConfig({
   // snarkjs/ffjavascript use multi-threaded WASM for multiexponentiation.
   // Without these, groth16.prove() runs single-threaded (~40s → ~5-10s).
   server: {
+    allowedHosts: ['pi'],
     headers: {
       'Cross-Origin-Opener-Policy': 'same-origin',
       'Cross-Origin-Embedder-Policy': 'require-corp',

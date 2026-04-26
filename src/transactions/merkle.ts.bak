@@ -1,0 +1,358 @@
+/*
+ * Copyright 2025 Kusama Shield Developers on behalf of the Kusama DAO, see LICENSE in main folder.
+ *
+ * Client-side LeanIMT reconstruction from on-chain events/calldata.
+ * Used to generate Merkle proofs for the FixedIlop withdraw circuit.
+ *
+ * The insert() logic is a direct 1:1 port of InternalLeanIMT.sol _insert().
+ * Uses poseidon-lite for hashing (matches circomlib Poseidon used by the circuit).
+ *
+ * IMPORTANT: The on-chain Poseidon contract MUST use the same Poseidon as
+ * circomlib (i.e. PoseidonT3 from poseidon-solidity). If it doesn't, the
+ * locally-computed root will not match the on-chain root, and proofs will
+ * fail on-chain validation.
+ */
+
+import { ethers } from "ethers";
+import { poseidon2 } from "poseidon-lite";
+
+export interface MerkleProof {
+  siblings: string[];
+  root: string;
+  depth: number;
+  leafIndex: number;
+}
+
+// ---------------------------------------------------------------------------
+// localStorage cache for incremental tree rebuilds
+// ---------------------------------------------------------------------------
+
+interface MerkleCache {
+  lastBlockScanned: number;
+  leaves: string[];  // public on-chain commitments, not sensitive
+}
+
+const CACHE_KEY_PREFIX = "merkle_cache_";
+
+function getCacheKey(contractAddress: string): string {
+  return CACHE_KEY_PREFIX + contractAddress.toLowerCase();
+}
+
+function loadCache(contractAddress: string): MerkleCache | null {
+  try {
+    const raw = localStorage.getItem(getCacheKey(contractAddress));
+    if (!raw) return null;
+    return JSON.parse(raw) as MerkleCache;
+  } catch {
+    return null;
+  }
+}
+
+function saveCache(contractAddress: string, cache: MerkleCache): void {
+  try {
+    localStorage.setItem(getCacheKey(contractAddress), JSON.stringify(cache));
+  } catch (e) {
+    console.warn("Failed to save Merkle cache to localStorage:", e);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// LeanIMT — mirrors InternalLeanIMT.sol exactly
+// Uses poseidon-lite (matches circomlib / poseidon-solidity PoseidonT3)
+// ---------------------------------------------------------------------------
+
+export class LeanIMT {
+  private leaves: bigint[] = [];
+  // sideNodes mirrors the Solidity mapping(uint256 => uint256).
+  // Unset positions are implicitly 0n.
+  private _sideNodes = new Map<number, bigint>();
+  private _depth: number = 0;
+  private _root: bigint = 0n;
+
+  get root(): bigint { return this._root; }
+  get size(): number { return this.leaves.length; }
+
+  private sn(level: number): bigint {
+    return this._sideNodes.get(level) ?? 0n;
+  }
+
+  /**
+   * Insert a leaf — direct port of InternalLeanIMT.sol _insert().
+   *
+   *   uint256 index = self.size;
+   *   if (2**treeDepth < index+1) ++treeDepth;
+   *   for level in 0..treeDepth:
+   *       if right child: node = hash(sideNodes[level], node)
+   *       else:           sideNodes[level] = node
+   *   sideNodes[treeDepth] = node;          // ← root
+   */
+  insert(leaf: bigint): void {
+    const index = this.leaves.length;
+    let treeDepth = this._depth;
+
+    // Depth increase check (matches Solidity 2**treeDepth < index+1)
+    if ((1 << treeDepth) < index + 1) {
+      treeDepth++;
+    }
+    this._depth = treeDepth;
+
+    let node = leaf;
+
+    for (let level = 0; level < treeDepth; level++) {
+      if ((index >> level) & 1) {
+        // Right child: hash(sideNode, node)
+        node = poseidon2([this.sn(level), node]);
+      } else {
+        // Left child: store side node, propagate node upward unchanged
+        this._sideNodes.set(level, node);
+      }
+    }
+
+    this._sideNodes.set(treeDepth, node);
+    this._root = node;
+    this.leaves.push(leaf);
+  }
+
+  /**
+   * Get Merkle proof for a given leaf index.
+   * Rebuilds the tree layer-by-layer from the stored leaves to extract
+   * the sibling at each level.  Pads to 254 siblings for the circuit.
+   */
+  getProof(leafIndex: number): MerkleProof {
+    if (leafIndex < 0 || leafIndex >= this.leaves.length) {
+      throw new Error(
+        `Leaf index ${leafIndex} out of range (tree has ${this.leaves.length} leaves)`,
+      );
+    }
+
+    const siblings: bigint[] = [];
+    let currentLayer = [...this.leaves];
+    let idx = leafIndex;
+
+    // Run for full circuit depth (128) to generate all siblings
+    for (let level = 0; level < 128; level++) {
+      // Sibling of idx at this level
+      const sibIdx = (idx % 2 === 0) ? idx + 1 : idx - 1;
+      siblings.push(
+        sibIdx >= 0 && sibIdx < currentLayer.length ? currentLayer[sibIdx] : 0n,
+      );
+
+      // Build next layer
+      const nextLayer: bigint[] = [];
+      for (let i = 0; i < currentLayer.length; i += 2) {
+        if (i + 1 < currentLayer.length) {
+          nextLayer.push(poseidon2([currentLayer[i], currentLayer[i + 1]]));
+        } else {
+          nextLayer.push(currentLayer[i]); // odd node propagates
+        }
+      }
+      currentLayer = nextLayer;
+      idx = Math.floor(idx / 2);
+    }
+
+
+    return {
+      siblings: siblings.map((s) => s.toString()),
+      root: this._root.toString(),
+      depth: this._depth,
+      leafIndex,
+    };
+  }
+
+  findLeafIndex(leaf: bigint): number {
+    return this.leaves.findIndex((l) => l === leaf);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Build tree from contract events (with incremental caching)
+// ---------------------------------------------------------------------------
+
+const TX_BATCH_SIZE = 10;
+
+export async function buildMerkleTreeFromContract(
+  provider: ethers.Provider,
+  contractAddress: string,
+  abi: string[],
+): Promise<LeanIMT> {
+  const tree = new LeanIMT();
+  const iface = new ethers.Interface(abi);
+
+  // Try to load cached state
+  const cached = loadCache(contractAddress);
+  let fromBlock = 0;
+  console.log(`Building Merkle tree for ${contractAddress}, cache found:`, cached ? `${cached.leaves.length} leaves` : 'none');
+
+  if (cached && cached.leaves.length > 0) {
+    // Replay cached leaves into the tree (fast, no RPC)
+    for (const leafStr of cached.leaves) {
+      tree.insert(BigInt(leafStr));
+    }
+    fromBlock = cached.lastBlockScanned + 1;
+    console.log(
+      `Merkle cache: restored ${cached.leaves.length} leaves, scanning from block ${fromBlock}`,
+    );
+  }
+
+  // Fetch events from where we left off
+  // v3 contract: event Deposit(address indexed asset, bytes32 commitment, uint256 nullifierHash);
+  const depositTopic = ethers.id("Deposit(address,bytes32,uint256)");
+  // v3 contract: event Withdrawal(address indexed asset, uint256 amount, address indexed recipient);
+  const withdrawalTopic = ethers.id("Withdrawal(address,uint256,address)");
+  // v3 contract: event NewCommitment(bytes32 newCommitment);
+  const newCommitmentTopic = ethers.id("NewCommitment(bytes32)");
+
+  const currentBlock = await provider.getBlockNumber();
+
+  // If cache is fully up-to-date, skip the RPC scan
+  if (fromBlock > currentBlock) {
+    console.log(`Merkle cache is up-to-date (block ${currentBlock})`);
+    return tree;
+  }
+
+  const logs = await provider.getLogs({
+    address: contractAddress,
+    fromBlock,
+    toBlock: currentBlock,
+    topics: [[depositTopic, withdrawalTopic, newCommitmentTopic]],
+  });
+
+  console.log(`Fetching logs from block ${fromBlock} to ${currentBlock}:`);
+  console.log(`  Deposit topic: ${depositTopic}`);
+  console.log(`  Withdrawal topic: ${withdrawalTopic}`);
+  console.log(`  Found ${logs.length} total logs`);
+
+  // Sort by block number, then log index
+  logs.sort((a, b) => {
+    if (a.blockNumber !== b.blockNumber) return a.blockNumber - b.blockNumber;
+    return a.index - b.index;
+  });
+
+  // Collect withdrawal logs that need tx lookups
+  const withdrawalLogs = logs.filter((l) => l.topics[0] === withdrawalTopic);
+
+  // Batch-fetch withdrawal transactions with Promise.all in groups
+  const txMap = new Map<string, ethers.TransactionResponse | null>();
+  for (let i = 0; i < withdrawalLogs.length; i += TX_BATCH_SIZE) {
+    const batch = withdrawalLogs.slice(i, i + TX_BATCH_SIZE);
+    const results = await Promise.all(
+      batch.map((log) => provider.getTransaction(log.transactionHash)),
+    );
+    batch.forEach((log, idx) => {
+      txMap.set(log.transactionHash, results[idx]);
+    });
+  }
+
+  // Process events in order
+  let insertionIndex = tree.size;
+
+  for (const log of logs) {
+if (log.topics[0] === depositTopic) {
+      // v3/v4: Deposit(address indexed asset, bytes32 commitment, uint256 nullifierHash)
+      // topics[0]=sig, topics[1]=asset (indexed=20 bytes)
+      // commitment (bytes32, NOT indexed) = data[0:32]
+      // nullifierHash (uint256, NOT indexed) = data[32:64]
+      console.log(`Processing deposit log:`);
+      console.log(`  topics[0]: ${log.topics[0].slice(0, 20)}...`);
+      console.log(`  topics[1]: ${log.topics[1]}`);
+      console.log(`  data: ${log.data.slice(0, 80)}... (length: ${log.data.length})`);
+      
+      const dataHex = log.data;
+      // commitment is first 32 bytes in data (64 hex chars)
+      // Make sure we handle both "0x" prefixed and non-prefixed
+      const commitmentHex = dataHex.startsWith('0x') ? dataHex.slice(2, 66) : dataHex.slice(0, 64);
+      console.log(`  commitmentHex: ${commitmentHex}`);
+      const commitment = BigInt('0x' + commitmentHex);
+      console.log(`  commitment parsed: ${commitment}`);
+      
+      tree.insert(commitment);
+      console.log(
+        `Merkle insert #${insertionIndex}: deposit commitment=${commitment} (block ${log.blockNumber}) → root=${tree.root}`,
+      );
+      insertionIndex++;
+    } else if (log.topics[0] === newCommitmentTopic) {
+      // NewCommitment(bytes32 newCommitment) - easier to get directly from log
+      const newCommitment = BigInt(log.topics[1]);
+      tree.insert(newCommitment);
+      console.log(
+        `Merkle insert #${insertionIndex}: withdrawal newCommitment=${newCommitment} (block ${log.blockNumber}) → root=${tree.root}`,
+      );
+      insertionIndex++;
+    } else if (log.topics[0] === withdrawalTopic) {
+      // Withdrawal — extract newCommitmentHash from the withdraw() calldata
+      const tx = txMap.get(log.transactionHash);
+      if (tx) {
+        try {
+          const decoded = iface.parseTransaction({ data: tx.data, value: tx.value });
+          if (decoded && decoded.name === "withdraw") {
+            // withdraw(uint256[2] a, uint256[2][2] b, uint256[2] c,
+            //          uint256[6] pubSignals, address asset, address recipient)
+            const pubSignals = decoded.args[3];
+            if (pubSignals && pubSignals.length >= 1) {
+              const newCommitmentHash = BigInt(pubSignals[0]);
+              tree.insert(newCommitmentHash);
+              console.log(
+                `Merkle insert #${insertionIndex}: withdrawal newCommitment=${newCommitmentHash} → root=${tree.root}`,
+              );
+              insertionIndex++;
+            } else {
+              console.error(
+                `Could not extract pubSignals from withdraw tx ${log.transactionHash}`,
+              );
+            }
+          }
+        } catch (e) {
+          console.error(`Failed to decode withdraw tx ${log.transactionHash}:`, e);
+        }
+      }
+    }
+  }
+
+  // Persist updated cache
+  const cachedLeaves = cached?.leaves ?? [];
+  const newLeaves: string[] = [];
+  // We inserted `insertionIndex - (cached?.leaves.length ?? 0)` new leaves.
+  // Reconstruct from the logs we just processed.
+  for (const log of logs) {
+    if (log.topics[0] === depositTopic) {
+      // commitment is in data[0:32], not topics
+      const commitmentHex = log.data.startsWith('0x') ? log.data.slice(2, 66) : log.data.slice(0, 64);
+      newLeaves.push(BigInt('0x' + commitmentHex).toString());
+    } else if (log.topics[0] === withdrawalTopic) {
+      // For withdrawal, new commitment is in pubSignals[0]
+      const tx = txMap.get(log.transactionHash);
+      if (tx) {
+        try {
+          const decoded = iface.parseTransaction({ data: tx.data, value: tx.value });
+          if (decoded && (decoded.name === "withdraw" || decoded.name === "withdrawNative" || decoded.name === "withdrawAsset")) {
+            console.log(`Processing withdrawal tx: ${log.transactionHash}, function: ${decoded.name}`);
+            // Get pubSignals - depends on function name
+            let pubSignals = null;
+            if (decoded.name === "withdraw") {
+              pubSignals = decoded.args[3];
+            } else if (decoded.name === "withdrawNative" || decoded.name === "withdrawAsset") {
+              pubSignals = decoded.args[3];
+            }
+            if (pubSignals && pubSignals.length >= 1) {
+              newLeaves.push(BigInt(pubSignals[0]).toString());
+              console.log(`  newCommitment from withdrawal: ${pubSignals[0]}`);
+            }
+          }
+        } catch (e) { 
+          console.log(`  Error processing withdrawal:`, e); 
+        }
+      }
+    }
+  }
+
+  saveCache(contractAddress, {
+    lastBlockScanned: currentBlock,
+    leaves: [...cachedLeaves, ...newLeaves],
+  });
+
+  console.log(
+    `Merkle tree built: ${tree.size} leaves, depth=${tree.size <= 1 ? 0 : Math.ceil(Math.log2(tree.size))}, root=${tree.root}`,
+  );
+
+  return tree;
+}

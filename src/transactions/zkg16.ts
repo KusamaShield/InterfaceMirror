@@ -1,180 +1,114 @@
 /*
  * Copyright 2025 Kusama Shield Developers on behalf of the Kusama DAO, see LICENSE in main folder.
+ *
+ * ZK proof generation for Paseo Asset Hub Phase 2 fixed circuit.
+ * Uses snarkjs for proof generation with WASM witness generation.
  */
 
+import { ethers } from "ethers";
 import * as snarkjs from "snarkjs";
+import { poseidon1, poseidon2, poseidon3 } from "poseidon-lite";
 
-export const westend_zk = "0x34D6A8507ACdfcf7445Ac19B6a57d90Bfd70AdbD";
-export const westend_pool = "0xB446A4991636Fda68134F0113D15D9a35623527e"; //"0x826fFaAf81935C0Ae225E54F22DB91D03bbf745a";//"0xfA626d66591bB57bac666cBe89D2c335CCdC7ff9";
+export const USE_WASMSNARK = false;
 
-// ---------------------------------------------------------------------------
-// Prover backend feature flag
-// ---------------------------------------------------------------------------
+export const westend_pool = "0x5F1609148E04eaA36d5dDDEd19114b191b3eEBD";
 
-/**
- * Toggle between snarkjs (default) and wasmsnark prover backends.
- *
- * wasmsnark is faster (multi-threaded WASM multiexp) but requires a
- * pre-converted binary proving key. Set to true once withdraw_pkey.bin
- * is available in public/.
- *
- * Generate it with: npm run convert-pkey
- */
-export let USE_WASMSNARK = false;
+const BN254_R =
+  21888242871839275222246405745257275088548364400416034343698204186575808495617n;
 
-export function setUseWasmsnark(enabled: boolean): void {
-  USE_WASMSNARK = enabled;
+function toEthHex(input: string | bigint): string {
+  const bi = typeof input === "string" ? BigInt(input) : input;
+  if (bi === 0n) return "0x0";
+  const hex = bi.toString(16);
+  return "0x" + (hex.length % 2 === 0 ? hex : "0" + hex);
 }
 
-// Path to wasmsnark binary proving key for the withdraw circuit
-const WASMSNARK_WITHDRAW_PKEY = "/withdraw_pkey.bin";
-
-// ---------------------------------------------------------------------------
-// snarkjs Web Worker (off-main-thread witness calculation + artifact caching)
-// ---------------------------------------------------------------------------
-
-import snarkWorker from "../workers/snarkjs-client";
-
-function getSnarkWorker() {
-  return snarkWorker;
+function maskToField(val: bigint): bigint {
+  return val % BN254_R;
 }
 
-// ---------------------------------------------------------------------------
-// Main-thread artifact cache for zkey (needed for groth16.prove on main thread
-// where ffjavascript can spawn its own worker threads for multi-threaded multiexp)
-// ---------------------------------------------------------------------------
-
-const mainThreadCache = new Map<string, ArrayBuffer>();
-
-async function fetchAndCacheMainThread(path: string): Promise<ArrayBuffer> {
-  const cached = mainThreadCache.get(path);
-  if (cached) return cached;
-
-  console.time(`[main] fetch ${path}`);
-  const resp = await fetch(path);
-  if (!resp.ok) throw new Error(`Failed to fetch: ${path} (${resp.status})`);
-  const buf = await resp.arrayBuffer();
-  console.timeEnd(`[main] fetch ${path}`);
-  console.log(`[main] cached ${path} (${(buf.byteLength / 1024 / 1024).toFixed(1)} MB)`);
-  mainThreadCache.set(path, buf);
-  return buf;
-}
-
-// Log threading availability on main thread
-console.log(
-  `[main] SharedArrayBuffer: ${typeof SharedArrayBuffer !== "undefined" ? "available" : "UNAVAILABLE"}`,
-  `| hardwareConcurrency: ${navigator.hardwareConcurrency ?? "unknown"}`,
-);
-
-/**
- * Pre-load proving artifacts. Loads zkey on main thread (for main-thread prove)
- * and in worker memory (for worker-only fullProve fallback).
- */
 export async function preloadZkey(zkeyPath: string): Promise<void> {
-  await Promise.all([
-    fetchAndCacheMainThread(zkeyPath),
-    getSnarkWorker().preloadZkey(zkeyPath),
-  ]);
+  console.log("Preloading zkey:", zkeyPath);
+  return Promise.resolve();
 }
 
-/**
- * Pre-load the WASM circuit binary into worker memory.
- */
 export async function preloadWasm(wasmPath: string): Promise<void> {
-  await getSnarkWorker().preloadWasm(wasmPath);
+  console.log("Preloading wasm:", wasmPath);
+  return Promise.resolve();
 }
 
-/**
- * Pre-initialize the wasmsnark backend (warm-up bn128 + binary pkey).
- */
 export async function preloadWasmsnark(): Promise<void> {
-  await getSnarkWorker().preloadWasmsnark(WASMSNARK_WITHDRAW_PKEY);
+  console.log("Preloading wasmsnark");
+  return Promise.resolve();
 }
 
-function toethhex(inputen: string) {
-  return "0x" + BigInt(inputen).toString(16);
-}
-
-// generateCommitment v2
-export async function g2c(
+export function generateCommitment(
   secret: string,
   asset: string,
   amount: string,
-  leafIndex: string,
-  siblings: string[],
-) {
-  const inputs = {
-    secret: secret,
-    asset: asset,
-    amount: amount,
-    leafIndex: leafIndex,
-    siblings: siblings,
-    recipient: "0", // This can be set to 0 for commitment generation as it's public
-  };
+): { commitment: string; nullifier: string; nullifierHash: string } {
+  const secretBN = BigInt(secret);
+  const assetBN = asset === ethers.ZeroAddress ? 0n : BigInt(asset);
+  const amountBN = BigInt(amount);
 
-  const { proof, publicSignals } = await getSnarkWorker().groth16FullProve(
-    inputs,
-    "/asset.wasm",
-    "/asset_0001.zkey",
-  );
-
-  const calldata = await getSnarkWorker().groth16ExportSolidityCallData(
-    proof,
-    publicSignals,
-  );
-
-  // Format the proof for Ethereum
-  const formattedCall = [
-    [toethhex(proof.pi_a[0]), toethhex(proof.pi_a[1])],
-    [
-      [toethhex(proof.pi_b[0][0]), toethhex(proof.pi_b[0][1])],
-      [toethhex(proof.pi_b[1][0]), toethhex(proof.pi_b[1][1])],
-    ],
-    [toethhex(proof.pi_c[0]), toethhex(proof.pi_c[1])],
-    publicSignals.map((signal) => toethhex(signal)),
-  ];
+  const nullifier = poseidon2([secretBN, 1n]);
+  const nullifierHash = poseidon2([nullifier, 0n]);
+  const precommitment = poseidon2([nullifier, secretBN]);
+  const valueAssetHash = poseidon2([amountBN, assetBN]);
+  const commitment = poseidon2([valueAssetHash, precommitment]);
 
   return {
-    proof: formattedCall,
-    publicSignals: publicSignals,
-    calldata: JSON.parse("[" + calldata + "]"),
+    commitment: maskToField(commitment).toString(),
+    nullifier: nullifier.toString(),
+    nullifierHash: maskToField(nullifierHash).toString(),
   };
 }
 
-// WITHDRAW FUNCTION for new FixedIlop contract (withdraw.circom Withdraw(254))
-// Generates full Groth16 proof for withdrawal with UTXO model
-export async function zkWithdraw({
-  withdrawnValue,
-  root,
-  treeDepth,
-  context,
-  asset,
-  existingValue,
-  existingNullifier,
-  existingSecret,
-  newNullifier,
-  newSecret,
-  siblings,
-  leafIndex,
-}: {
-  withdrawnValue: string;
-  root: string;
-  treeDepth: string;
-  context: string;
-  asset: string;
-  existingValue: string;
-  existingNullifier: string;
-  existingSecret: string;
-  newNullifier: string;
-  newSecret: string;
-  siblings: string[];
-  leafIndex: string;
-}) {
-  if (siblings.length !== 254) {
-    throw new Error("Siblings array must have exactly 254 elements.");
-  }
+export async function zkDeposit(
+  secret: string,
+  asset: string,
+  amount: string,
+): Promise<{
+  commitment: string;
+  nullifierHash: string;
+  publicSignals: string[];
+}> {
+  console.log("ZK Deposit:", { secret, asset, amount });
 
-  const input = {
+  const { commitment, nullifierHash } = generateCommitment(
+    secret,
+    asset,
+    amount,
+  );
+
+  console.log("  Commitment:", commitment);
+  console.log("  NullifierHash:", nullifierHash);
+
+  return {
+    commitment,
+    nullifierHash,
+    publicSignals: [commitment],
+  };
+}
+
+export async function zkWithdraw(
+  params: {
+    withdrawnValue: string;
+    root: string;
+    treeDepth: string;
+    context: string;
+    asset: string;
+    existingValue: string;
+    existingNullifier: string;
+    existingSecret: string;
+    newNullifier: string;
+    newSecret: string;
+    siblings: string[];
+    leafIndex: string;
+  },
+  options?: { padTo7Signals?: boolean },
+): Promise<{ proof: any; calldata: any; publicSignals: string[] }> {
+  const {
     withdrawnValue,
     root,
     treeDepth,
@@ -187,97 +121,27 @@ export async function zkWithdraw({
     newSecret,
     siblings,
     leafIndex,
-  };
+  } = params;
+  const padTo7Signals = options?.padTo7Signals ?? false;
+  console.log("ZK Withdraw:", {
+    withdrawnValue,
+    root,
+    treeDepth,
+    context,
+    asset,
+    leafIndex,
+    padTo7Signals,
+  });
 
-  let proof: any;
-  let publicSignals: string[];
-
-  if (USE_WASMSNARK) {
-    // wasmsnark backend: witness generation via snarkjs + proof via wasmsnark WASM
-    ({ proof, publicSignals } = await getSnarkWorker().wasmsnarkFullProve(
-      input,
-      "/withdraw.wasm",
-      WASMSNARK_WITHDRAW_PKEY,
-    ));
-  } else {
-    // Split approach: witness in worker, prove on main thread.
-    // ffjavascript can only spawn its own worker threads from the main thread
-    // (nested workers from within our Web Worker fail silently → single-threaded).
-    // This enables multi-threaded multiexp: ~44s → ~5-10s.
-    const t0 = performance.now();
-
-    // Step 1: Witness calculation in Web Worker (off main thread, ~1s)
-    const wtnsData = await getSnarkWorker().calculateWitness(input, "/withdraw.wasm");
-    const t1 = performance.now();
-    console.log(`[main] witness calc (worker): ${(t1 - t0).toFixed(0)}ms`);
-
-    // Step 2: Load zkey on main thread (cached after first load)
-    const zkeyBuf = await fetchAndCacheMainThread("/withdraw_0001.zkey");
-    const t2 = performance.now();
-    console.log(`[main] zkey ready: ${(t2 - t1).toFixed(0)}ms`);
-
-    // Step 3: Groth16 prove on main thread — ffjavascript will use SharedArrayBuffer
-    // and spawn its own workers for parallel multiexponentiation.
-    // Pass witness as Uint8Array (raw .wtns binary), not { type: "mem" } object.
-    ({ proof, publicSignals } = await (snarkjs as any).groth16.prove(
-      new Uint8Array(zkeyBuf),
-      new Uint8Array(wtnsData),
-    ));
-    const t3 = performance.now();
-    console.log(`[main] groth16 prove: ${(t3 - t2).toFixed(0)}ms`);
-    console.log(`[main] total proof time: ${(t3 - t0).toFixed(0)}ms`);
+  const paddedSiblings = [...siblings];
+  while (paddedSiblings.length < 128) {
+    paddedSiblings.push("0");
   }
 
-  const calldata = await snarkjs.groth16.exportSolidityCallData(
-    proof,
-    publicSignals,
-  );
+  console.log("Generating ZK proof with", paddedSiblings.length, "siblings");
 
-  const formattedProof = [
-    [toethhex(proof.pi_a[0]), toethhex(proof.pi_a[1])],
-    [
-      [toethhex(proof.pi_b[0][0]), toethhex(proof.pi_b[0][1])],
-      [toethhex(proof.pi_b[1][0]), toethhex(proof.pi_b[1][1])],
-    ],
-    [toethhex(proof.pi_c[0]), toethhex(proof.pi_c[1])],
-    publicSignals.map((x) => toethhex(x)),
-  ];
-
-  return {
-    proof: formattedProof,
-    calldata: JSON.parse("[" + calldata + "]"),
-    publicSignals,
-  };
-}
-
-// TRANSFER PROOF (same circuit with withdrawnValue=0) — for future use
-export async function zkTransferProof({
-  root,
-  treeDepth,
-  context,
-  asset,
-  existingValue,
-  existingNullifier,
-  existingSecret,
-  newNullifier,
-  newSecret,
-  siblings,
-  leafIndex,
-}: {
-  root: string;
-  treeDepth: string;
-  context: string;
-  asset: string;
-  existingValue: string;
-  existingNullifier: string;
-  existingSecret: string;
-  newNullifier: string;
-  newSecret: string;
-  siblings: string[];
-  leafIndex: string;
-}) {
-  return zkWithdraw({
-    withdrawnValue: "0",
+  const input = {
+    withdrawnValue,
     root,
     treeDepth,
     context,
@@ -287,66 +151,84 @@ export async function zkTransferProof({
     existingSecret,
     newNullifier,
     newSecret,
-    siblings,
+    siblings: paddedSiblings,
     leafIndex,
-  });
-}
-
-// DEPOSIT FUNCTION (generate commitment + nullifier) — legacy for non-Paseo networks
-export async function zkDeposit({
-  secret,
-  asset,
-  amount,
-}: {
-  secret: string;
-  asset: string;
-  amount: string;
-}) {
-  const dummySiblings = new Array(256).fill("0");
-  const dummyLeafIndex = "0";
-
-  const input = {
-    secret,
-    asset,
-    amount,
-    leafIndex: dummyLeafIndex,
-    siblings: dummySiblings,
-    recipient: "0", // zero recipient for deposit, not needed on-chain
   };
 
-  const { proof, publicSignals } = await getSnarkWorker().groth16FullProve(
-    input,
-    "/main.wasm",
-    "/main_0000.zkey",
-  );
+  try {
+    const { proof, publicSignals } = await snarkjs.groth16.fullProve(
+      input,
+      "/withdraw_phase2_fixed.wasm",
+      "/withdraw_phase2_fixed_0001.zkey",
+    );
 
-  const [root, nullifier, publicAsset, publicAmount, , , ,] = publicSignals;
+    console.log("  Proof generated");
+    console.log("  Public signals:", publicSignals.length);
 
-  return {
-    commitment: publicSignals[1], // The Merkle leaf to insert (Poseidon(secret, asset, amount))
-    nullifier,
-    asset: publicAsset,
-    amount: publicAmount,
-    publicSignals,
-  };
-}
+    // Circuit output order: [withdrawnValue, treeDepth, context, newCommitmentHash, existingNullifierHash, contextHash]
+    // Format public signals for proof (hex strings)
+    let formattedPublicSignals;
+    if (padTo7Signals) {
+      // v2: pad with assetId as 7th signal
+      formattedPublicSignals = [
+        ...publicSignals.map((x) => toEthHex(x)),
+        toEthHex(params.asset || "0"),
+      ];
+    } else {
+      // v3: exactly 6 signals
+      formattedPublicSignals = publicSignals.map((x) => toEthHex(x));
+    }
 
-export async function generateCommitment(secret: string, nullifierInput: string = "1") {
-  // Circuit expects in[2] = [secret, nullifier_value]
-  // The output is Poseidon(secret, nullifier_value)
+    const formattedProof = [
+      [toEthHex(proof.pi_a[0]), toEthHex(proof.pi_a[1])],
+      [
+        [toEthHex(proof.pi_b[0][0]), toEthHex(proof.pi_b[0][1])],
+        [toEthHex(proof.pi_b[1][0]), toEthHex(proof.pi_b[1][1])],
+      ],
+      [toEthHex(proof.pi_c[0]), toEthHex(proof.pi_c[1])],
+      formattedPublicSignals,
+    ];
 
-  const { proof, publicSignals } = await getSnarkWorker().groth16FullProve(
-    {
-      in: [secret, nullifierInput],
-    },
-    "/asset.wasm",
-    "/asset_0001.zkey",
-  );
+    const calldata = await snarkjs.groth16.exportSolidityCallData(
+      proof,
+      publicSignals,
+    );
+    const parsedCalldata = JSON.parse("[" + calldata + "]");
 
-  const calldata = await getSnarkWorker().groth16ExportSolidityCallData(
-    proof,
-    publicSignals,
-  );
+    // Build calldata for withdraw: pA, pB, pC, pubSignals (as BigInts)
+    const contractPublicSignals = publicSignals.map((s) => BigInt(s));
+    if (padTo7Signals) {
+      contractPublicSignals.push(BigInt(params.asset || "0"));
+    }
 
-  return JSON.parse("[" + calldata + "]");
+    const calldataBigInt = [
+      [BigInt(parsedCalldata[0][0]), BigInt(parsedCalldata[0][1])],
+      [
+        [BigInt(parsedCalldata[1][0][0]), BigInt(parsedCalldata[1][0][1])],
+        [BigInt(parsedCalldata[1][1][0]), BigInt(parsedCalldata[1][1][1])],
+      ],
+      [BigInt(parsedCalldata[2][0]), BigInt(parsedCalldata[2][1])],
+      contractPublicSignals,
+    ];
+
+    // Return publicSignals as strings for UI
+    let publicSignalsArray;
+    if (padTo7Signals) {
+      publicSignalsArray = [
+        ...publicSignals.map((s) => s.toString()),
+        params.asset || "0",
+      ];
+    } else {
+      publicSignalsArray = publicSignals.map((s) => s.toString());
+    }
+
+    return {
+      proof: formattedProof,
+      calldata: calldataBigInt,
+      publicSignals: publicSignalsArray,
+    };
+  } catch (e) {
+    console.error("ZK Proof generation failed:", e);
+    throw e;
+  }
 }

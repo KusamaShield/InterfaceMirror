@@ -66,7 +66,12 @@ export class ZKPService {
   }
 
   // New FixedIlop commitment: Poseidon3(value, asset, Poseidon2(nullifier, secret))
-  generateFixedIlopCommitment(nullifier: string, secret: string, asset: string, amount: bigint): string {
+  generateFixedIlopCommitment(
+    nullifier: string,
+    secret: string,
+    asset: string,
+    amount: bigint,
+  ): string {
     const nullifierBN = BigInt(nullifier);
     const secretBN = BigInt(secret);
     const assetBN = asset === ethers.ZeroAddress ? 0n : BigInt(asset);
@@ -103,7 +108,12 @@ export class ZKPService {
     asset: string,
     amount: bigint,
   ): { asset: string; amount: bigint; commitment: string } {
-    const commitment = this.generateFixedIlopCommitment(nullifier, secret, asset, amount);
+    const commitment = this.generateFixedIlopCommitment(
+      nullifier,
+      secret,
+      asset,
+      amount,
+    );
 
     // Store deposit info for later withdrawal
     this.deposits.set(commitment, {

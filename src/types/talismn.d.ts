@@ -1,5 +1,5 @@
-declare module '@talismn/connect-components' {
-  import { ComponentType } from 'react';
+declare module "@talismn/connect-components" {
+  import { ComponentType } from "react";
 
   export interface WalletAccount {
     address: string;
@@ -9,7 +9,9 @@ declare module '@talismn/connect-components' {
 
   export interface Wallet {
     enable: (appName: string) => Promise<void>;
-    subscribeAccounts: (callback: (accounts: WalletAccount[]) => void) => Promise<() => void>;
+    subscribeAccounts: (
+      callback: (accounts: WalletAccount[]) => void,
+    ) => Promise<() => void>;
     accounts: WalletAccount[];
   }
 
@@ -25,10 +27,12 @@ declare module '@talismn/connect-components' {
   export const WalletSelect: any;
 }
 
-declare module '@talismn/connect-wallets' {
+declare module "@talismn/connect-wallets" {
   export interface Wallet {
     enable: (appName: string) => Promise<void>;
-    subscribeAccounts: (callback: (accounts: WalletAccount[]) => void) => Promise<() => void>;
+    subscribeAccounts: (
+      callback: (accounts: WalletAccount[]) => void,
+    ) => Promise<() => void>;
     accounts: WalletAccount[];
     name: string;
     extension: any;
