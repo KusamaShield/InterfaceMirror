@@ -15,4 +15,10 @@
   --shield-height: calc(var(--shield-width) * 0.8);
   --acc: cubic-bezier(0.390, 0.575, 0.565, 1.000);
   --acc-2: cubic-bezier(0.390, 0.575, 0.565, 1.000);
+  
+  /* Theme Customization Variables */
+  --bg-primary: #09002b;
+  --bg-gradient: #000000;
+  --bg-toaster: none;
+  --bg-toaster-size: auto;
 }
