@@ -26,6 +26,20 @@ export default defineConfig({
       'Cross-Origin-Opener-Policy': 'same-origin',
       'Cross-Origin-Embedder-Policy': 'require-corp',
     },
+    proxy: {
+      '/api/rpc-proxy': {
+        target: 'https://kusama-rpc.laissez-faire.trade',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/rpc-proxy/, ''),
+        configure: (proxy, options) => {
+          proxy.on('proxyRes', (proxyRes, req, res) => {
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+            res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+          });
+        }
+      }
+    }
   },
   preview: {
     headers: {

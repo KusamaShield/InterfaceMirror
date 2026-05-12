@@ -1,7 +1,7 @@
 {
   "name": "kusama-shield",
   "private": true,
-  "version": "0.0.52",
+  "version": "0.0.53",
   "type": "module",
   "scripts": {
     "dev": "vite --host",
@@ -38,6 +38,7 @@
     "buffer": "^6.0.3",
     "comlink": "^4.4.2",
     "dayjs": "^1.11.10",
+    "d3": "^7.9.0", 
     "dotenv": "16.5.0",
     "ethers": "6.13.5",
     "generatezkwasm": "file:public/pkg/generate_zk_wasm",
