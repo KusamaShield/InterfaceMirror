@@ -27,9 +27,7 @@ export default function NetworkSelect({ selectedNetwork, onNetworkChange }: Netw
   const getNetworkLabel = (network: string): string => {
     const labels: Record<string, string> = {
       moonbase: 'Moonbase Testnet',
-      paseo_assethub_v3: 'Paseo AssetHub v3',
-      paseo_assethub_v2: 'Paseo AssetHub v2',
-      paseo_assethub: 'Paseo Assethub',
+      paseo_assethub: 'Paseo AssetHub',
       westend_assethub: 'Westend Assethub',
       kusama: 'Kusama Assethub',
       polkadot: 'Polkadot Assethub',
@@ -43,7 +41,7 @@ export default function NetworkSelect({ selectedNetwork, onNetworkChange }: Netw
         className={`selected-network ${isOpen ? 'open' : ''}`}
         onClick={() => setIsOpen(!isOpen)}
       >
-         {selectedNetwork && (selectedNetwork.includes('paseo') || selectedNetwork === 'polkadot') ? (
+         {selectedNetwork && (selectedNetwork === 'paseo_assethub' || selectedNetwork === 'polkadot') ? (
             <>
               <img src={selectedNetwork.includes('paseo') ? "/paseo-icon.png" : "/favicon-dark.svg"} alt="Network" className="network-logo" />
               <span>{getNetworkLabel(selectedNetwork)}</span>
@@ -67,25 +65,11 @@ export default function NetworkSelect({ selectedNetwork, onNetworkChange }: Netw
               🔗 Moonbase Testnet
             </div>
             <div 
-              className={`network-option ${selectedNetwork === 'paseo_assethub_v3' ? 'selected' : ''}`}
-              onClick={() => handleSelect('paseo_assethub_v3')}
-            >
-              <img src="/paseo-icon.png" alt="Paseo" className="network-logo" />
-              Paseo AssetHub v3 
-            </div>
-            <div 
-              className={`network-option ${selectedNetwork === 'paseo_assethub_v2' ? 'selected' : ''}`}
-              onClick={() => handleSelect('paseo_assethub_v2')}
-            >
-              <img src="/paseo-icon.png" alt="Paseo" className="network-logo" />
-              Paseo AssetHub v2
-            </div>
-            <div 
               className={`network-option ${selectedNetwork === 'paseo_assethub' ? 'selected' : ''}`}
               onClick={() => handleSelect('paseo_assethub')}
             >
               <img src="/paseo-icon.png" alt="Paseo" className="network-logo" />
-              Paseo Assethub
+              Paseo AssetHub
             </div>
             <div 
               className={`network-option ${selectedNetwork === 'westend_assethub' ? 'selected' : ''}`}
