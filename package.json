@@ -8,6 +8,7 @@
     "local": "vite",
     "txgen": "node src/tests/txtest.js",
     "check_balance": "npx tsx src/tests/balance.ts",
+    "gasestimate": "npx tsx src/tests/gas_estimate.ts",
     "check_foreign_balance": "npx tsx src/tests/foreign_asset_balance.ts",
     "format": "npx prettier --write src/*/*.ts && npx prettier --write src/*.tsx",
     "txtest": "npx tsx  src/tests/txtest.ts",

@@ -113,7 +113,7 @@ const NETWORKS = {
     rpcEndpoint: "https://kusama-rpc.laissez-faire.trade/",
     wsEndpoint: "wss://asset-hub-paseo-rpc.n.dwellir.com",
     faucet: "https://faucet.polkadot.io",
-    block_explorer: "https://testnet.routescan.io",
+    block_explorer: "https://blockscout-testnet.polkadot.io",
     shield_address: "0x3099889C1538f0200B831181cbfb532a4e9A418F",
     verifier_address: "0xeb5ef0863A83CBAaeA103841C4FADE3b5284c196",
     leanIMT_address: "0x20EAE9e1683816Bb6299f133696F4cBd841E3F12",
@@ -332,6 +332,9 @@ export function App() {
   const [ProofWorker, setProofWorker] = useState<any>(null);
   const [isGeneratingSecret, setIsGeneratingSecret] = useState(false);
   const [generatedSecret, setGeneratedSecret] = useState<string>("");
+  const [estimatedGasCost, setEstimatedGasCost] = useState<string>("");
+  const [isGasPriceLoading, setIsGasPriceLoading] = useState<boolean>(false);
+  const [recentGasUnits, setRecentGasUnits] = useState<Record<string, { shield: bigint; unshield: bigint }>>({});
 
   // Swap state variables
   const [fromCurrency, setFromCurrency] = useState<string>("BTC");
@@ -1437,6 +1440,13 @@ export function App() {
         );
         // 8. Wait for confirmation
         const receipt = await txResponse.wait();
+        setRecentGasUnits(prev => ({
+          ...prev,
+          [selectedNetwork]: {
+            ...prev[selectedNetwork],
+            shield: receipt.gasUsed,
+          },
+        }));
 
         toast(`Transaction confirmed in block: ${receipt.blockNumber}`, {
           position: "top-right",
@@ -3229,6 +3239,13 @@ export function App() {
           );
           // 8. Wait for confirmation
           const receipt2 = await txResponse.wait();
+          setRecentGasUnits(prev => ({
+            ...prev,
+            [selectedNetwork]: {
+              ...prev[selectedNetwork],
+              unshield: receipt2.gasUsed,
+            },
+          }));
 
           toast(`Transaction confirmed in block: ${receipt2.blockNumber}`, {
             position: "top-right",
@@ -4550,6 +4567,142 @@ export function App() {
     }
   }, [poolComposition, showPrivacy]);
 
+  // Estimate gas cost for shield/unshield
+  useEffect(() => {
+    if (activeTab === "bridge") {
+      setEstimatedGasCost("");
+      setIsGasPriceLoading(false);
+      return;
+    }
+
+    setIsGasPriceLoading(true);
+    const asset = (NETWORKS[selectedNetwork] as any)?.asset || "";
+
+    const getGasCost = async (): Promise<string> => {
+      let gasPriceWei: bigint;
+      try {
+        if (selectedWalletEVM && isWalletConnected) {
+          const signer = await selectedWalletEVM.getSigner();
+          const prov = signer.provider;
+          if (prov) {
+            const fd = await prov.getFeeData();
+            if (fd.gasPrice && fd.gasPrice > 0n) {
+              gasPriceWei = fd.gasPrice;
+            } else {
+              throw new Error("no gas price");
+            }
+          } else {
+            throw new Error("no provider");
+          }
+        } else {
+          const rpcUrl = (NETWORKS[selectedNetwork] as any)?.rpcEndpoint;
+          if (!rpcUrl) throw new Error("no rpc");
+          const resp = await fetch(rpcUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              jsonrpc: "2.0",
+              id: 1,
+              method: "eth_gasPrice",
+              params: [],
+            }),
+            signal: AbortSignal.timeout(5000),
+          });
+          const json = await resp.json();
+          if (json.error) throw new Error(json.error.message);
+          gasPriceWei = BigInt(json.result);
+        }
+      } catch {
+        gasPriceWei = ethers.parseUnits("1", "gwei");
+      }
+
+      let gasUnits: bigint;
+
+      // Try to get a real gas estimate from the contract's deposit method
+      try {
+        const networkConfig = (NETWORKS[selectedNetwork] as any);
+        if (networkConfig?.shield_address && networkConfig?.abi && amount && Number(amount) > 0) {
+          let provider: ethers.Provider;
+          if (selectedWalletEVM && isWalletConnected) {
+            provider = selectedWalletEVM;
+          } else if (networkConfig.rpcEndpoint) {
+            provider = new ethers.JsonRpcProvider(networkConfig.rpcEndpoint);
+          } else {
+            throw new Error("no provider for estimate");
+          }
+
+          const contract = new ethers.Contract(
+            networkConfig.shield_address,
+            networkConfig.abi,
+            provider,
+          );
+
+          const depositAmount = ethers.parseEther(amount);
+
+          if (activeTab === "shield") {
+            if (selectedNetwork === "kusama") {
+              gasUnits = await contract.deposit3.estimateGas(
+                ethers.ZeroAddress,
+                depositAmount,
+                ethers.ZeroHash,
+                { value: depositAmount },
+              );
+            } else {
+              // paseo_assethub, paseo_assethub_v2, polkadot all use depositNative
+              const dummyCommitment = ethers.toBeArray(1n);
+              const dummyNullifier = ethers.toBeArray(1n);
+              gasUnits = await contract.depositNative.estimateGas(
+                dummyCommitment,
+                dummyNullifier,
+                { value: depositAmount },
+              );
+            }
+          } else if (activeTab === "unshield") {
+            throw new Error("unshield estimate not implemented via contract");
+          } else {
+            throw new Error("unknown tab");
+          }
+        } else {
+          throw new Error("no contract config or amount");
+        }
+      } catch (e) {
+        console.warn("Gas estimate via contract failed, using defaults:", e);
+        const recent = recentGasUnits[selectedNetwork];
+        if (recent) {
+          gasUnits = activeTab === "unshield" ? recent.unshield : recent.shield;
+        } else {
+          const defaults: Record<string, { shield: bigint; unshield: bigint }> = {
+            paseo_assethub: { shield: 20000n, unshield: 40000n },
+            paseo_assethub_v2: { shield: 25000n, unshield: 50000n },
+            polkadot: { shield: 50000n, unshield: 100000n },
+            westend_assethub: { shield: 150000n, unshield: 300000n },
+            kusama: { shield: 200000n, unshield: 400000n },
+          };
+          gasUnits = defaults[selectedNetwork]
+            ? (activeTab === "unshield" ? defaults[selectedNetwork].unshield : defaults[selectedNetwork].shield)
+            : 200000n;
+        }
+      }
+
+      const totalCost = gasUnits * gasPriceWei;
+      return Number(ethers.formatEther(totalCost)).toString();
+    };
+
+    let cancelled = false;
+    getGasCost().then((costStr) => {
+      if (!cancelled) {
+        setEstimatedGasCost(costStr);
+        setIsGasPriceLoading(false);
+      }
+    }).catch(() => {
+      if (!cancelled) {
+        setEstimatedGasCost("Error");
+        setIsGasPriceLoading(false);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [activeTab, selectedNetwork, isWalletConnected, selectedWalletEVM, amount]);
+
   return (
     <div className="App">
       <ToastContainer />
@@ -5224,6 +5377,27 @@ export function App() {
                         </span>
                       )}
                     </div>
+                    {(activeTab === "shield" || activeTab === "unshield") && (
+                      <div
+                        className="balance"
+                        style={{
+                          marginLeft: "auto",
+                          textAlign: "right",
+                          opacity: 0.75,
+                        }}
+                      >
+                        Gas Price:{" "}
+                        {isGasPriceLoading ? (
+                          <span style={{ opacity: 0.7 }}>Calculating...</span>
+                        ) : estimatedGasCost ? (
+                          <>
+                            {estimatedGasCost} {NETWORKS[selectedNetwork].asset}
+                          </>
+                        ) : (
+                          <span style={{ opacity: 0.7 }}>Not available</span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 
