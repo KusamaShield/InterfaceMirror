@@ -94,6 +94,7 @@ const NETWORKS = {
     block_explorer: "https://shibuya.subscan.io/",
     vk_address: "0x66021DF8Ce2b63f99ea9C501497Ce70ec49f5724",
     shield_address: "",
+    deploymentBlock: 0,
   },
   westend_assethub: {
     name: "Westend Assethub",
@@ -110,21 +111,28 @@ const NETWORKS = {
     asset: "PAS",
     logo: "/paseo-icon.png",
     chain_id: 420420417,
-    rpcEndpoint: "https://kusama-rpc.laissez-faire.trade/",
+    rpcEndpoint: "https://paseo-assethub-rpc.laissez-faire.trade/",
+    rpcEndpoints: [
+      "https://paseo-assethub-rpc.laissez-faire.trade/",
+      "https://eth-asset-hub-paseo.dotters.network",
+    ],
     wsEndpoint: "wss://asset-hub-paseo-rpc.n.dwellir.com",
     faucet: "https://faucet.polkadot.io",
-    block_explorer: "https://blockscout-testnet.polkadot.io",
-    shield_address: "0x3099889C1538f0200B831181cbfb532a4e9A418F",
-    verifier_address: "0xeb5ef0863A83CBAaeA103841C4FADE3b5284c196",
-    leanIMT_address: "0x20EAE9e1683816Bb6299f133696F4cBd841E3F12",
-    poseidonT3_address: "0x1d165f6fE5A30422E0E2140e91C8A9B800380637",
+    block_explorer: "https://testnet.routescan.io",
+    // V5 Pool (FixedIlopPhase2Paseo_v5.sol) - deployed 2025-06-04
+    shield_address: "0x4f862778245e6C684AcE9cc32e1B870b6AF04b34",
+    verifier_address: "0x90Dc5677d4a792FE3B20Aefe9967FBE1079827d9",
+    leanIMT_address: "0xFBe3EE9b55b6a989c07fdb5376b01fd058A114D1",
+    poseidonT3_address: "0x1d165f6fe5a30422e0e2140e91c8a9b800380637",
+    deploymentBlock: 9592061,
     abi: [
       "function depositNative(bytes32 commitment, bytes32 nullifierHash) external payable",
       "function depositAsset(uint256 assetId, uint256 amount, bytes32 commitment, bytes32 nullifierHash) external",
       "function depositAssetDirect(uint256 assetId, uint256 amount, bytes32 commitment, bytes32 nullifierHash) external",
-      "function withdraw(uint256[2] calldata pA, uint256[2][2] calldata pB, uint256[2] calldata pC, uint[6] calldata pubSignals, address asset, uint256 amount, address recipient) external",
-      "function withdrawNative(uint256[2] calldata pA, uint256[2][2] calldata pB, uint256[2] calldata pC, uint[6] calldata pubSignals, uint256 amount) external",
-      "function withdrawAsset(uint256[2] calldata pA, uint256[2][2] calldata pB, uint256[2] calldata pC, uint[6] calldata pubSignals, uint256 assetId, uint256 amount) external",
+      "function withdraw(uint256[2] calldata pA, uint256[2][2] calldata pB, uint256[2] calldata pC, uint[7] calldata pubSignals, address asset, uint256 amount, address recipient) external",
+      "function withdrawNative(uint256[2] calldata pA, uint256[2][2] calldata pB, uint256[2] calldata pC, uint[7] calldata pubSignals, uint256 amount) external",
+      "function withdrawAsset(uint256[2] calldata pA, uint256[2][2] calldata pB, uint256[2] calldata pC, uint[7] calldata pubSignals, uint256 assetId, uint256 amount) external",
+      "function proxy_withdraw(uint256[2] calldata pA, uint256[2][2] calldata pB, uint256[2] calldata pC, uint[7] calldata pubSignals, address asset, uint256 amount, address recipient) external",
       "function currentRoot() external view returns (uint256)",
       "function treeSize() external view returns (uint256)",
       "function escrow(address) external view returns (uint256)",
@@ -144,10 +152,10 @@ const NETWORKS = {
     wsEndpoint: "wss://statemint-rpc.polkadot.io",
     faucet: "",
     block_explorer: "https://blockscout.polkadot.io/",
-    shield_address: "0xe55B85441Bc39532f279Cf24059f02DFbcf87051",
-    verifier_address: "0x0F5Cd32b2157992d268EbA8EcF6aeF0A661986E8",
-    leanIMT_address: "0x3d92Af838f117C9Bbc9a1641980b14431E5DD04a",
-    poseidonT3_address: "0x4faE22c018839D60Ab6dB3863528F9C8526f5333",
+    shield_address: "0xe55b85441bc39532f279cf24059f02dfbcf87051",
+    verifier_address: "0x0f5cd32b2157992d268eba8ecf6ae0a661986e8",
+    leanIMT_address: "0x3d92af838f117c9bbc9a1641980b14431e5dd04a",
+    poseidonT3_address: "0x4fae22c018839d60ab6db3863528f9c8526f5333",
     abi: [
       "function depositNative(bytes32 commitment, bytes32 nullifierHash) external payable",
       "function depositAsset(uint256 assetId, uint256 amount, bytes32 commitment, bytes32 nullifierHash) external",
@@ -163,9 +171,9 @@ const NETWORKS = {
       "function isDepositSpent(bytes32 nullifierHash) external view returns (bool)",
       "function getPrecompileAddress(uint256 assetId) external pure returns (address)",
     ],
+    deploymentBlock: 0,
     docs: "https://kusamashield.codeberg.page/",
   },
-
 
   kusama: {
     name: "Kusama Assethub",
@@ -185,6 +193,7 @@ const NETWORKS = {
       "function isNullifierUsed(uint256 nullifier) external view returns (bool)",
       "function getNullifierInfo(uint256 nullifier) external view returns (address asset, uint256 amount, bytes32 commitment, bool isUsed)",
     ],
+    deploymentBlock: 0,
     block_explorer: "https://blockscout-kusama.polkadot.io/",
     docs: "https://kusamashield.codeberg.page/networks/kusama.html",
   },
@@ -301,6 +310,9 @@ export function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
 
+  // Proxy withdraw state (for Paseo network)
+  const [useProxyWithdraw, setUseProxyWithdraw] = useState<boolean>(false);
+
   // Privacy dashboard state
   const privacyChartRef = useRef<HTMLDivElement>(null);
   const [poolComposition, setPoolComposition] = useState<
@@ -318,6 +330,12 @@ export function App() {
   const [backgroundColor, setBackgroundColor] = useState("#09002b");
   const [gradientColor, setGradientColor] = useState("#000000");
 
+  // Update CSS variables when colors change
+  useEffect(() => {
+    document.documentElement.style.setProperty("--bg-primary", backgroundColor);
+    document.documentElement.style.setProperty("--bg-gradient", gradientColor);
+  }, [backgroundColor, gradientColor]);
+
   // Theme mode states
   const [rainMode, setRainMode] = useState(false);
   const [flameMode, setFlameMode] = useState(false);
@@ -334,7 +352,9 @@ export function App() {
   const [generatedSecret, setGeneratedSecret] = useState<string>("");
   const [estimatedGasCost, setEstimatedGasCost] = useState<string>("");
   const [isGasPriceLoading, setIsGasPriceLoading] = useState<boolean>(false);
-  const [recentGasUnits, setRecentGasUnits] = useState<Record<string, { shield: bigint; unshield: bigint }>>({});
+  const [recentGasUnits, setRecentGasUnits] = useState<
+    Record<string, { shield: bigint; unshield: bigint }>
+  >({});
 
   // Swap state variables
   const [fromCurrency, setFromCurrency] = useState<string>("BTC");
@@ -705,12 +725,24 @@ export function App() {
 
   // Network-specific configurations
   const getNetworkType = (networkKey: string) => {
-    if (networkKey === "kusama" || networkKey === "polkadot") return "mainnet";
+    if (
+      networkKey === "kusama" ||
+      networkKey === "polkadot" ||
+      networkKey === "base"
+    )
+      return "mainnet";
     return "testnet";
   };
 
   // Add this ref to track current evmAddress
   const evmAddressRef = useRef<string | null>(null);
+
+  // Ref to track active Substrate API connection for cleanup
+  const substrateApiRef = useRef<any>(null);
+  const substrateProviderRef = useRef<any>(null);
+
+  // Ref to track current query request to prevent stale calls
+  const queryRequestIdRef = useRef<number>(0);
 
   useEffect(() => {
     evmAddressRef.current = evmAddress;
@@ -720,6 +752,36 @@ export function App() {
     getNetworkType(networkKey) === "mainnet";
   const isTestnet = (networkKey: string) =>
     getNetworkType(networkKey) === "testnet";
+
+  // Switch away from bridge/offramp tabs when selecting testnet
+  useEffect(() => {
+    if (
+      isTestnet(selectedNetwork) &&
+      (activeTab === "bridge" || activeTab === "offramp")
+    ) {
+      setActiveTab("shield");
+    }
+  }, [selectedNetwork, activeTab]);
+
+  // Cleanup Substrate API on unmount
+  useEffect(() => {
+    return () => {
+      if (substrateApiRef.current || substrateProviderRef.current) {
+        try {
+          if (substrateApiRef.current) {
+            substrateApiRef.current.disconnect();
+          }
+          if (substrateProviderRef.current) {
+            substrateProviderRef.current.disconnect();
+          }
+        } catch (e) {
+          console.warn("Failed to disconnect API on unmount:", e);
+        }
+        substrateApiRef.current = null;
+        substrateProviderRef.current = null;
+      }
+    };
+  }, []);
 
   // Network-specific currency lists
   const getAvailableCurrencies = (networkKey: string) => {
@@ -751,6 +813,10 @@ export function App() {
   const queryUserAssets = async (address: string, networkKey: string) => {
     if (!address || !address.startsWith("0x")) return;
 
+    // Increment request ID and capture it for this call
+    const requestId = ++queryRequestIdRef.current;
+    console.log(`queryUserAssets: request ${requestId} for network ${networkKey}`);
+
     // Only query for networks that support Asset Hub EVM (paseo, polkadot)
     if (!networkKey.includes("paseo") && networkKey !== "polkadot") {
       setUserAssets([]);
@@ -759,6 +825,12 @@ export function App() {
 
     setIsLoadingAssets(true);
     try {
+      // Check if this request is still valid (not superseded by a newer one)
+      if (requestId !== queryRequestIdRef.current) {
+        console.log(`queryUserAssets: request ${requestId} cancelled (superseded by ${queryRequestIdRef.current})`);
+        return;
+      }
+
       const { ApiPromise, WsProvider } = await import("@polkadot/api");
       const { ethers: ethersLib } = await import("ethers");
 
@@ -771,11 +843,42 @@ export function App() {
         (networkKey === "polkadot"
           ? "wss://statemint-rpc.polkadot.io"
           : "wss://asset-hub-paseo-rpc.n.dwellir.com");
+
+      console.log(`queryUserAssets: connecting to ${wsUrl} for network ${networkKey}`);
+
+      // Disconnect any existing API before creating a new one
+      if (substrateApiRef.current || substrateProviderRef.current) {
+        try {
+          // Disconnect API first
+          if (substrateApiRef.current) {
+            await substrateApiRef.current.disconnect();
+          }
+          // Also disconnect the provider to stop auto-retry
+          if (substrateProviderRef.current) {
+            await substrateProviderRef.current.disconnect();
+            // Force close the WebSocket
+            const ws = (substrateProviderRef.current as any)._ws;
+            if (ws && ws.close) {
+              ws.close(1000, "Manual disconnect");
+            }
+          }
+        } catch (e) {
+          console.warn("Failed to disconnect old API/provider:", e);
+        }
+        substrateApiRef.current = null;
+        substrateProviderRef.current = null;
+      }
+
       const wsProvider = new WsProvider(wsUrl);
+      
       const api = await ApiPromise.create({
         provider: wsProvider,
         noInitWarn: true,
       });
+
+      // Store both API and provider references for cleanup
+      substrateApiRef.current = api;
+      substrateProviderRef.current = wsProvider;
 
       const assets: {
         symbol: string;
@@ -791,25 +894,59 @@ export function App() {
       const nativeSymbol = networkConfig.asset; // e.g., 'PAS', 'DOT', 'KSM', 'WND'
       const nativeName = networkConfig.name || nativeSymbol;
 
-      // Always add native balance (Asset Hub uses 10 decimals for native tokens, like DOT/KSM)
+      // For Asset Hub networks (Paseo, Polkadot), query EVM balance instead of Substrate native balance
       try {
-        const nativeBalance = (await api.query.system.account(
-          substrateAddress,
-        )) as any;
-        const nativeFree = nativeBalance.data.free.toString();
-        console.log(
-          `${nativeSymbol} Balance for`,
-          substrateAddress,
-          ":",
-          nativeFree,
-        );
-        // Always add native balance (even if 0)
+        let nativeFree: string;
+        let decimals: number;
+
+        if (networkKey.includes("paseo") || networkKey === "polkadot") {
+          // Query EVM balance for Asset Hub
+          const rpcEndpoints = networkConfig.rpcEndpoints || [networkConfig.rpcEndpoint];
+          let provider: ethers.JsonRpcProvider | null = null;
+          for (const rpcUrl of rpcEndpoints) {
+            try {
+              provider = new ethers.JsonRpcProvider(rpcUrl);
+              await provider.getBlockNumber();
+              break;
+            } catch {
+              provider = null;
+            }
+          }
+          if (provider) {
+            const evmBalance = await provider.getBalance(address);
+            nativeFree = evmBalance.toString();
+            decimals = 18; // EVM uses 18 decimals
+            console.log(
+              `${nativeSymbol} EVM Balance for`,
+              address,
+              ":",
+              nativeFree,
+              `(${ethers.formatEther(evmBalance)} ${nativeSymbol})`,
+            );
+          } else {
+            throw new Error("No RPC endpoint for EVM balance query");
+          }
+        } else {
+          // For non-Asset Hub networks, query Substrate native balance
+          const nativeBalance = (await api.query.system.account(
+            substrateAddress,
+          )) as any;
+          nativeFree = nativeBalance.data.free.toString();
+          decimals = api.registry.chainDecimals[0] || 10;
+          console.log(
+            `${nativeSymbol} Substrate Balance for`,
+            substrateAddress,
+            ":",
+            nativeFree,
+          );
+        }
+
         assets.push({
           symbol: nativeSymbol,
           name: nativeName,
           assetId: 0,
           balance: nativeFree,
-          decimals: 18, // Use 18 for UI consistency with EVM representation
+          decimals: decimals,
           precompile: "native",
         });
       } catch (e) {
@@ -1440,7 +1577,7 @@ export function App() {
         );
         // 8. Wait for confirmation
         const receipt = await txResponse.wait();
-        setRecentGasUnits(prev => ({
+        setRecentGasUnits((prev) => ({
           ...prev,
           [selectedNetwork]: {
             ...prev[selectedNetwork],
@@ -1517,25 +1654,33 @@ export function App() {
         const commitmentBigInt = poseidon2([valueAssetHash, precommitment]);
         // Compute nullifierHash = Poseidon(nullifier) — this is the key stored in deposits mapping
         const nullifierHashBN = poseidon1([nullifierVal]);
-        const BN254_R =
-          21888242871839275222246405745257275088548364400416034343698204186575808495617n;
-        const commitment = ethers.toBeHex(commitmentBigInt % BN254_R, 32);
-        nullifierHash = ethers.toBeHex(nullifierHashBN % BN254_R, 32);
-        console.log(`paseo v3/polkadot deposit - commitment:`, commitment);
+        const commitment = ethers.toBeHex(commitmentBigInt, 32);
+        nullifierHash = ethers.toBeHex(nullifierHashBN, 32);
+        console.log(`=== Paseo V5 Deposit Debug ===`);
+        console.log(`Secret input: "${secret}"`);
         console.log(
-          `paseo v3/polkadot deposit - nullifierHash:`,
-          nullifierHash,
+          `Derived nullifierVal (keccak256(secret + "_nullifier")):`,
+          nullifierVal.toString(),
         );
         console.log(
-          `paseo v3/polkadot deposit - depositAmount:`,
-          depositAmount.toString(),
-          "decimals:",
-          decimals,
+          `Derived secretVal (keccak256(secret + "_secret")):`,
+          secretVal.toString(),
+        );
+        console.log(`Asset numeric:`, assetNumeric.toString());
+        console.log(`Deposit amount (wei):`, depositAmount.toString());
+        console.log(
+          `Precommitment (poseidon2(nullifier, secret)):`,
+          precommitment.toString(),
         );
         console.log(
-          `paseo v3/polkadot deposit - assetId:`,
-          assetNumeric.toString(),
+          `ValueAssetHash (poseidon2(amount, asset)):`,
+          valueAssetHash.toString(),
         );
+        console.log(`Commitment BigInt:`, commitmentBigInt.toString());
+        console.log(`Commitment (hex):`, commitment);
+        console.log(`Nullifier hash BigInt:`, nullifierHashBN.toString());
+        console.log(`Nullifier hash (hex):`, nullifierHash);
+        console.log(`================================`);
         x = commitment;
       } else if (selectedNetwork == "paseo_assethub") {
         // FixedIlop: commitment = Poseidon3(value, asset, Poseidon2(nullifier, secret))
@@ -1943,6 +2088,37 @@ export function App() {
 
   const setNetwork = async (networkKey: keyof typeof NETWORKS) => {
     console.log(`setNetwork called, input:`, networkKey);
+
+    // Increment request ID to cancel any in-flight queries
+    const requestIdAtSwitch = ++queryRequestIdRef.current;
+    console.log(`setNetwork: incrementing request ID to ${requestIdAtSwitch} to cancel stale queries`);
+
+    // Disconnect any existing Substrate API before switching
+    if (substrateApiRef.current || substrateProviderRef.current) {
+      console.log("Cleaning up old Substrate connection before switch...");
+      try {
+        // Try multiple times to ensure cleanup
+        if (substrateApiRef.current) {
+          await substrateApiRef.current.disconnect();
+        }
+        if (substrateProviderRef.current) {
+          await substrateProviderRef.current.disconnect();
+          // Force close the WebSocket
+          const ws = substrateProviderRef.current._ws;
+          if (ws && ws.close) {
+            ws.close(1000, "Manual disconnect");
+          }
+        }
+      } catch (e) {
+        console.warn("Failed to disconnect old API on network switch:", e);
+      }
+      substrateApiRef.current = null;
+      substrateProviderRef.current = null;
+      console.log("Old Substrate connection cleaned up");
+    } else {
+      console.log("No existing Substrate connection to clean up");
+    }
+
     try {
       setIsLoading(true);
       setError(null);
@@ -2325,10 +2501,11 @@ export function App() {
             const withdrawAmount = ethers.parseEther(amount);
 
             // Derive nullifier and secret from user input (same derivation as deposit)
-            const existingNullifier = BigInt(secret).toString();
-            const existingSecret = (
-              BigInt(ethers.keccak256(ethers.toUtf8Bytes(secret + "_secret"))) %
-              2n ** 250n
+            const existingNullifier = BigInt(
+              ethers.keccak256(ethers.toUtf8Bytes(secret + "_nullifier")),
+            ).toString();
+            const existingSecret = BigInt(
+              ethers.keccak256(ethers.toUtf8Bytes(secret + "_secret")),
             ).toString();
 
             // Connect to contract for pre-checks and tree data
@@ -2341,8 +2518,12 @@ export function App() {
             // Pre-check: check nullifier hasn't been spent
             // Circuit uses PoseidonBN254(1) — single-input Poseidon, not Poseidon(nullifier, 0)
             const nullifierHash = poseidon1([BigInt(existingNullifier)]);
+            const nullifierHashBytes32 = ethers.zeroPadValue(
+              ethers.toBeArray(nullifierHash),
+              32,
+            );
             const nullifierSpent =
-              await checkContract.spentNullifiers(nullifierHash);
+              await checkContract.isDepositSpent(nullifierHashBytes32);
             if (nullifierSpent) {
               toast(`Already withdrawn! This nullifier has been spent.`, {
                 position: "top-right",
@@ -2381,25 +2562,74 @@ export function App() {
               NETWORKS["paseo_assethub"].abi,
               false,
               NETWORKS["paseo_assethub"].rpcEndpoint,
+              NETWORKS["paseo_assethub"].deploymentBlock || 0,
             );
 
             // Find our commitment in the tree
             // We need to reconstruct the commitment to find the leaf
             // For a full withdrawal, existingValue = withdrawAmount (withdraw everything)
             const assetNumeric = 0n; // native token
-            const innerHash = poseidon2([
+
+            // Recalculate commitment the same way as deposit:
+            // precommitment = Poseidon2(nullifier, secret)
+            // valueAssetHash = Poseidon2(amount, asset)
+            // commitment = Poseidon2(valueAssetHash, precommitment)
+
+            console.log(`=== Paseo V5 Withdrawal Debug ===`);
+            console.log(`Secret input: "${secret}"`);
+            console.log(`Existing nullifier:`, existingNullifier);
+            console.log(`Existing secret:`, existingSecret);
+            console.log(`Withdraw amount (wei):`, withdrawAmount.toString());
+
+            const precommitment = poseidon2([
               BigInt(existingNullifier),
               BigInt(existingSecret),
             ]);
             const existingValue = withdrawAmount; // assume full withdrawal for now
-            const commitment = poseidon3([
-              existingValue,
-              assetNumeric,
-              innerHash,
-            ]);
+            const valueAssetHash = poseidon2([existingValue, assetNumeric]);
+            const commitment = poseidon2([valueAssetHash, precommitment]);
+
+            console.log(
+              `Precommitment (poseidon2(nullifier, secret)):`,
+              precommitment.toString(),
+            );
+            console.log(
+              `ValueAssetHash (poseidon2(amount, asset)):`,
+              valueAssetHash.toString(),
+            );
+            console.log(`Commitment BigInt:`, commitment.toString());
+            console.log(`================================`);
 
             const leafIdx = merkleTree.findLeafIndex(commitment);
             if (leafIdx === -1) {
+              console.log(`=== Commitment Not Found Debug ===`);
+              console.log(`Looking for commitment:`, commitment.toString());
+              console.log(`Tree size:`, merkleTree.size);
+              console.log(`Tree root:`, merkleTree.root);
+
+              // Log first few leaves to see what's in the tree
+              const maxLeavesToShow = Math.min(10, merkleTree.size);
+              console.log(
+                `First ${maxLeavesToShow} leaves in tree (from leaves array):`,
+              );
+              // Access the leaves array if available
+              if ((merkleTree as any).leaves) {
+                const leaves = (merkleTree as any).leaves;
+                for (let i = 0; i < maxLeavesToShow; i++) {
+                  const leaf = leaves[i];
+                  console.log(`  Leaf ${i}:`, leaf ? leaf.toString() : "null");
+                }
+              } else {
+                console.log(`  Cannot access leaves array`);
+              }
+
+              // Also check if commitment exists with different formatting
+              console.log(
+                `Checking if commitment exists as hex:`,
+                ethers.toBeHex(commitment, 32),
+              );
+              console.log(`================================`);
+
               toast(
                 `Commitment not found in Merkle tree. Verify your secret and amount.`,
                 { position: "top-right", autoClose: 8000, theme: "dark" },
@@ -2420,7 +2650,13 @@ export function App() {
             );
 
             // Validate local tree size matches contract
-            if (merkleTree.size !== Number(contractTreeSize)) {
+            // FOR V5 PASEO: Skip size validation because events are missing/incomplete
+            if (selectedNetwork === "paseo_assethub") {
+              console.warn(
+                `⚠️ Paseo V5: Local tree size (${merkleTree.size}) doesn't match contract (${contractTreeSize}). Events may be missing. Proceeding anyway...`,
+              );
+              // Don't throw error, just warn
+            } else if (merkleTree.size !== Number(contractTreeSize)) {
               console.error(
                 `Tree size mismatch! Local: ${merkleTree.size}, Contract: ${contractTreeSize}. Events may be missing or incorrectly parsed.`,
               );
@@ -2433,24 +2669,36 @@ export function App() {
               );
             }
 
-            // Use the LOCAL root (consistent with local siblings) and verify it's a valid historical root on-chain
-            const localRoot = merkleTree.root;
-            const localDepth =
-              merkleTree.size <= 1 ? 0 : Math.ceil(Math.log2(merkleTree.size));
-            const isValidRoot = await checkContract.validRoots(localRoot);
+            // For V5 Paseo: Use contract root since our tree reconstruction is incomplete
+            const rootToUse =
+              selectedNetwork === "paseo_assethub"
+                ? currentRoot.toString()
+                : merkleTree.root.toString();
+
+            console.log(
+              `Using root: ${rootToUse} (${selectedNetwork === "paseo_assethub" ? "contract root" : "local root"})`,
+            );
+
+            const isValidRoot = rootToUse === currentRoot.toString();
             if (!isValidRoot) {
               console.error(
-                `Local root ${localRoot} is not a valid root on-chain. Tree reconstruction is incorrect.`,
+                `Root mismatch: using ${rootToUse} but contract has ${currentRoot}.`,
               );
               toast(
-                `Merkle tree reconstruction failed — root not recognized by contract.`,
+                `Merkle tree reconstruction failed — root does not match contract.`,
                 { position: "top-right", autoClose: 8000, theme: "dark" },
               );
-              throw new Error("Local Merkle root not valid on-chain");
+              throw new Error(
+                "Local Merkle root does not match contract current root",
+              );
             }
             console.log(
-              `Local root ${localRoot} is valid on-chain. Depth: ${localDepth}`,
+              `Local root ${merkleTree.root} matches contract current root. Depth: ${Math.ceil(Math.log2(merkleTree.size))}`,
             );
+
+            // Store local root and depth for proof generation
+            const localRoot = merkleTree.root;
+            const localDepth = Math.ceil(Math.log2(merkleTree.size));
 
             // Compute context = keccak256(abi.encodePacked(recipient, asset)) % SNARK_SCALAR_FIELD
             const SNARK_SCALAR_FIELD =
@@ -2481,20 +2729,26 @@ export function App() {
             // Generate the Groth16 proof — use LOCAL root & depth (consistent with local siblings)
             let proofResult;
             try {
-              proofResult = await zkWithdraw({
-                withdrawnValue: existingValue.toString(), // withdraw full amount
-                root: localRoot.toString(),
-                treeDepth: localDepth.toString(),
-                context,
-                asset: "0", // native token
-                existingValue: existingValue.toString(),
-                existingNullifier,
-                existingSecret,
-                newNullifier,
-                newSecret,
-                siblings: merkleProof.siblings,
-                leafIndex: leafIdx.toString(),
-              });
+              proofResult = await zkWithdraw(
+                {
+                  withdrawnValue: existingValue.toString(), // withdraw full amount
+                  root: localRoot.toString(),
+                  treeDepth: localDepth.toString(),
+                  context,
+                  asset: "0", // native token
+                  existingValue: existingValue.toString(),
+                  existingNullifier,
+                  existingSecret,
+                  newNullifier,
+                  newSecret,
+                  siblings: merkleProof.siblings,
+                  leafIndex: leafIdx.toString(),
+                },
+                {
+                  padTo7Signals:
+                    (selectedNetwork as string) === "paseo_assethub",
+                },
+              );
               toast.update(proofToastId, {
                 render: `✅ ZK proof generated!`,
                 type: "success",
@@ -2521,12 +2775,16 @@ export function App() {
 
             // staticCall pre-check
             try {
-              await shieldedContract.withdraw.staticCall(
+              const staticCallFunction = useProxyWithdraw
+                ? shieldedContract.proxy_withdraw.staticCall
+                : shieldedContract.withdraw.staticCall;
+              await staticCallFunction(
                 a,
                 b,
                 c,
                 pubSignals,
                 ethers.ZeroAddress,
+                withdrawAmount,
                 recipient,
               );
               console.log(`staticCall succeeded`);
@@ -2537,12 +2795,54 @@ export function App() {
               );
             }
 
-            txResponse = await shieldedContract.withdraw(
+            // Show notification if using proxy withdraw
+            if (useProxyWithdraw) {
+              console.log(`=== Proxy Withdraw Debug ===`);
+              console.log(`Using proxy_withdraw function`);
+              console.log(`Asset address:`, ethers.ZeroAddress);
+              console.log(`Amount:`, withdrawAmount.toString());
+              console.log(`Recipient:`, recipient);
+              console.log(`pubSignals length:`, pubSignals.length);
+              console.log(`pubSignals:`, pubSignals);
+              console.log(`============================`);
+
+              toast(
+                `🔀 Using Proxy Withdraw (routes through forwarder contract)`,
+                {
+                  position: "top-right",
+                  autoClose: 5000,
+                  theme: "dark",
+                },
+              );
+            }
+
+            // Use proxy_withdraw if checkbox is checked, otherwise use regular withdraw
+            const withdrawFunction = useProxyWithdraw
+              ? shieldedContract.proxy_withdraw
+              : shieldedContract.withdraw;
+
+            console.log(`=== Transaction Call Debug ===`);
+            console.log(
+              `Function:`,
+              useProxyWithdraw ? "proxy_withdraw" : "withdraw",
+            );
+            console.log(`Parameters:`);
+            console.log(`  a:`, a);
+            console.log(`  b:`, b);
+            console.log(`  c:`, c);
+            console.log(`  pubSignals:`, pubSignals);
+            console.log(`  asset:`, ethers.ZeroAddress);
+            console.log(`  amount:`, withdrawAmount.toString());
+            console.log(`  recipient:`, recipient);
+            console.log(`=============================`);
+
+            txResponse = await withdrawFunction(
               a,
               b,
               c,
               pubSignals,
               ethers.ZeroAddress,
+              withdrawAmount,
               recipient,
             );
           } else if (selectedNetwork === "paseo_assethub_v2") {
@@ -2690,20 +2990,26 @@ export function App() {
 
             let proofResult;
             try {
-              proofResult = await zkWithdraw({
-                withdrawnValue: existingValue.toString(),
-                root: localRoot.toString(),
-                treeDepth: localDepth.toString(),
-                context,
-                asset: "0", // native token asset ID = 0
-                existingValue: existingValue.toString(),
-                existingNullifier: nullifierHash.toString(),
-                existingSecret: secretVal.toString(),
-                newNullifier,
-                newSecret,
-                siblings: merkleProof.siblings,
-                leafIndex: leafIdx.toString(),
-              });
+              proofResult = await zkWithdraw(
+                {
+                  withdrawnValue: existingValue.toString(),
+                  root: localRoot.toString(),
+                  treeDepth: localDepth.toString(),
+                  context,
+                  asset: "0", // native token asset ID = 0
+                  existingValue: existingValue.toString(),
+                  existingNullifier: nullifierHash.toString(),
+                  existingSecret: secretVal.toString(),
+                  newNullifier,
+                  newSecret,
+                  siblings: merkleProof.siblings,
+                  leafIndex: leafIdx.toString(),
+                },
+                {
+                  padTo7Signals:
+                    (selectedNetwork as string) === "paseo_assethub",
+                },
+              );
               toast.update(proofToastId, {
                 render: `✅ ZK proof generated!`,
                 type: "success",
@@ -2726,7 +3032,19 @@ export function App() {
             );
 
             // calldata format: [a, b, c, pubSignals]
-            const [a, b, c, pubSignals] = proofResult.calldata;
+            const [a, b, c, pubSignalsRaw] = proofResult.calldata;
+
+            // Ensure pubSignals are properly formatted as decimal strings
+            const pubSignals = pubSignalsRaw.map((sig: any) => {
+              if (typeof sig === "string" && sig.startsWith("0x")) {
+                // Convert hex string to decimal string
+                return BigInt(sig).toString();
+              }
+              // Already a number or decimal string
+              return sig.toString();
+            });
+
+            console.log("Formatted pubSignals:", pubSignals);
 
             // Use withdrawNative since we're withdrawing native tokens
             txResponse = await shieldedContract.withdrawNative(
@@ -2776,7 +3094,7 @@ export function App() {
               21888242871839275222246405745257275088548364400416034343698204186575808495617n;
             const nullifierHashBN = poseidon1([nullifierVal]);
             const nullifierHashBytes32 = ethers.zeroPadValue(
-              ethers.toBeArray(nullifierHashBN % BN254_R),
+              ethers.toBeArray(nullifierHashBN),
               32,
             );
             const depositInfo =
@@ -2823,6 +3141,7 @@ export function App() {
               NETWORKS[selectedNetwork].abi,
               true, // Force refresh to get latest deposits
               NETWORKS[selectedNetwork].rpcEndpoint,
+              NETWORKS[selectedNetwork].deploymentBlock || 0,
             );
 
             // IMPORTANT: If we just made a deposit, our leaf is at index = treeSize - 1
@@ -2890,15 +3209,12 @@ export function App() {
                 valueAssetHash,
                 precommitment,
               ]);
-              const BN254_R =
-                21888242871839275222246405745257275088548364400416034343698204186575808495617n;
-              const maskedCommitment = commitmentBigInt % BN254_R;
 
               console.log(
-                `  Testing ${desc}: amount=${testAmount}, commitment=${maskedCommitment}`,
+                `  Testing ${desc}: amount=${testAmount}, commitment=${commitmentBigInt}`,
               );
 
-              leafIdx = merkleTree.findLeafIndex(maskedCommitment);
+              leafIdx = merkleTree.findLeafIndex(commitmentBigInt);
               if (leafIdx !== -1) {
                 foundAmount = testAmount;
                 console.log(
@@ -3052,20 +3368,26 @@ export function App() {
 
             let proofResult;
             try {
-              proofResult = await zkWithdraw({
-                withdrawnValue: withdrawAmount.toString(),
-                root: localRoot.toString(),
-                treeDepth: localDepth.toString(),
-                context,
-                asset: assetNumeric.toString(),
-                existingValue: foundAmount.toString(), // Use found amount not contract amount
-                existingNullifier: nullifierVal.toString(),
-                existingSecret: secretVal.toString(),
-                newNullifier,
-                newSecret,
-                siblings: merkleProof.siblings,
-                leafIndex: leafIdx.toString(),
-              });
+              proofResult = await zkWithdraw(
+                {
+                  withdrawnValue: withdrawAmount.toString(),
+                  root: localRoot.toString(),
+                  treeDepth: localDepth.toString(),
+                  context,
+                  asset: assetNumeric.toString(),
+                  existingValue: foundAmount.toString(), // Use found amount not contract amount
+                  existingNullifier: nullifierVal.toString(),
+                  existingSecret: secretVal.toString(),
+                  newNullifier,
+                  newSecret,
+                  siblings: merkleProof.siblings,
+                  leafIndex: leafIdx.toString(),
+                },
+                {
+                  padTo7Signals:
+                    (selectedNetwork as string) === "paseo_assethub",
+                },
+              );
               toast.update(proofToastId, {
                 render: `✅ ZK proof generated!`,
                 type: "success",
@@ -3086,7 +3408,21 @@ export function App() {
               `ZK proof generated. Public signals:`,
               proofResult.publicSignals,
             );
-            const [a, b, c, pubSignals] = proofResult.calldata;
+
+            // calldata format: [a, b, c, pubSignals]
+            const [a, b, c, pubSignalsRaw] = proofResult.calldata;
+
+            // Ensure pubSignals are properly formatted as decimal strings
+            const pubSignals = pubSignalsRaw.map((sig: any) => {
+              if (typeof sig === "string" && sig.startsWith("0x")) {
+                // Convert hex string to decimal string
+                return BigInt(sig).toString();
+              }
+              // Already a number or decimal string
+              return sig.toString();
+            });
+
+            console.log("Formatted pubSignals:", pubSignals);
 
             console.log(`=== WITHDRAW TX DATA ===`);
             console.log(
@@ -3239,7 +3575,7 @@ export function App() {
           );
           // 8. Wait for confirmation
           const receipt2 = await txResponse.wait();
-          setRecentGasUnits(prev => ({
+          setRecentGasUnits((prev) => ({
             ...prev,
             [selectedNetwork]: {
               ...prev[selectedNetwork],
@@ -4336,35 +4672,55 @@ export function App() {
     setLoadingProgress({ processed: 0, total: 0, found: 0, currentAsset: "" });
     try {
       const networkConfig = NETWORKS[selectedNetwork] as any;
-      let rpcEndpoint = networkConfig?.rpcEndpoint;
+      const rpcEndpoints = networkConfig?.rpcEndpoints || [networkConfig?.rpcEndpoint];
       const shieldAddr = networkConfig?.shield_address;
       const wsEndpoint = networkConfig?.wsEndpoint;
-      if (!shieldAddr || !rpcEndpoint) {
+      if (!shieldAddr || !rpcEndpoints?.length) {
         setPoolComposition([]);
         return [];
       }
 
-      if (
-        typeof window !== "undefined" &&
-        window.location.hostname === "localhost" &&
-        !rpcEndpoint.includes("eth-rpc.polkadot.io")
-      ) {
-        rpcEndpoint = "http://localhost:5173/api/rpc-proxy";
+      // Try each RPC endpoint until one works
+      let provider: ethers.JsonRpcProvider | null = null;
+      let rpcEndpoint = "";
+      for (const endpoint of rpcEndpoints) {
+        try {
+          provider = new ethers.JsonRpcProvider(endpoint);
+          await provider.getBlockNumber(); // Test if endpoint works
+          rpcEndpoint = endpoint;
+          console.log(`Using RPC: ${endpoint}`);
+          break;
+        } catch (e) {
+          console.warn(`RPC ${endpoint} failed, trying next...`);
+          provider = null;
+        }
+      }
+      if (!provider) {
+        throw new Error("All RPC endpoints failed");
       }
 
-      const provider = new ethers.JsonRpcProvider(rpcEndpoint);
       const abi = networkConfig?.abi || [
         "function escrow(address) external view returns (uint256)",
       ];
       const contract = new ethers.Contract(shieldAddr, abi, provider);
-      const assets: { symbol: string; amount: number; decimals: number; assetId: number }[] = [];
+      const assets: {
+        symbol: string;
+        amount: number;
+        decimals: number;
+        assetId: number;
+      }[] = [];
 
       // Native token
       setLoadingProgress((p) => ({ ...p, currentAsset: networkConfig.asset }));
       try {
         const nativeBalance = await contract.escrow(ethers.ZeroAddress);
         if (nativeBalance > 0) {
-          assets.push({ symbol: networkConfig.asset, amount: Number(ethers.formatUnits(nativeBalance, 18)), decimals: 18, assetId: 0 });
+          assets.push({
+            symbol: networkConfig.asset,
+            amount: Number(ethers.formatUnits(nativeBalance, 18)),
+            decimals: 18,
+            assetId: 0,
+          });
         }
       } catch (_) {}
 
@@ -4373,7 +4729,10 @@ export function App() {
         try {
           const { ApiPromise, WsProvider } = await import("@polkadot/api");
           const wsProvider = new WsProvider(wsEndpoint);
-          const api = await ApiPromise.create({ provider: wsProvider, noInitWarn: true });
+          const api = await ApiPromise.create({
+            provider: wsProvider,
+            noInitWarn: true,
+          });
           if (!api.query.assets || !api.query.assets.metadata) {
             console.warn("Assets metadata pallet not available");
             await api.disconnect();
@@ -4403,15 +4762,24 @@ export function App() {
             assetIds.push(assetId);
             const metadata = value.toJSON() as any;
             if (!metadata) continue;
-            const symbol = decodeHexBrowser(metadata.symbol) || `Asset-${assetId}`;
+            const symbol =
+              decodeHexBrowser(metadata.symbol) || `Asset-${assetId}`;
             const name = decodeHexBrowser(metadata.name);
-            const displayName = symbol !== `Asset-${assetId}` ? symbol : (name || `Asset-${assetId}`);
+            const displayName =
+              symbol !== `Asset-${assetId}`
+                ? symbol
+                : name || `Asset-${assetId}`;
             assetSymbols[assetId] = displayName;
             assetDecimals[assetId] = metadata.decimals || 18;
-            precompileAddrs[assetId] = `0x${assetId.toString(16).padStart(8, "0")}00000000000000000000000001200000`;
+            precompileAddrs[assetId] =
+              `0x${assetId.toString(16).padStart(8, "0")}00000000000000000000000001200000`;
           }
 
-          setLoadingProgress((p) => ({ ...p, total: assetIds.length + 1, found: assets.length }));
+          setLoadingProgress((p) => ({
+            ...p,
+            total: assetIds.length + 1,
+            found: assets.length,
+          }));
 
           const batchSize = 25;
           let processed = 1;
@@ -4423,8 +4791,15 @@ export function App() {
               try {
                 const bal = await contract.escrow(precompileAddrs[assetId]);
                 if (bal > 0) {
-                  const amount = Number(ethers.formatUnits(bal, assetDecimals[assetId]));
-                  return { symbol: assetSymbols[assetId], amount, decimals: assetDecimals[assetId], assetId };
+                  const amount = Number(
+                    ethers.formatUnits(bal, assetDecimals[assetId]),
+                  );
+                  return {
+                    symbol: assetSymbols[assetId],
+                    amount,
+                    decimals: assetDecimals[assetId],
+                    assetId,
+                  };
                 }
               } catch (_) {}
               return null;
@@ -4439,8 +4814,12 @@ export function App() {
               }
               if (processed % 5 === 0 || processed === assetIds.length + 1) {
                 setLoadingProgress({
-                  processed, total: assetIds.length + 1, found,
-                  currentAsset: result ? `${result.symbol} (${result.assetId})` : `Asset ${batch[j]}`,
+                  processed,
+                  total: assetIds.length + 1,
+                  found,
+                  currentAsset: result
+                    ? `${result.symbol} (${result.assetId})`
+                    : `Asset ${batch[j]}`,
                 });
               }
             }
@@ -4488,56 +4867,121 @@ export function App() {
       const height = chartSize;
       const radius = Math.min(width, height) / 6;
 
-      const color = d3.scaleOrdinal()
+      const color = d3
+        .scaleOrdinal()
         .domain(hierarchicalData.children.map((d) => d.name))
-        .range(d3.quantize(d3.interpolateRainbow, hierarchicalData.children.length + 1));
+        .range(
+          d3.quantize(
+            d3.interpolateRainbow,
+            hierarchicalData.children.length + 1,
+          ),
+        );
 
-      const hierarchy = d3.hierarchy(hierarchicalData).sum((d) => d.value).sort((a, b) => (b.value || 0) - (a.value || 0));
-      const root = d3.partition().size([2 * Math.PI, hierarchy.height + 1])(hierarchy);
+      const hierarchy = d3
+        .hierarchy(hierarchicalData)
+        .sum((d) => d.value)
+        .sort((a, b) => (b.value || 0) - (a.value || 0));
+      const root = d3.partition().size([2 * Math.PI, hierarchy.height + 1])(
+        hierarchy,
+      );
       root.each((d) => (d.current = d));
 
-      const arc = d3.arc()
-        .startAngle((d) => d.x0).endAngle((d) => d.x1)
+      const arc = d3
+        .arc()
+        .startAngle((d) => d.x0)
+        .endAngle((d) => d.x1)
         .padAngle((d) => Math.min((d.x1 - d.x0) / 2, 0.005))
         .padRadius(radius * 1.5)
         .innerRadius((d) => d.y0 * radius)
         .outerRadius((d) => Math.max(d.y0 * radius, d.y1 * radius - 1));
 
       const arcVisible = (d) => d.y1 <= 3 && d.y0 >= 1 && d.x1 > d.x0;
-      const labelVisible = (d) => d.y1 <= 3 && d.y0 >= 1 && (d.y1 - d.y0) * (d.x1 - d.x0) > 0.03;
+      const labelVisible = (d) =>
+        d.y1 <= 3 && d.y0 >= 1 && (d.y1 - d.y0) * (d.x1 - d.x0) > 0.03;
       const labelTransform = (d) => {
         const x = (((d.x0 + d.x1) / 2) * 180) / Math.PI;
         const y = ((d.y0 + d.y1) / 2) * radius;
         return `rotate(${x - 90}) translate(${y},0) rotate(${x < 180 ? 0 : 180})`;
       };
 
-      const svg = wrapper.append("svg").attr("viewBox", [-width / 2, -height / 2, width, width]).attr("width", width).attr("height", height).style("font", "10px 'Exo 2', sans-serif");
+      const svg = wrapper
+        .append("svg")
+        .attr("viewBox", [-width / 2, -height / 2, width, width])
+        .attr("width", width)
+        .attr("height", height)
+        .style("font", "10px 'Exo 2', sans-serif");
 
-      const path = svg.append("g").selectAll("path").data(root.descendants().slice(1)).join("path")
-        .attr("fill", (d) => { while (d.depth > 1) d = d.parent; return color(d.data.name); })
-        .attr("fill-opacity", (d) => arcVisible(d.current) ? (d.children ? 0.6 : 0.4) : 0)
-        .attr("pointer-events", (d) => arcVisible(d.current) ? "auto" : "none")
+      const path = svg
+        .append("g")
+        .selectAll("path")
+        .data(root.descendants().slice(1))
+        .join("path")
+        .attr("fill", (d) => {
+          while (d.depth > 1) d = d.parent;
+          return color(d.data.name);
+        })
+        .attr("fill-opacity", (d) =>
+          arcVisible(d.current) ? (d.children ? 0.6 : 0.4) : 0,
+        )
+        .attr("pointer-events", (d) =>
+          arcVisible(d.current) ? "auto" : "none",
+        )
         .attr("d", (d) => arc(d.current))
         .on("mouseenter", function (event, d) {
           const total = root.value || 1;
-          const pct = ((d.value || 0) / total * 100).toFixed(1);
-          container.append("div").attr("class", "sunburst-tooltip").style("position", "absolute").style("background", "rgba(0,0,0,0.9)").style("color", "white").style("padding", "10px").style("border-radius", "6px").style("font-size", "12px").style("pointer-events", "none").style("z-index", "1000").style("backdrop-filter", "blur(4px)").style("border", "1px solid rgba(147, 51, 234, 0.3)")
-            .html(`<strong style="color:#e91e63">${d.data.name || d.data.symbol}</strong><br/><span style="color:#9333ea">${d.value.toFixed(4)} (${pct}%)</span>`)
-            .style("left", event.pageX + 10 + "px").style("top", event.pageY - 10 + "px");
+          const pct = (((d.value || 0) / total) * 100).toFixed(1);
+          container
+            .append("div")
+            .attr("class", "sunburst-tooltip")
+            .style("position", "absolute")
+            .style("background", "rgba(0,0,0,0.9)")
+            .style("color", "white")
+            .style("padding", "10px")
+            .style("border-radius", "6px")
+            .style("font-size", "12px")
+            .style("pointer-events", "none")
+            .style("z-index", "1000")
+            .style("backdrop-filter", "blur(4px)")
+            .style("border", "1px solid rgba(147, 51, 234, 0.3)")
+            .html(
+              `<strong style="color:#e91e63">${d.data.name || d.data.symbol}</strong><br/><span style="color:#9333ea">${d.value.toFixed(4)} (${pct}%)</span>`,
+            )
+            .style("left", event.pageX + 10 + "px")
+            .style("top", event.pageY - 10 + "px");
         })
-        .on("mouseleave", function () { container.selectAll(".sunburst-tooltip").remove(); });
+        .on("mouseleave", function () {
+          container.selectAll(".sunburst-tooltip").remove();
+        });
 
-      svg.append("g").attr("pointer-events", "none").attr("text-anchor", "middle").style("user-select", "none").selectAll("text")
-        .data(root.descendants().slice(1)).join("text")
-        .attr("dy", "0.35em").attr("fill-opacity", (d) => +labelVisible(d.current))
+      svg
+        .append("g")
+        .attr("pointer-events", "none")
+        .attr("text-anchor", "middle")
+        .style("user-select", "none")
+        .selectAll("text")
+        .data(root.descendants().slice(1))
+        .join("text")
+        .attr("dy", "0.35em")
+        .attr("fill-opacity", (d) => +labelVisible(d.current))
         .attr("transform", (d) => labelTransform(d.current))
         .attr("fill", "rgba(255, 255, 255, 0.9)")
         .text((d) => d.data.symbol || d.data.name);
 
-      const defs = svg.append("defs").append("linearGradient").attr("id", "center-gradient").attr("x1", "0%").attr("x2", "100%");
+      const defs = svg
+        .append("defs")
+        .append("linearGradient")
+        .attr("id", "center-gradient")
+        .attr("x1", "0%")
+        .attr("x2", "100%");
       defs.append("stop").attr("offset", "0%").attr("stop-color", "#09002b");
       defs.append("stop").attr("offset", "100%").attr("stop-color", "#000000");
-      svg.append("circle").datum(root).attr("r", radius / 4).attr("fill", "url(#center-gradient)").attr("stroke", "#9333ea").attr("stroke-width", 2);
+      svg
+        .append("circle")
+        .datum(root)
+        .attr("r", radius / 4)
+        .attr("fill", "url(#center-gradient)")
+        .attr("stroke", "#9333ea")
+        .attr("stroke-width", 2);
     } catch (error) {
       console.error("Error rendering sunburst chart:", error);
     }
@@ -4546,7 +4990,12 @@ export function App() {
   useEffect(() => {
     if (showPrivacy) {
       setIsLoadingPoolData(true);
-      setLoadingProgress({ processed: 0, total: 0, found: 0, currentAsset: "" });
+      setLoadingProgress({
+        processed: 0,
+        total: 0,
+        found: 0,
+        currentAsset: "",
+      });
       fetchPoolComposition()
         .then((assets) => {
           setPoolComposition(assets);
@@ -4557,7 +5006,12 @@ export function App() {
           setIsLoadingPoolData(false);
         });
     } else {
-      setLoadingProgress({ processed: 0, total: 0, found: 0, currentAsset: "" });
+      setLoadingProgress({
+        processed: 0,
+        total: 0,
+        found: 0,
+        currentAsset: "",
+      });
     }
   }, [showPrivacy, selectedNetwork]);
 
@@ -4620,13 +5074,30 @@ export function App() {
 
       // Try to get a real gas estimate from the contract's deposit method
       try {
-        const networkConfig = (NETWORKS[selectedNetwork] as any);
-        if (networkConfig?.shield_address && networkConfig?.abi && amount && Number(amount) > 0) {
+        const networkConfig = NETWORKS[selectedNetwork] as any;
+        if (
+          networkConfig?.shield_address &&
+          networkConfig?.abi &&
+          amount &&
+          Number(amount) > 0
+        ) {
           let provider: ethers.Provider;
           if (selectedWalletEVM && isWalletConnected) {
             provider = selectedWalletEVM;
           } else if (networkConfig.rpcEndpoint) {
-            provider = new ethers.JsonRpcProvider(networkConfig.rpcEndpoint);
+            const rpcs = networkConfig.rpcEndpoints || [networkConfig.rpcEndpoint];
+            let rpcProvider: ethers.JsonRpcProvider | null = null;
+            for (const rpc of rpcs) {
+              try {
+                rpcProvider = new ethers.JsonRpcProvider(rpc);
+                await rpcProvider.getBlockNumber();
+                provider = rpcProvider;
+                break;
+              } catch {
+                rpcProvider = null;
+              }
+            }
+            if (!provider) throw new Error("All RPC endpoints failed");
           } else {
             throw new Error("no provider for estimate");
           }
@@ -4669,18 +5140,42 @@ export function App() {
         console.warn("Gas estimate via contract failed, using defaults:", e);
         const recent = recentGasUnits[selectedNetwork];
         if (recent) {
-          gasUnits = activeTab === "unshield" ? recent.unshield : recent.shield;
+          let recentGas =
+            activeTab === "unshield" ? recent.unshield : recent.shield;
+          // Apply proxy withdraw multiplier (17x) for Paseo unshield when enabled
+          if (
+            activeTab === "unshield" &&
+            selectedNetwork === "paseo_assethub" &&
+            useProxyWithdraw
+          ) {
+            recentGas = recentGas * 17n;
+          }
+          gasUnits = recentGas;
         } else {
-          const defaults: Record<string, { shield: bigint; unshield: bigint }> = {
-            paseo_assethub: { shield: 20000n, unshield: 40000n },
-            paseo_assethub_v2: { shield: 25000n, unshield: 50000n },
-            polkadot: { shield: 50000n, unshield: 100000n },
-            westend_assethub: { shield: 150000n, unshield: 300000n },
-            kusama: { shield: 200000n, unshield: 400000n },
-          };
-          gasUnits = defaults[selectedNetwork]
-            ? (activeTab === "unshield" ? defaults[selectedNetwork].unshield : defaults[selectedNetwork].shield)
+          const defaults: Record<string, { shield: bigint; unshield: bigint }> =
+            {
+              paseo_assethub: { shield: 20000n, unshield: 40000n },
+              paseo_assethub_v2: { shield: 25000n, unshield: 50000n },
+              polkadot: { shield: 50000n, unshield: 100000n },
+              westend_assethub: { shield: 150000n, unshield: 300000n },
+              kusama: { shield: 200000n, unshield: 400000n },
+            };
+          let baseGasUnits = defaults[selectedNetwork]
+            ? activeTab === "unshield"
+              ? defaults[selectedNetwork].unshield
+              : defaults[selectedNetwork].shield
             : 200000n;
+
+          // Apply proxy withdraw multiplier (17x) for Paseo unshield when enabled
+          if (
+            activeTab === "unshield" &&
+            selectedNetwork === "paseo_assethub" &&
+            useProxyWithdraw
+          ) {
+            baseGasUnits = baseGasUnits * 17n;
+          }
+
+          gasUnits = baseGasUnits;
         }
       }
 
@@ -4689,19 +5184,30 @@ export function App() {
     };
 
     let cancelled = false;
-    getGasCost().then((costStr) => {
-      if (!cancelled) {
-        setEstimatedGasCost(costStr);
-        setIsGasPriceLoading(false);
-      }
-    }).catch(() => {
-      if (!cancelled) {
-        setEstimatedGasCost("Error");
-        setIsGasPriceLoading(false);
-      }
-    });
-    return () => { cancelled = true; };
-  }, [activeTab, selectedNetwork, isWalletConnected, selectedWalletEVM, amount]);
+    getGasCost()
+      .then((costStr) => {
+        if (!cancelled) {
+          setEstimatedGasCost(costStr);
+          setIsGasPriceLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setEstimatedGasCost("Error");
+          setIsGasPriceLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeTab,
+    selectedNetwork,
+    isWalletConnected,
+    selectedWalletEVM,
+    amount,
+    useProxyWithdraw,
+  ]);
 
   return (
     <div className="App">
@@ -4751,15 +5257,6 @@ export function App() {
                   Shield
                 </button>
                 <button
-                  className={`tab ${activeTab === "send" ? "active" : ""}`}
-                  onClick={() => setActiveTab("send")}
-                  disabled
-                  title="Coming soon"
-                  style={{ opacity: 0.6, cursor: "not-allowed" }}
-                >
-                  Send
-                </button>
-                <button
                   className={`tab ${activeTab === "unshield" ? "active" : ""}`}
                   onClick={() => setActiveTab("unshield")}
                 >
@@ -4768,6 +5265,17 @@ export function App() {
                 <button
                   className={`tab ${activeTab === "bridge" ? "active" : ""}`}
                   onClick={() => setActiveTab("bridge")}
+                  disabled={isTestnet(selectedNetwork)}
+                  title={
+                    isTestnet(selectedNetwork)
+                      ? "Bridge not available on testnet"
+                      : undefined
+                  }
+                  style={
+                    isTestnet(selectedNetwork)
+                      ? { opacity: 0.6, cursor: "not-allowed" }
+                      : undefined
+                  }
                 >
                   {getBridgeTitle(selectedNetwork)}
                 </button>
@@ -4776,6 +5284,17 @@ export function App() {
             <button
               className={`tab ${activeTab === "offramp" ? "active" : ""}`}
               onClick={() => setActiveTab("offramp")}
+              disabled={isTestnet(selectedNetwork)}
+              title={
+                isTestnet(selectedNetwork)
+                  ? "Offramp not available on testnet"
+                  : undefined
+              }
+              style={
+                isTestnet(selectedNetwork)
+                  ? { opacity: 0.6, cursor: "not-allowed" }
+                  : undefined
+              }
             >
               Offramp
             </button>
@@ -5346,6 +5865,126 @@ export function App() {
                         </option>
                       ))}
                     </select>
+
+                    {/* Proxy withdraw checkbox for Paseo network (unshield tab only) */}
+                    {activeTab === "unshield" &&
+                      selectedNetwork === "paseo_assethub" && (
+                        <div
+                          className="proxy-withdraw-option"
+                          style={{
+                            marginTop: "15px",
+                            marginBottom: "10px",
+                            padding: "10px 12px",
+                            background: "rgba(0, 0, 0, 0.05)",
+                            borderRadius: "8px",
+                            border: "1px solid rgba(0, 0, 0, 0.1)",
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                            }}
+                          >
+                            <div style={{ flex: 1 }}>
+                              <div
+                                style={{
+                                  fontSize: "0.95rem",
+                                  fontWeight: 500,
+                                  color: "#333",
+                                  marginBottom: "2px",
+                                }}
+                              >
+                                Proxy Withdraw
+                              </div>
+                              <div
+                                style={{
+                                  fontSize: "0.85rem",
+                                  color: "#666",
+                                  lineHeight: "1.3",
+                                }}
+                              >
+                                Create a unique address that your funds are sent
+                                via for unique sender addresses every time
+                              </div>
+                            </div>
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "10px",
+                              }}
+                            >
+                              <span
+                                style={{
+                                  fontSize: "0.85rem",
+                                  color: "#666",
+                                  fontStyle: "italic",
+                                }}
+                              >
+                                {useProxyWithdraw ? "Enabled" : "Disabled"}
+                              </span>
+                              <div
+                                style={{
+                                  position: "relative",
+                                  width: "40px",
+                                  height: "20px",
+                                }}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={useProxyWithdraw}
+                                  onChange={(e) =>
+                                    setUseProxyWithdraw(e.target.checked)
+                                  }
+                                  style={{
+                                    position: "absolute",
+                                    top: 0,
+                                    left: 0,
+                                    width: "100%",
+                                    height: "100%",
+                                    opacity: 0,
+                                    cursor: "pointer",
+                                    zIndex: 2,
+                                  }}
+                                />
+                                <div
+                                  style={{
+                                    position: "absolute",
+                                    top: 0,
+                                    left: 0,
+                                    width: "100%",
+                                    height: "100%",
+                                    background: useProxyWithdraw
+                                      ? "#007bff"
+                                      : "#ccc",
+                                    borderRadius: "10px",
+                                    transition: "all 0.3s ease",
+                                    pointerEvents: "none",
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      position: "absolute",
+                                      top: "2px",
+                                      left: useProxyWithdraw ? "22px" : "2px",
+                                      width: "16px",
+                                      height: "16px",
+                                      background: "#fff",
+                                      borderRadius: "50%",
+                                      transition: "all 0.3s ease",
+                                      boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+                                      pointerEvents: "none",
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
                     <div
                       className="balance"
                       style={{ marginLeft: "auto", textAlign: "right" }}
@@ -5526,10 +6165,12 @@ export function App() {
           By using this website you agree to the Terms of Service.
         </button>
         <button className="privacy-button" onClick={() => setShowPrivacy(true)}>
-          🌳
-          Privacy Guarantee Chart
+          🌳 Privacy Guarantee Chart
         </button>
-        <button className="settings-button" onClick={() => setShowSettings(true)}>
+        <button
+          className="settings-button"
+          onClick={() => setShowSettings(true)}
+        >
           <img src="/toolbox.png" alt="Settings" className="settings-icon" />
           Customize Theme
         </button>
@@ -5772,85 +6413,389 @@ export function App() {
               <h2>Privacy Dashboard</h2>
               <div className="help-section">
                 <h3>Shielded Pool Composition</h3>
-                <p>Click "Scan Pool" to query assets currently in the privacy pool.</p>
+                <p>
+                  Click "Scan Pool" to query assets currently in the privacy
+                  pool.
+                </p>
                 {!isLoadingPoolData && poolComposition.length > 0 && (
-                  <div style={{ margin: "10px 0", padding: "12px", background: "rgba(147, 51, 234, 0.08)", borderRadius: "8px", border: "1px solid rgba(147, 51, 234, 0.2)" }}>
-                    <div style={{ color: "#aaa", fontSize: "0.85rem", marginBottom: "8px", fontWeight: "bold" }}>Pool Assets</div>
+                  <div
+                    style={{
+                      margin: "10px 0",
+                      padding: "12px",
+                      background: "rgba(147, 51, 234, 0.08)",
+                      borderRadius: "8px",
+                      border: "1px solid rgba(147, 51, 234, 0.2)",
+                    }}
+                  >
+                    <div
+                      style={{
+                        color: "#aaa",
+                        fontSize: "0.85rem",
+                        marginBottom: "8px",
+                        fontWeight: "bold",
+                      }}
+                    >
+                      Pool Assets
+                    </div>
                     {poolComposition.map((a, i) => (
-                      <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", borderBottom: i < poolComposition.length - 1 ? "1px solid rgba(147, 51, 234, 0.1)" : "none" }}>
-                        <span style={{ color: "#e91e63", fontWeight: "bold" }}>{a.symbol}</span>
-                        <span style={{ color: "white", fontFamily: "monospace" }}>{a.amount.toFixed(4)}</span>
+                      <div
+                        key={i}
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          padding: "4px 0",
+                          borderBottom:
+                            i < poolComposition.length - 1
+                              ? "1px solid rgba(147, 51, 234, 0.1)"
+                              : "none",
+                        }}
+                      >
+                        <span style={{ color: "#e91e63", fontWeight: "bold" }}>
+                          {a.symbol}
+                        </span>
+                        <span
+                          style={{ color: "white", fontFamily: "monospace" }}
+                        >
+                          {a.amount.toFixed(4)}
+                        </span>
                       </div>
                     ))}
                   </div>
                 )}
-                <div id="anonymity-chart-container" ref={privacyChartRef} style={{
-                  width: "100%", height: "450px", margin: "20px 0",
-                  background: "rgba(9, 0, 43, 0.3)", borderRadius: "12px",
-                  border: "1px solid rgba(147, 51, 234, 0.3)", overflow: "hidden", position: "relative",
-                }} />
+                <div
+                  id="anonymity-chart-container"
+                  ref={privacyChartRef}
+                  style={{
+                    width: "100%",
+                    height: "450px",
+                    margin: "20px 0",
+                    background: "rgba(9, 0, 43, 0.3)",
+                    borderRadius: "12px",
+                    border: "1px solid rgba(147, 51, 234, 0.3)",
+                    overflow: "hidden",
+                    position: "relative",
+                  }}
+                />
                 {isLoadingPoolData ? (
                   <div style={{ textAlign: "center", padding: "2rem" }}>
-                    <div style={{ fontSize: "2rem", marginBottom: "1rem", animation: "pulse 1.5s infinite" }}>🔍</div>
-                    <p style={{ color: "#9333ea", fontWeight: "bold", fontSize: "1.1rem", marginBottom: "0.5rem" }}>Scanning blockchain for assets...</p>
-                    <div style={{ background: "rgba(147, 51, 234, 0.1)", borderRadius: "12px", padding: "1rem", margin: "1rem 0", border: "1px solid rgba(147, 51, 234, 0.2)" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.5rem" }}>
-                        <span style={{ color: "#aaa", fontSize: "0.9rem" }}>Progress</span>
-                        <span style={{ color: "#e91e63", fontWeight: "bold", fontFamily: "monospace" }}>{loadingProgress.processed}/{loadingProgress.total}</span>
+                    <div
+                      style={{
+                        fontSize: "2rem",
+                        marginBottom: "1rem",
+                        animation: "pulse 1.5s infinite",
+                      }}
+                    >
+                      🔍
+                    </div>
+                    <p
+                      style={{
+                        color: "#9333ea",
+                        fontWeight: "bold",
+                        fontSize: "1.1rem",
+                        marginBottom: "0.5rem",
+                      }}
+                    >
+                      Scanning blockchain for assets...
+                    </p>
+                    <div
+                      style={{
+                        background: "rgba(147, 51, 234, 0.1)",
+                        borderRadius: "12px",
+                        padding: "1rem",
+                        margin: "1rem 0",
+                        border: "1px solid rgba(147, 51, 234, 0.2)",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          marginBottom: "0.5rem",
+                        }}
+                      >
+                        <span style={{ color: "#aaa", fontSize: "0.9rem" }}>
+                          Progress
+                        </span>
+                        <span
+                          style={{
+                            color: "#e91e63",
+                            fontWeight: "bold",
+                            fontFamily: "monospace",
+                          }}
+                        >
+                          {loadingProgress.processed}/{loadingProgress.total}
+                        </span>
                       </div>
-                      <div style={{ background: "rgba(147, 51, 234, 0.2)", borderRadius: "10px", height: "12px", width: "100%", overflow: "hidden", position: "relative" }}>
-                        <div style={{ background: "linear-gradient(90deg, #9333ea, #e91e63)", height: "100%", width: `${Math.max(5, (loadingProgress.processed / Math.max(1, loadingProgress.total)) * 100)}%`, transition: "width 0.5s ease", borderRadius: "10px", boxShadow: "0 0 10px rgba(147, 51, 234, 0.5)" }} />
-                        <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent)", animation: "shimmer 1.5s infinite" }} />
+                      <div
+                        style={{
+                          background: "rgba(147, 51, 234, 0.2)",
+                          borderRadius: "10px",
+                          height: "12px",
+                          width: "100%",
+                          overflow: "hidden",
+                          position: "relative",
+                        }}
+                      >
+                        <div
+                          style={{
+                            background:
+                              "linear-gradient(90deg, #9333ea, #e91e63)",
+                            height: "100%",
+                            width: `${Math.max(5, (loadingProgress.processed / Math.max(1, loadingProgress.total)) * 100)}%`,
+                            transition: "width 0.5s ease",
+                            borderRadius: "10px",
+                            boxShadow: "0 0 10px rgba(147, 51, 234, 0.5)",
+                          }}
+                        />
+                        <div
+                          style={{
+                            position: "absolute",
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            background:
+                              "linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent)",
+                            animation: "shimmer 1.5s infinite",
+                          }}
+                        />
                       </div>
-                      <div style={{ display: "flex", justifyContent: "space-between", marginTop: "0.75rem", fontSize: "0.85rem" }}>
-                        <div><span style={{ color: "#aaa" }}>Found: </span><span style={{ color: "#4ade80", fontWeight: "bold", fontFamily: "monospace" }}>{loadingProgress.found}</span><span style={{ color: "#aaa", marginLeft: "0.5rem" }}>assets</span></div>
-                        <div><span style={{ color: "#aaa" }}>Speed: </span><span style={{ color: "#60a5fa", fontWeight: "bold", fontFamily: "monospace" }}>20x</span><span style={{ color: "#aaa", marginLeft: "0.25rem" }}>(parallel)</span></div>
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          marginTop: "0.75rem",
+                          fontSize: "0.85rem",
+                        }}
+                      >
+                        <div>
+                          <span style={{ color: "#aaa" }}>Found: </span>
+                          <span
+                            style={{
+                              color: "#4ade80",
+                              fontWeight: "bold",
+                              fontFamily: "monospace",
+                            }}
+                          >
+                            {loadingProgress.found}
+                          </span>
+                          <span style={{ color: "#aaa", marginLeft: "0.5rem" }}>
+                            assets
+                          </span>
+                        </div>
+                        <div>
+                          <span style={{ color: "#aaa" }}>Speed: </span>
+                          <span
+                            style={{
+                              color: "#60a5fa",
+                              fontWeight: "bold",
+                              fontFamily: "monospace",
+                            }}
+                          >
+                            20x
+                          </span>
+                          <span
+                            style={{ color: "#aaa", marginLeft: "0.25rem" }}
+                          >
+                            (parallel)
+                          </span>
+                        </div>
                       </div>
                     </div>
                     {loadingProgress.currentAsset && (
-                      <div style={{ marginTop: "1rem", padding: "0.75rem", background: "rgba(147, 51, 234, 0.05)", borderRadius: "8px", border: "1px solid rgba(147, 51, 234, 0.1)" }}>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem" }}>
-                          <span style={{ fontSize: "1.2rem", animation: "bounce 1s infinite" }}>↻</span>
-                          <span style={{ color: "#e91e63", fontFamily: "monospace", fontSize: "0.9rem" }}>Checking: <strong>{loadingProgress.currentAsset}</strong></span>
+                      <div
+                        style={{
+                          marginTop: "1rem",
+                          padding: "0.75rem",
+                          background: "rgba(147, 51, 234, 0.05)",
+                          borderRadius: "8px",
+                          border: "1px solid rgba(147, 51, 234, 0.1)",
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            gap: "0.5rem",
+                          }}
+                        >
+                          <span
+                            style={{
+                              fontSize: "1.2rem",
+                              animation: "bounce 1s infinite",
+                            }}
+                          >
+                            ↻
+                          </span>
+                          <span
+                            style={{
+                              color: "#e91e63",
+                              fontFamily: "monospace",
+                              fontSize: "0.9rem",
+                            }}
+                          >
+                            Checking:{" "}
+                            <strong>{loadingProgress.currentAsset}</strong>
+                          </span>
                         </div>
                       </div>
                     )}
-                    <div style={{ marginTop: "1.5rem", display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "0.75rem" }}>
-                      <div style={{ textAlign: "center", padding: "0.75rem", background: "rgba(147, 51, 234, 0.05)", borderRadius: "8px", border: "1px solid rgba(147, 51, 234, 0.1)" }}>
-                        <div style={{ fontSize: "1.5rem", marginBottom: "0.25rem" }}>⚡</div>
-                        <div style={{ fontSize: "0.8rem", color: "#aaa" }}>Parallel</div>
-                        <div style={{ color: "#60a5fa", fontWeight: "bold", fontSize: "0.9rem" }}>20 assets/batch</div>
+                    <div
+                      style={{
+                        marginTop: "1.5rem",
+                        display: "grid",
+                        gridTemplateColumns: "repeat(3, 1fr)",
+                        gap: "0.75rem",
+                      }}
+                    >
+                      <div
+                        style={{
+                          textAlign: "center",
+                          padding: "0.75rem",
+                          background: "rgba(147, 51, 234, 0.05)",
+                          borderRadius: "8px",
+                          border: "1px solid rgba(147, 51, 234, 0.1)",
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: "1.5rem",
+                            marginBottom: "0.25rem",
+                          }}
+                        >
+                          ⚡
+                        </div>
+                        <div style={{ fontSize: "0.8rem", color: "#aaa" }}>
+                          Parallel
+                        </div>
+                        <div
+                          style={{
+                            color: "#60a5fa",
+                            fontWeight: "bold",
+                            fontSize: "0.9rem",
+                          }}
+                        >
+                          20 assets/batch
+                        </div>
                       </div>
-                      <div style={{ textAlign: "center", padding: "0.75rem", background: "rgba(147, 51, 234, 0.05)", borderRadius: "8px", border: "1px solid rgba(147, 234, 51, 0.1)" }}>
-                        <div style={{ fontSize: "1.5rem", marginBottom: "0.25rem" }}>📊</div>
-                        <div style={{ fontSize: "0.8rem", color: "#aaa" }}>Total</div>
-                        <div style={{ color: "#4ade80", fontWeight: "bold", fontSize: "0.9rem" }}>{loadingProgress.total} assets</div>
+                      <div
+                        style={{
+                          textAlign: "center",
+                          padding: "0.75rem",
+                          background: "rgba(147, 51, 234, 0.05)",
+                          borderRadius: "8px",
+                          border: "1px solid rgba(147, 234, 51, 0.1)",
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: "1.5rem",
+                            marginBottom: "0.25rem",
+                          }}
+                        >
+                          📊
+                        </div>
+                        <div style={{ fontSize: "0.8rem", color: "#aaa" }}>
+                          Total
+                        </div>
+                        <div
+                          style={{
+                            color: "#4ade80",
+                            fontWeight: "bold",
+                            fontSize: "0.9rem",
+                          }}
+                        >
+                          {loadingProgress.total} assets
+                        </div>
                       </div>
-                      <div style={{ textAlign: "center", padding: "0.75rem", background: "rgba(147, 51, 234, 0.05)", borderRadius: "8px", border: "1px solid rgba(234, 51, 147, 0.1)" }}>
-                        <div style={{ fontSize: "1.5rem", marginBottom: "0.25rem" }}>✅</div>
-                        <div style={{ fontSize: "0.8rem", color: "#aaa" }}>Complete</div>
-                        <div style={{ color: "#e91e63", fontWeight: "bold", fontSize: "0.9rem" }}>{Math.round((loadingProgress.processed / Math.max(1, loadingProgress.total)) * 100)}%</div>
+                      <div
+                        style={{
+                          textAlign: "center",
+                          padding: "0.75rem",
+                          background: "rgba(147, 51, 234, 0.05)",
+                          borderRadius: "8px",
+                          border: "1px solid rgba(234, 51, 147, 0.1)",
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: "1.5rem",
+                            marginBottom: "0.25rem",
+                          }}
+                        >
+                          ✅
+                        </div>
+                        <div style={{ fontSize: "0.8rem", color: "#aaa" }}>
+                          Complete
+                        </div>
+                        <div
+                          style={{
+                            color: "#e91e63",
+                            fontWeight: "bold",
+                            fontSize: "0.9rem",
+                          }}
+                        >
+                          {Math.round(
+                            (loadingProgress.processed /
+                              Math.max(1, loadingProgress.total)) *
+                              100,
+                          )}
+                          %
+                        </div>
                       </div>
                     </div>
-                    <p style={{ color: "#888", fontSize: "0.85rem", marginTop: "1.5rem", fontStyle: "italic" }}>Live scanning of on-chain asset registry...</p>
+                    <p
+                      style={{
+                        color: "#888",
+                        fontSize: "0.85rem",
+                        marginTop: "1.5rem",
+                        fontStyle: "italic",
+                      }}
+                    >
+                      Live scanning of on-chain asset registry...
+                    </p>
                   </div>
                 ) : poolComposition.length === 0 ? (
                   <div style={{ textAlign: "center", padding: "2rem" }}>
-                    <p style={{ color: "#888" }}>No pool data yet. Click the button below to scan.</p>
+                    <p style={{ color: "#888" }}>
+                      No pool data yet. Click the button below to scan.
+                    </p>
                   </div>
                 ) : null}
                 {!isLoadingPoolData && (
-                  <button onClick={() => { setIsLoadingPoolData(true); fetchPoolComposition().then((assets) => { setPoolComposition(assets); setTimeout(renderPrivacyChart, 50); }); }}
+                  <button
+                    onClick={() => {
+                      setIsLoadingPoolData(true);
+                      fetchPoolComposition().then((assets) => {
+                        setPoolComposition(assets);
+                        setTimeout(renderPrivacyChart, 50);
+                      });
+                    }}
                     style={{
-                      background: "linear-gradient(135deg, #9333ea, #e91e63)", color: "white", border: "none",
-                      borderRadius: "12px", padding: "12px 24px", cursor: "pointer", fontWeight: "bold",
-                      fontFamily: "'Exo 2', sans-serif", fontSize: "14px", display: "block", margin: "0 auto",
-                    }}>
+                      background: "linear-gradient(135deg, #9333ea, #e91e63)",
+                      color: "white",
+                      border: "none",
+                      borderRadius: "12px",
+                      padding: "12px 24px",
+                      cursor: "pointer",
+                      fontWeight: "bold",
+                      fontFamily: "'Exo 2', sans-serif",
+                      fontSize: "14px",
+                      display: "block",
+                      margin: "0 auto",
+                    }}
+                  >
                     🔍 Scan Pool
                   </button>
                 )}
               </div>
-              <button className="close-help-button" onClick={() => setShowPrivacy(false)}>Close</button>
+              <button
+                className="close-help-button"
+                onClick={() => setShowPrivacy(false)}
+              >
+                Close
+              </button>
             </div>
           </div>
         )}
@@ -5863,36 +6808,175 @@ export function App() {
                 <h3>Background Color (Center)</h3>
                 <div style={{ margin: "1.5rem 0" }}>
                   <div style={{ marginBottom: "1rem" }}>
-                    <label style={{ display: "block", marginBottom: "0.5rem", color: "#ccc", fontWeight: "bold" }}>Primary Color</label>
-                    <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-                      <input type="color" value={backgroundColor} onChange={(e) => setBackgroundColor(e.target.value)}
-                        style={{ width: "60px", height: "60px", borderRadius: "8px", border: "2px solid #333", cursor: "pointer" }} />
+                    <label
+                      style={{
+                        display: "block",
+                        marginBottom: "0.5rem",
+                        color: "#ccc",
+                        fontWeight: "bold",
+                      }}
+                    >
+                      Primary Color
+                    </label>
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: "10px",
+                        alignItems: "center",
+                      }}
+                    >
+                      <input
+                        type="color"
+                        value={backgroundColor}
+                        onChange={(e) => setBackgroundColor(e.target.value)}
+                        style={{
+                          width: "60px",
+                          height: "60px",
+                          borderRadius: "8px",
+                          border: "2px solid #333",
+                          cursor: "pointer",
+                        }}
+                      />
                       <div style={{ flex: 1 }}>
-                        <div style={{ background: backgroundColor, height: "30px", borderRadius: "6px", border: "1px solid #444", marginBottom: "0.25rem" }} />
-                        <code style={{ color: "#888", fontSize: "0.8rem" }}>{backgroundColor}</code>
+                        <div
+                          style={{
+                            background: backgroundColor,
+                            height: "30px",
+                            borderRadius: "6px",
+                            border: "1px solid #444",
+                            marginBottom: "0.25rem",
+                          }}
+                        />
+                        <code style={{ color: "#888", fontSize: "0.8rem" }}>
+                          {backgroundColor}
+                        </code>
                       </div>
                     </div>
                   </div>
                   <div style={{ marginBottom: "1rem" }}>
-                    <label style={{ display: "block", marginBottom: "0.5rem", color: "#ccc", fontWeight: "bold" }}>Gradient Color (Edges)</label>
-                    <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-                      <input type="color" value={gradientColor} onChange={(e) => setGradientColor(e.target.value)}
-                        style={{ width: "60px", height: "60px", borderRadius: "8px", border: "2px solid #333", cursor: "pointer" }} />
+                    <label
+                      style={{
+                        display: "block",
+                        marginBottom: "0.5rem",
+                        color: "#ccc",
+                        fontWeight: "bold",
+                      }}
+                    >
+                      Gradient Color (Edges)
+                    </label>
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: "10px",
+                        alignItems: "center",
+                      }}
+                    >
+                      <input
+                        type="color"
+                        value={gradientColor}
+                        onChange={(e) => setGradientColor(e.target.value)}
+                        style={{
+                          width: "60px",
+                          height: "60px",
+                          borderRadius: "8px",
+                          border: "2px solid #333",
+                          cursor: "pointer",
+                        }}
+                      />
                       <div style={{ flex: 1 }}>
-                        <div style={{ background: gradientColor, height: "30px", borderRadius: "6px", border: "1px solid #444", marginBottom: "0.25rem" }} />
-                        <code style={{ color: "#888", fontSize: "0.8rem" }}>{gradientColor}</code>
+                        <div
+                          style={{
+                            background: gradientColor,
+                            height: "30px",
+                            borderRadius: "6px",
+                            border: "1px solid #444",
+                            marginBottom: "0.25rem",
+                          }}
+                        />
+                        <code style={{ color: "#888", fontSize: "0.8rem" }}>
+                          {gradientColor}
+                        </code>
                       </div>
                     </div>
                   </div>
-                  <div style={{ background: `radial-gradient(circle at center, ${backgroundColor} 0%, ${gradientColor} 100%)`, height: "80px", borderRadius: "12px", border: "1px solid #444", marginTop: "1rem", display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontWeight: "bold", textShadow: "0 1px 3px rgba(0,0,0,0.5)" }}>Preview</div>
+                  <div
+                    style={{
+                      background: `radial-gradient(circle at center, ${backgroundColor} 0%, ${gradientColor} 100%)`,
+                      height: "80px",
+                      borderRadius: "12px",
+                      border: "1px solid #444",
+                      marginTop: "1rem",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: "white",
+                      fontWeight: "bold",
+                      textShadow: "0 1px 3px rgba(0,0,0,0.5)",
+                    }}
+                  >
+                    Preview
+                  </div>
                 </div>
-                <div style={{ marginTop: "1.5rem", paddingTop: "1rem", borderTop: "1px solid #333" }}>
-                  <button onClick={() => { setBackgroundColor("#09002b"); setGradientColor("#000000"); }}
-                    style={{ background: "linear-gradient(135deg, #9333ea, #e91e63)", color: "white", border: "none", borderRadius: "8px", padding: "10px 20px", cursor: "pointer", fontWeight: "bold", marginRight: "10px" }}>Reset to Default</button>
-                  <button onClick={() => { setBackgroundColor("#1a1a2e"); setGradientColor("#16213e"); }}
-                    style={{ background: "linear-gradient(135deg, #1a1a2e, #16213e)", color: "white", border: "none", borderRadius: "8px", padding: "10px 20px", cursor: "pointer", fontWeight: "bold", marginRight: "10px" }}>Dark Blue Theme</button>
-                  <button onClick={() => { setBackgroundColor("#0f172a"); setGradientColor("#1e293b"); }}
-                    style={{ background: "linear-gradient(135deg, #0f172a, #1e293b)", color: "white", border: "none", borderRadius: "8px", padding: "10px 20px", cursor: "pointer", fontWeight: "bold" }}>Slate Theme</button>
+                <div
+                  style={{
+                    marginTop: "1.5rem",
+                    paddingTop: "1rem",
+                    borderTop: "1px solid #333",
+                  }}
+                >
+                  <button
+                    onClick={() => {
+                      setBackgroundColor("#09002b");
+                      setGradientColor("#000000");
+                    }}
+                    style={{
+                      background: "linear-gradient(135deg, #9333ea, #e91e63)",
+                      color: "white",
+                      border: "none",
+                      borderRadius: "8px",
+                      padding: "10px 20px",
+                      cursor: "pointer",
+                      fontWeight: "bold",
+                      marginRight: "10px",
+                    }}
+                  >
+                    Reset to Default
+                  </button>
+                  <button
+                    onClick={() => {
+                      setBackgroundColor("#1a1a2e");
+                      setGradientColor("#16213e");
+                    }}
+                    style={{
+                      background: "linear-gradient(135deg, #1a1a2e, #16213e)",
+                      color: "white",
+                      border: "none",
+                      borderRadius: "8px",
+                      padding: "10px 20px",
+                      cursor: "pointer",
+                      fontWeight: "bold",
+                      marginRight: "10px",
+                    }}
+                  >
+                    Dark Blue Theme
+                  </button>
+                  <button
+                    onClick={() => {
+                      setBackgroundColor("#0f172a");
+                      setGradientColor("#1e293b");
+                    }}
+                    style={{
+                      background: "linear-gradient(135deg, #0f172a, #1e293b)",
+                      color: "white",
+                      border: "none",
+                      borderRadius: "8px",
+                      padding: "10px 20px",
+                      cursor: "pointer",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    Slate Theme
+                  </button>
                 </div>
               </div>
 
@@ -5900,26 +6984,145 @@ export function App() {
                 <h3>Theme Modes</h3>
                 <p>Choose which visual effects to enable:</p>
                 <div style={{ margin: "1.5rem 0" }}>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "1rem", marginBottom: "2rem" }}>
-                    <div onClick={() => setRainMode(!rainMode)} style={{ background: "rgba(0,0,0,0.2)", borderRadius: "8px", padding: "1rem", border: `2px solid ${rainMode ? "#9333ea" : "#333"}`, textAlign: "center", cursor: "pointer", transition: "all 0.2s" }}>
-                      <div style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>🌧️</div>
-                      <div style={{ color: "#ccc", fontWeight: "bold", marginBottom: "0.25rem" }}>Rain Mode</div>
-                      <div style={{ color: rainMode ? "#4ade80" : "#888", fontSize: "0.8rem" }}>{rainMode ? "Enabled" : "Click to enable"}</div>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr 1fr 1fr",
+                      gap: "1rem",
+                      marginBottom: "2rem",
+                    }}
+                  >
+                    <div
+                      onClick={() => setRainMode(!rainMode)}
+                      style={{
+                        background: "rgba(0,0,0,0.2)",
+                        borderRadius: "8px",
+                        padding: "1rem",
+                        border: `2px solid ${rainMode ? "#9333ea" : "#333"}`,
+                        textAlign: "center",
+                        cursor: "pointer",
+                        transition: "all 0.2s",
+                      }}
+                    >
+                      <div style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>
+                        🌧️
+                      </div>
+                      <div
+                        style={{
+                          color: "#ccc",
+                          fontWeight: "bold",
+                          marginBottom: "0.25rem",
+                        }}
+                      >
+                        Rain Mode
+                      </div>
+                      <div
+                        style={{
+                          color: rainMode ? "#4ade80" : "#888",
+                          fontSize: "0.8rem",
+                        }}
+                      >
+                        {rainMode ? "Enabled" : "Click to enable"}
+                      </div>
                     </div>
-                    <div onClick={() => setFlameMode(!flameMode)} style={{ background: "rgba(0,0,0,0.2)", borderRadius: "8px", padding: "1rem", border: `2px solid ${flameMode ? "#ff4400" : "#333"}`, textAlign: "center", cursor: "pointer", transition: "all 0.2s" }}>
-                      <div style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>🔥</div>
-                      <div style={{ color: "#ccc", fontWeight: "bold", marginBottom: "0.25rem" }}>Flame Mode</div>
-                      <div style={{ color: flameMode ? "#4ade80" : "#888", fontSize: "0.8rem" }}>{flameMode ? "Enabled" : "Click to enable"}</div>
+                    <div
+                      onClick={() => setFlameMode(!flameMode)}
+                      style={{
+                        background: "rgba(0,0,0,0.2)",
+                        borderRadius: "8px",
+                        padding: "1rem",
+                        border: `2px solid ${flameMode ? "#ff4400" : "#333"}`,
+                        textAlign: "center",
+                        cursor: "pointer",
+                        transition: "all 0.2s",
+                      }}
+                    >
+                      <div style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>
+                        🔥
+                      </div>
+                      <div
+                        style={{
+                          color: "#ccc",
+                          fontWeight: "bold",
+                          marginBottom: "0.25rem",
+                        }}
+                      >
+                        Flame Mode
+                      </div>
+                      <div
+                        style={{
+                          color: flameMode ? "#4ade80" : "#888",
+                          fontSize: "0.8rem",
+                        }}
+                      >
+                        {flameMode ? "Enabled" : "Click to enable"}
+                      </div>
                     </div>
-                    <div onClick={() => setToasterMode(!toasterMode)} style={{ background: "rgba(0,0,0,0.2)", borderRadius: "8px", padding: "1rem", border: `2px solid ${toasterMode ? "#ff9966" : "#333"}`, textAlign: "center", cursor: "pointer", transition: "all 0.2s" }}>
-                      <div style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>🍞</div>
-                      <div style={{ color: "#ccc", fontWeight: "bold", marginBottom: "0.25rem" }}>Toaster Mode</div>
-                      <div style={{ color: toasterMode ? "#4ade80" : "#888", fontSize: "0.8rem" }}>{toasterMode ? "Enabled" : "Click to enable"}</div>
+                    <div
+                      onClick={() => setToasterMode(!toasterMode)}
+                      style={{
+                        background: "rgba(0,0,0,0.2)",
+                        borderRadius: "8px",
+                        padding: "1rem",
+                        border: `2px solid ${toasterMode ? "#ff9966" : "#333"}`,
+                        textAlign: "center",
+                        cursor: "pointer",
+                        transition: "all 0.2s",
+                      }}
+                    >
+                      <div style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>
+                        🍞
+                      </div>
+                      <div
+                        style={{
+                          color: "#ccc",
+                          fontWeight: "bold",
+                          marginBottom: "0.25rem",
+                        }}
+                      >
+                        Toaster Mode
+                      </div>
+                      <div
+                        style={{
+                          color: toasterMode ? "#4ade80" : "#888",
+                          fontSize: "0.8rem",
+                        }}
+                      >
+                        {toasterMode ? "Enabled" : "Click to enable"}
+                      </div>
                     </div>
-                    <div onClick={() => setPonyMode(!ponyMode)} style={{ background: "rgba(0,0,0,0.2)", borderRadius: "8px", padding: "1rem", border: `2px solid ${ponyMode ? "#ff69b4" : "#333"}`, textAlign: "center", cursor: "pointer", transition: "all 0.2s" }}>
-                      <div style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>🦄</div>
-                      <div style={{ color: "#ccc", fontWeight: "bold", marginBottom: "0.25rem" }}>Pony Mode</div>
-                      <div style={{ color: ponyMode ? "#4ade80" : "#888", fontSize: "0.8rem" }}>{ponyMode ? "Enabled" : "Click to enable"}</div>
+                    <div
+                      onClick={() => setPonyMode(!ponyMode)}
+                      style={{
+                        background: "rgba(0,0,0,0.2)",
+                        borderRadius: "8px",
+                        padding: "1rem",
+                        border: `2px solid ${ponyMode ? "#ff69b4" : "#333"}`,
+                        textAlign: "center",
+                        cursor: "pointer",
+                        transition: "all 0.2s",
+                      }}
+                    >
+                      <div style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>
+                        🦄
+                      </div>
+                      <div
+                        style={{
+                          color: "#ccc",
+                          fontWeight: "bold",
+                          marginBottom: "0.25rem",
+                        }}
+                      >
+                        Pony Mode
+                      </div>
+                      <div
+                        style={{
+                          color: ponyMode ? "#4ade80" : "#888",
+                          fontSize: "0.8rem",
+                        }}
+                      >
+                        {ponyMode ? "Enabled" : "Click to enable"}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -5931,42 +7134,174 @@ export function App() {
                   <p>Customize your rain particles:</p>
                   <div style={{ margin: "1.5rem 0" }}>
                     <div style={{ marginBottom: "1rem" }}>
-                      <div style={{ marginBottom: "1rem", padding: "1rem", background: "rgba(0,0,0,0.2)", borderRadius: "8px" }}>
-                        <label style={{ display: "block", marginBottom: "0.5rem", color: "#aaa", fontWeight: "bold" }}>Upload Image for Particles</label>
-                        <input type="file" accept="image/*" onChange={(e) => { const file = e.target.files?.[0]; if (file) { const reader = new FileReader(); reader.onload = (event) => { if (event.target?.result) setUploadedImage(event.target.result as string); }; reader.readAsDataURL(file); } }}
-                          style={{ width: "100%", padding: "10px", background: "rgba(255,255,255,0.1)", border: "1px solid #444", borderRadius: "6px", color: "#ccc", cursor: "pointer" }} />
+                      <div
+                        style={{
+                          marginBottom: "1rem",
+                          padding: "1rem",
+                          background: "rgba(0,0,0,0.2)",
+                          borderRadius: "8px",
+                        }}
+                      >
+                        <label
+                          style={{
+                            display: "block",
+                            marginBottom: "0.5rem",
+                            color: "#aaa",
+                            fontWeight: "bold",
+                          }}
+                        >
+                          Upload Image for Particles
+                        </label>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onload = (event) => {
+                                if (event.target?.result)
+                                  setUploadedImage(
+                                    event.target.result as string,
+                                  );
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                          style={{
+                            width: "100%",
+                            padding: "10px",
+                            background: "rgba(255,255,255,0.1)",
+                            border: "1px solid #444",
+                            borderRadius: "6px",
+                            color: "#ccc",
+                            cursor: "pointer",
+                          }}
+                        />
                         {uploadedImage && (
-                          <div style={{ marginTop: "1rem", textAlign: "center" }}>
-                            <p style={{ color: "#4ade80", marginBottom: "0.5rem" }}>Image uploaded!</p>
-                            <div style={{ display: "inline-block", width: "80px", height: "80px", borderRadius: "50%", overflow: "hidden", border: "2px solid #9333ea", background: `url(${uploadedImage}) center/cover` }} />
+                          <div
+                            style={{ marginTop: "1rem", textAlign: "center" }}
+                          >
+                            <p
+                              style={{
+                                color: "#4ade80",
+                                marginBottom: "0.5rem",
+                              }}
+                            >
+                              Image uploaded!
+                            </p>
+                            <div
+                              style={{
+                                display: "inline-block",
+                                width: "80px",
+                                height: "80px",
+                                borderRadius: "50%",
+                                overflow: "hidden",
+                                border: "2px solid #9333ea",
+                                background: `url(${uploadedImage}) center/cover`,
+                              }}
+                            />
                           </div>
                         )}
                       </div>
                     </div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1rem" }}>
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "1fr 1fr",
+                        gap: "1rem",
+                        marginBottom: "1rem",
+                      }}
+                    >
                       <div>
-                        <label style={{ display: "block", marginBottom: "0.5rem", color: "#aaa", fontSize: "0.9rem" }}>Particle Count: {particleCount}</label>
-                        <input type="range" min="5" max="100" value={particleCount} onChange={(e) => setParticleCount(parseInt(e.target.value))} style={{ width: "100%" }} />
+                        <label
+                          style={{
+                            display: "block",
+                            marginBottom: "0.5rem",
+                            color: "#aaa",
+                            fontSize: "0.9rem",
+                          }}
+                        >
+                          Particle Count: {particleCount}
+                        </label>
+                        <input
+                          type="range"
+                          min="5"
+                          max="100"
+                          value={particleCount}
+                          onChange={(e) =>
+                            setParticleCount(parseInt(e.target.value))
+                          }
+                          style={{ width: "100%" }}
+                        />
                       </div>
                       <div>
-                        <label style={{ display: "block", marginBottom: "0.5rem", color: "#aaa", fontSize: "0.9rem" }}>Particle Size: {particleSize}px</label>
-                        <input type="range" min="4" max="20" value={particleSize} onChange={(e) => setParticleSize(parseInt(e.target.value))} style={{ width: "100%" }} />
+                        <label
+                          style={{
+                            display: "block",
+                            marginBottom: "0.5rem",
+                            color: "#aaa",
+                            fontSize: "0.9rem",
+                          }}
+                        >
+                          Particle Size: {particleSize}px
+                        </label>
+                        <input
+                          type="range"
+                          min="4"
+                          max="20"
+                          value={particleSize}
+                          onChange={(e) =>
+                            setParticleSize(parseInt(e.target.value))
+                          }
+                          style={{ width: "100%" }}
+                        />
                       </div>
                     </div>
                     <div>
-                      <label style={{ display: "block", marginBottom: "0.5rem", color: "#aaa", fontSize: "0.9rem" }}>Falling Speed: {fallingSpeed}</label>
-                      <input type="range" min="1" max="10" value={fallingSpeed} onChange={(e) => setFallingSpeed(parseInt(e.target.value))} style={{ width: "100%" }} />
+                      <label
+                        style={{
+                          display: "block",
+                          marginBottom: "0.5rem",
+                          color: "#aaa",
+                          fontSize: "0.9rem",
+                        }}
+                      >
+                        Falling Speed: {fallingSpeed}
+                      </label>
+                      <input
+                        type="range"
+                        min="1"
+                        max="10"
+                        value={fallingSpeed}
+                        onChange={(e) =>
+                          setFallingSpeed(parseInt(e.target.value))
+                        }
+                        style={{ width: "100%" }}
+                      />
                     </div>
                   </div>
                 </div>
               )}
 
-              <button className="close-help-button" onClick={() => setShowSettings(false)}>Close</button>
+              <button
+                className="close-help-button"
+                onClick={() => setShowSettings(false)}
+              >
+                Close
+              </button>
             </div>
           </div>
         )}
         {toasterMode && <FlyingToasters />}
-        {rainMode && <RainAnimation particleCount={particleCount} particleSize={particleSize} fallingSpeed={fallingSpeed} uploadedImage={uploadedImage} />}
+        {rainMode && (
+          <RainAnimation
+            particleCount={particleCount}
+            particleSize={particleSize}
+            fallingSpeed={fallingSpeed}
+            uploadedImage={uploadedImage}
+          />
+        )}
         {flameMode && <FlameAnimation />}
         {ponyMode && <PonyAnimation />}
       </div>

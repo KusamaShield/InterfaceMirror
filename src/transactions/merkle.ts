@@ -194,13 +194,14 @@ export async function buildMerkleTreeFromContract(
   abi: string[],
   forceRefresh = false,
   rpcEndpoint?: string,
+  startBlock = 0,
 ): Promise<LeanIMT> {
   const tree = new LeanIMT();
   const iface = new ethers.Interface(abi);
 
   // Try to load cached state
   const cached = forceRefresh ? null : loadCache(contractAddress);
-  let fromBlock = 0;
+  let fromBlock = startBlock;
 
   if (cached && cached.leaves.length > 0) {
     // Replay cached leaves into the tree (fast, no RPC)
@@ -214,10 +215,14 @@ export async function buildMerkleTreeFromContract(
   }
 
   // Fetch events from where we left off
-  // Actual deployed contract uses different signatures than source code!
-  // Based on event logs:
-  const depositTopic = ethers.id("Deposit(address,bytes32,uint256)"); // address is indexed (in topics[1])
-  const withdrawalTopic = ethers.id("Withdrawal(address,uint256,address)"); // addresses are indexed
+  // V5 contract signatures (bytecode_hash = "none" requires manual decoding)
+  // Deposit(address indexed asset, bytes32 commitment, uint256 nullifierHash)
+  const depositTopic = ethers.id("Deposit(address,bytes32,uint256)");
+  // Withdrawal(address indexed asset, uint256 amount, address indexed recipient, uint256 newCommitment)
+  const withdrawalTopic = ethers.id(
+    "Withdrawal(address,uint256,address,uint256)",
+  );
+  // NewCommitment(bytes32 newCommitmentHash)
   const newCommitmentTopic = ethers.id("NewCommitment(bytes32)");
 
   const currentBlock = await provider.getBlockNumber();
@@ -331,6 +336,7 @@ export async function buildMerkleTreeFromContract(
 
   // Process events in order
   let insertionIndex = tree.size;
+  const insertedCommitments = new Set<string>(); // Track to avoid duplicates
 
   for (const log of logs) {
     if (log.topics[0] === depositTopic) {
@@ -370,7 +376,14 @@ export async function buildMerkleTreeFromContract(
         continue;
       }
 
+      const commitmentStr = commitment.toString();
+      if (insertedCommitments.has(commitmentStr)) {
+        console.log(`Skipping duplicate commitment: ${commitmentStr}`);
+        continue;
+      }
+
       tree.insert(commitment);
+      insertedCommitments.add(commitmentStr);
       console.log(
         `Merkle insert #${insertionIndex}: deposit commitment=${commitment} → root=${tree.root}`,
       );
@@ -388,7 +401,16 @@ export async function buildMerkleTreeFromContract(
             log.topics,
           );
           const newCommitment = BigInt(decoded[0]); // bytes32 is first parameter
+          const newCommitmentStr = newCommitment.toString();
+          if (insertedCommitments.has(newCommitmentStr)) {
+            console.log(
+              `Skipping duplicate commitment from NewCommitment: ${newCommitmentStr}`,
+            );
+            continue;
+          }
+
           tree.insert(newCommitment);
+          insertedCommitments.add(newCommitmentStr);
           console.log(
             `Merkle insert #${insertionIndex}: new commitment from withdrawal=${newCommitment} → root=${tree.root}`,
           );
@@ -421,7 +443,16 @@ export async function buildMerkleTreeFromContract(
             const pubSignals = decoded.args[3];
             if (pubSignals && pubSignals.length >= 1) {
               const newCommitmentHash = BigInt(pubSignals[0]);
+              const newCommitmentHashStr = newCommitmentHash.toString();
+              if (insertedCommitments.has(newCommitmentHashStr)) {
+                console.log(
+                  `Skipping duplicate commitment from withdrawal tx: ${newCommitmentHashStr}`,
+                );
+                continue;
+              }
+
               tree.insert(newCommitmentHash);
+              insertedCommitments.add(newCommitmentHashStr);
               console.log(
                 `Merkle insert #${insertionIndex}: withdrawal newCommitment=${newCommitmentHash} → root=${tree.root}`,
               );
