@@ -8,11 +8,11 @@
 import { ethers } from "ethers";
 import { ApiPromise, WsProvider } from "@polkadot/api";
 
-// Paseo v3 network configuration
+// Paseo v5 network configuration
 const CONFIG = {
-  name: "Paseo AssetHub v3",
-  shieldAddress: "0x3099889C1538f0200B831181cbfb532a4e9A418F",
-  rpcEndpoint: "http://localhost:5173/api/rpc-proxy", // Use Vite proxy
+  name: "Paseo AssetHub v5",
+  shieldAddress: "0x4f862778245e6C684AcE9cc32e1B870b6AF04b34",
+  rpcEndpoint: "https://paseo-assethub-rpc.laissez-faire.trade/",
   wsEndpoint: "wss://asset-hub-paseo-rpc.n.dwellir.com",
   nativeAsset: "PAS",
 };

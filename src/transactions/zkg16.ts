@@ -11,6 +11,41 @@ import { poseidon1, poseidon2, poseidon3 } from "poseidon-lite";
 
 export const USE_WASMSNARK = false;
 
+// ============================================================================
+// Contract Addresses - Paseo Asset Hub (Testnet)
+// ============================================================================
+
+export const PASEO_ASSETHUB = {
+  // V5 Pool Contracts (deployed 2025-06-04)
+  pool: "0x4f862778245e6C684AcE9cc32e1B870b6AF04b34",
+  verifier: "0x90Dc5677d4a792FE3B20Aefe9967FBE1079827d9",
+  leanIMT: "0xFBe3EE9b55b6a989c07fdb5376b01fd058A114D1",
+  
+  // Legacy/Other contracts
+  westend_pool: "0x5F1609148E04eaA36d5dDDEd19114b191b3eEBD",
+};
+
+// Pool ABI - includes both withdraw() and proxy_withdraw()
+export const POOL_ABI = [
+  // Events
+  "event Deposit(address indexed asset, bytes32 commitment, uint256 nullifierHash)",
+  "event Withdrawal(address indexed asset, uint256 amount, address indexed recipient, uint256 newCommitment)",
+  "event NewCommitment(bytes32 newCommitmentHash)",
+  
+  // Read functions
+  "function currentRoot() view returns (uint256)",
+  "function treeSize() view returns (uint256)",
+  "function isDepositSpent(bytes32 nullifierHash) view returns (bool)",
+  "function getEscrowBalance(address asset) view returns (uint256)",
+  "function deposits(bytes32 nullifierHash) view returns (address asset, uint256 assetId, uint256 amount, bool isSpent)",
+  
+  // Write functions
+  "function depositNative(bytes32 commitment, bytes32 nullifierHash) external payable",
+  "function withdraw(uint256[2] pA, uint256[2][2] pB, uint256[2] pC, uint256[7] pubSignals, address asset, uint256 amount, address recipient) external",
+  "function proxy_withdraw(uint256[2] pA, uint256[2][2] pB, uint256[2] pC, uint256[7] pubSignals, address asset, uint256 amount, address recipient) external",
+];
+
+// Legacy export for compatibility
 export const westend_pool = "0x5F1609148E04eaA36d5dDDEd19114b191b3eEBD";
 
 const BN254_R =
@@ -195,9 +230,22 @@ export async function zkWithdraw(
     );
     const parsedCalldata = JSON.parse("[" + calldata + "]");
 
+    // Debug: check what exportSolidityCallData returns
+    console.log(
+      "  exportSolidityCallData public signals:",
+      parsedCalldata[3]?.length || "undefined",
+    );
+
+    // Use the signals from exportSolidityCallData (they might be transformed)
+    const exportSignals =
+      parsedCalldata[3] || publicSignals.map((s) => s.toString());
+
     // Build calldata for withdraw: pA, pB, pC, pubSignals (as BigInts)
-    const contractPublicSignals = publicSignals.map((s) => BigInt(s));
-    if (padTo7Signals) {
+    const contractPublicSignals = exportSignals.map((s) => BigInt(s));
+
+    // For V5 (padTo7Signals), check if we already have 7 signals
+    // If not, add assetId as last signal
+    if (padTo7Signals && contractPublicSignals.length === 6) {
       contractPublicSignals.push(BigInt(params.asset || "0"));
     }
 
@@ -211,15 +259,14 @@ export async function zkWithdraw(
       contractPublicSignals,
     ];
 
-    // Return publicSignals as strings for UI
+    // Return publicSignals as strings for UI (should match what we send to contract)
     let publicSignalsArray;
-    if (padTo7Signals) {
-      publicSignalsArray = [
-        ...publicSignals.map((s) => s.toString()),
-        params.asset || "0",
-      ];
+    if (padTo7Signals && exportSignals.length === 6) {
+      // Pad for V5
+      publicSignalsArray = [...exportSignals, params.asset || "0"];
     } else {
-      publicSignalsArray = publicSignals.map((s) => s.toString());
+      // Use whatever exportSolidityCallData returned
+      publicSignalsArray = exportSignals;
     }
 
     return {
