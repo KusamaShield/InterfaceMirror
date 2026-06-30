@@ -38,6 +38,11 @@ export default defineConfig({
             res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
           });
         }
+      },
+      '/api/mail-proxy': {
+        target: 'https://mail.thc.org',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/mail-proxy/, ''),
       }
     }
   },

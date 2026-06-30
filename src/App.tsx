@@ -319,6 +319,17 @@ export function App() {
   const [showHelp, setShowHelp] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showNameGen, setShowNameGen] = useState(false);
+  const [generatedFirstName, setGeneratedFirstName] = useState("");
+  const [generatedLastName, setGeneratedLastName] = useState("");
+  const [genLoading, setGenLoading] = useState(false);
+  const [userEmail, setUserEmail] = useState("");
+  const [confirmationToken, setConfirmationToken] = useState("");
+  const [nameGenStep, setNameGenStep] = useState<"generate" | "confirm" | "done">("generate");
+  const [nameGenResult, setNameGenResult] = useState("");
+  const [firstNames, setFirstNames] = useState<string[]>([]);
+  const [lastNames, setLastNames] = useState<string[]>([]);
+  const [namesLoaded, setNamesLoaded] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
 
   // Proxy withdraw state (for Paseo network)
@@ -818,6 +829,68 @@ export function App() {
     const balanceWei = BigInt(asset.balance);
     const balance = Number(balanceWei) / Math.pow(10, asset.decimals);
     return balance.toFixed(4);
+  };
+
+  const pickRandom = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)];
+
+  const generateName = (fns?: string[], lns?: string[]) => {
+    const fnList = fns ?? firstNames;
+    const lnList = lns ?? lastNames;
+    if (fnList.length === 0 || lnList.length === 0) return;
+    const fn = pickRandom(fnList);
+    const ln = pickRandom(lnList);
+    setGeneratedFirstName(fn.charAt(0).toUpperCase() + fn.slice(1).toLowerCase());
+    setGeneratedLastName(ln.charAt(0).toUpperCase() + ln.slice(1).toLowerCase());
+    setNameGenResult("");
+  };
+
+  const loadWordlists = async () => {
+    if (namesLoaded) return;
+    try {
+      const [fnRes, lnRes] = await Promise.all([
+        fetch("/wordlists/firstnames.txt"),
+        fetch("/wordlists/lastnames.txt"),
+      ]);
+      const fnText = await fnRes.text();
+      const lnText = await lnRes.text();
+      const fns = fnText.split("\n").map((s) => s.trim()).filter(Boolean);
+      const lns = lnText.split("\n").map((s) => s.trim()).filter(Boolean);
+      setFirstNames(fns);
+      setLastNames(lns);
+      setNamesLoaded(true);
+      return [fns, lns] as const;
+    } catch (e) {
+      console.error("Failed to load wordlists", e);
+    }
+  };
+
+  const subscribeForwarder = async () => {
+    if (!generatedFirstName || !generatedLastName || !userEmail) return;
+    const handle = `${generatedFirstName.toLowerCase()}.${generatedLastName.toLowerCase()}`;
+    const params = new URLSearchParams({ name: handle, domain: "metasploit.io", to: userEmail });
+    try {
+      setNameGenResult("Sending confirmation email...");
+      const res = await fetch(`/api/mail-proxy/api/forward/subscribe?${params}`);
+      const data = await res.json();
+      if (data.ok) {
+        setNameGenResult("");
+        setNameGenStep("done");
+        toast("Press the link in your inbox", {
+          position: "top-right",
+          autoClose: 7000,
+          hideProgressBar: false,
+          closeOnClick: false,
+          pauseOnHover: true,
+          draggable: true,
+          progress: undefined,
+          theme: "dark",
+        });
+      } else {
+        setNameGenResult(`✗ ${data.error || "request failed"}`);
+      }
+    } catch (e: any) {
+      setNameGenResult(`✗ ${e.message}`);
+    }
   };
 
   // Query user's token balances from Paseo Asset Hub
@@ -6185,12 +6258,21 @@ export function App() {
           <img src="/toolbox.png" alt="Settings" className="settings-icon" />
           Customize Theme
         </button>
-        <a
-          href="https://kusamashield.codeberg.page/deploy.html"
-          title="run Kusama Shield locally"
-        >
-          <img src="/run_locally.gif" alt="run with ipfs" />
-        </a>
+        <div style={{ display: "flex", justifyContent: "center", gap: "8px", marginTop: "8px" }}>
+          <a
+            href="https://kusamashield.codeberg.page/deploy.html"
+            title="run Kusama Shield locally"
+          >
+            <img src="/run_locally.gif" alt="run with ipfs" />
+          </a>
+          <button
+            onClick={() => setShowNameGen(true)}
+            title="Fake name generator and email forwarder"
+            style={{ background: "none", border: "none", cursor: "pointer", padding: "0 4px" }}
+          >
+            <img src="/mustach_smile.png" alt="mustach" style={{ width: "90%", height: "90%" }} />
+          </button>
+        </div>
         <div
           style={{
             display: "flex",
@@ -7301,6 +7383,105 @@ export function App() {
               >
                 Close
               </button>
+            </div>
+          </div>
+        )}
+        {showNameGen && (
+          <div className="help-modal" onClick={() => setShowNameGen(false)}>
+            <div className="help-modal-content" onClick={(e) => e.stopPropagation()}>
+              <h2><img src="/haltman.png" alt="haltman" style={{ width: "32px", height: "32px", verticalAlign: "middle", marginRight: "8px" }} />Fake name generator</h2>
+              <div className="help-section">
+                <div style={{ textAlign: "center", marginBottom: "1.5rem" }}>
+                  {generatedFirstName ? (
+                    <>
+                      <div style={{ fontSize: "1.5rem", fontWeight: "bold", color: "#9d4edd", marginBottom: "0.5rem" }}>
+                        {generatedFirstName} {generatedLastName}
+                      </div>
+                      <div style={{ fontSize: "0.95rem", color: "#aaa" }}>
+                        📧 {generatedFirstName.toLowerCase()}.{generatedLastName.toLowerCase()}@metasploit.io
+                      </div>
+                    </>
+                  ) : (
+                    <div style={{ color: "#888" }}>Click generate to create a fake identity</div>
+                  )}
+                </div>
+                <div style={{ display: "flex", gap: "0.5rem", justifyContent: "center", marginBottom: "1rem" }}>
+                  <button
+                    className="help-button"
+                    onClick={async () => {
+                      const loaded = await loadWordlists();
+                      if (loaded) {
+                        generateName(loaded[0], loaded[1]);
+                      } else {
+                        generateName();
+                      }
+                      setNameGenStep("generate");
+                      setNameGenResult("");
+                    }}
+                    style={{ padding: "0.5rem 1rem" }}
+                  >
+                    🎲 Generate
+                  </button>
+                  {generatedFirstName && nameGenStep === "generate" && (
+                    <button
+                      className="help-button"
+                      onClick={() => setNameGenStep("confirm")}
+                      style={{ padding: "0.5rem 1rem" }}
+                    >
+                      📨 Create Forwarder
+                    </button>
+                  )}
+                </div>
+                {nameGenStep === "confirm" && (
+                  <div style={{ marginBottom: "1rem" }}>
+                    <div style={{ marginBottom: "0.75rem" }}>
+                      <label style={{ display: "block", marginBottom: "0.3rem", color: "#aaa", fontSize: "0.85rem" }}>
+                        Your email (where the confirmation will be sent)
+                      </label>
+                      <input
+                        type="email"
+                        value={userEmail}
+                        onChange={(e) => setUserEmail(e.target.value)}
+                        placeholder="you@example.com"
+                        style={{
+                          width: "100%",
+                          padding: "0.5rem",
+                          borderRadius: "6px",
+                          border: "1px solid #444",
+                          background: "#111",
+                          color: "#ccc",
+                          fontSize: "0.85rem",
+                          boxSizing: "border-box",
+                        }}
+                      />
+                    </div>
+                    <button
+                      className="help-button"
+                      onClick={subscribeForwarder}
+                      disabled={!userEmail}
+                      style={{ padding: "0.5rem 1rem", width: "100%", opacity: userEmail ? 1 : 0.5 }}
+                    >
+                      Send Confirmation && Activate forwarder
+                    </button>
+                  </div>
+                )}
+                {nameGenStep === "done" && (
+                  <div style={{ textAlign: "center", padding: "1rem 0", marginBottom: "1rem" }}>
+                    <div style={{ fontSize: "1rem", color: "#4ade80", marginBottom: "0.5rem" }}>
+                      Confirmation link sent, ready for action!
+                    </div>
+                  </div>
+                )}
+                {nameGenResult && (
+                  <div style={{ textAlign: "center", fontSize: "0.85rem", color: nameGenResult.startsWith("✓") ? "#4ade80" : "#f87171" }}>
+                    {nameGenResult}
+                  </div>
+                )}
+              </div>
+              <div style={{ textAlign: "center", fontSize: "0.75rem", color: "#666" }}>
+                Emails powered by <a href="https://haltman.org/" target="_blank" title="Haltman.org" style={{ color: "rgb(222 186 255)" }}>Brazilian Hacking Group Haltman</a>
+              </div>
+              <button className="close-help-button" onClick={() => setShowNameGen(false)}>Close</button>
             </div>
           </div>
         )}
