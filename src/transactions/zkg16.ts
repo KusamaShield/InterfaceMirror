@@ -2,12 +2,13 @@
  * Copyright 2025 Kusama Shield Developers on behalf of the Kusama DAO, see LICENSE in main folder.
  *
  * ZK proof generation for Paseo Asset Hub Phase 2 fixed circuit.
- * Uses snarkjs for proof generation with WASM witness generation.
+ * Uses snarkjs via Web Worker for proof generation to avoid blocking UI.
  */
 
 import { ethers } from "ethers";
 import * as snarkjs from "snarkjs";
 import { poseidon1, poseidon2, poseidon3 } from "poseidon-lite";
+import worker from "../workers/snarkjs-client";
 
 export const USE_WASMSNARK = false;
 
@@ -16,10 +17,15 @@ export const USE_WASMSNARK = false;
 // ============================================================================
 
 export const PASEO_ASSETHUB = {
-  // V5 Pool Contracts (deployed 2025-06-04)
-  pool: "0x4f862778245e6C684AcE9cc32e1B870b6AF04b34",
-  verifier: "0x90Dc5677d4a792FE3B20Aefe9967FBE1079827d9",
-  leanIMT: "0xFBe3EE9b55b6a989c07fdb5376b01fd058A114D1",
+  // V7 Pool Contracts (deployed 2026-07-20)
+  pool: "0xbcE09D4De052b2816df1285663ac89528DF45380",
+  verifier: "0xcA4cBc5d31eccd08d393C43aF492F729FF30b685",
+  poseidonT3: "0x1d165f6fE5A30422E0E2140e91C8A9B800380637",
+  
+  // Polkadot Mainnet V7 Pool (redeployed 2026-07-26 with circomlibjs hasher)
+  polkadot_pool: "0x0D694Da746e73D1e255c1894F90e38170db45809",
+  polkadot_verifier: "0x6A13781E43AEA21918120CD0E7a2ed8614c01e14",
+  polkadot_poseidonT3: "0xB8F0C6679D6Cc56450470522Bd96573C3D615052",
   
   // Legacy/Other contracts
   westend_pool: "0x5F1609148E04eaA36d5dDDEd19114b191b3eEBD",
@@ -87,7 +93,7 @@ export function generateCommitment(
   const amountBN = BigInt(amount);
 
   const nullifier = poseidon2([secretBN, 1n]);
-  const nullifierHash = poseidon2([nullifier, 0n]);
+  const nullifierHash = poseidon1([nullifier]);
   const precommitment = poseidon2([nullifier, secretBN]);
   const valueAssetHash = poseidon2([amountBN, assetBN]);
   const commitment = poseidon2([valueAssetHash, precommitment]);
@@ -126,6 +132,20 @@ export async function zkDeposit(
   };
 }
 
+// ============================================================================
+// Circuit signal counts:
+// - V5 (withdraw_phase2_fixed): 7 public signals
+// - V7 (withdraw_phase2_fixed_v7): 8 public signals
+//   [0] newCommitmentHash
+//   [1] existingNullifierHash  
+//   [2] contextHash
+//   [3] withdrawnValue
+//   [4] treeDepth
+//   [5] context
+//   [6] root
+//   [7] asset (public input in v7, private in v5)
+// ============================================================================
+
 export async function zkWithdraw(
   params: {
     withdrawnValue: string;
@@ -141,7 +161,9 @@ export async function zkWithdraw(
     siblings: string[];
     leafIndex: string;
   },
-  options?: { padTo7Signals?: boolean },
+  options?: { 
+    useV7Circuit?: boolean; 
+  },
 ): Promise<{ proof: any; calldata: any; publicSignals: string[] }> {
   const {
     withdrawnValue,
@@ -157,7 +179,9 @@ export async function zkWithdraw(
     siblings,
     leafIndex,
   } = params;
-  const padTo7Signals = options?.padTo7Signals ?? false;
+  
+  const useV7Circuit = options?.useV7Circuit ?? false;
+  
   console.log("ZK Withdraw:", {
     withdrawnValue,
     root,
@@ -165,7 +189,7 @@ export async function zkWithdraw(
     context,
     asset,
     leafIndex,
-    padTo7Signals,
+    useV7Circuit,
   });
 
   const paddedSiblings = [...siblings];
@@ -191,27 +215,40 @@ export async function zkWithdraw(
   };
 
   try {
-    const { proof, publicSignals } = await snarkjs.groth16.fullProve(
-      input,
-      "/withdraw_phase2_fixed.wasm",
-      "/withdraw_phase2_fixed_0001.zkey",
-    );
+    // Use v7 circuit for paseo v7 network (8 signals)
+    const wasmPath = useV7Circuit ? "/withdraw_phase2_fixed_v7.wasm" : "/withdraw_phase2_fixed.wasm";
+    const zkeyPath = useV7Circuit ? "/withdraw_phase2_fixed_v7_0001.zkey" : "/withdraw_phase2_fixed_0001.zkey";
+    
+    console.log("ZK circuit:", wasmPath, zkeyPath);
+    
+    // Use Web Worker for proof generation (non-blocking, caches artifacts)
+    const result = await worker.groth16FullProve(input, wasmPath, zkeyPath);
+    const { proof, publicSignals } = result;
 
-    console.log("  Proof generated");
+    console.log("  Proof generated (via worker)");
     console.log("  Public signals:", publicSignals.length);
 
     // Circuit output order: [withdrawnValue, treeDepth, context, newCommitmentHash, existingNullifierHash, contextHash]
+    // Plus: [newCommitmentHash] in v5/v6, [asset] in v7
     // Format public signals for proof (hex strings)
-    let formattedPublicSignals;
-    if (padTo7Signals) {
-      // v2: pad with assetId as 7th signal
+    
+    // For v7: circuit outputs 8 signals already
+    // For v5: circuit outputs 6 signals, we need to add 1 more
+    
+    const signalCount = publicSignals.length;
+    console.log("  Circuit signal count:", signalCount);
+    
+    let formattedPublicSignals: string[];
+    
+    if (useV7Circuit) {
+      // v7: circuit outputs 8 signals directly
+      formattedPublicSignals = publicSignals.map((x) => toEthHex(x));
+    } else {
+      // v5: circuit outputs 6 signals, need to pad to 7
       formattedPublicSignals = [
         ...publicSignals.map((x) => toEthHex(x)),
         toEthHex(params.asset || "0"),
       ];
-    } else {
-      // v3: exactly 6 signals
-      formattedPublicSignals = publicSignals.map((x) => toEthHex(x));
     }
 
     const formattedProof = [
@@ -241,12 +278,18 @@ export async function zkWithdraw(
       parsedCalldata[3] || publicSignals.map((s) => s.toString());
 
     // Build calldata for withdraw: pA, pB, pC, pubSignals (as BigInts)
-    const contractPublicSignals = exportSignals.map((s) => BigInt(s));
-
-    // For V5 (padTo7Signals), check if we already have 7 signals
-    // If not, add assetId as last signal
-    if (padTo7Signals && contractPublicSignals.length === 6) {
-      contractPublicSignals.push(BigInt(params.asset || "0"));
+    let contractPublicSignals: bigint[];
+    
+    if (useV7Circuit) {
+      // v7: 8 signals, asset is already in the signals (position 7)
+      contractPublicSignals = exportSignals.map((s) => BigInt(s));
+    } else {
+      // v5: 7 signals with asset as last signal
+      contractPublicSignals = exportSignals.map((s) => BigInt(s));
+      // If we have 6 signals, add asset as 7th
+      if (contractPublicSignals.length === 6) {
+        contractPublicSignals.push(BigInt(params.asset || "0"));
+      }
     }
 
     const calldataBigInt = [
@@ -259,15 +302,21 @@ export async function zkWithdraw(
       contractPublicSignals,
     ];
 
-    // Return publicSignals as strings for UI (should match what we send to contract)
-    let publicSignalsArray;
-    if (padTo7Signals && exportSignals.length === 6) {
-      // Pad for V5
-      publicSignalsArray = [...exportSignals, params.asset || "0"];
-    } else {
-      // Use whatever exportSolidityCallData returned
+    // Return publicSignals as strings for UI
+    let publicSignalsArray: string[];
+    
+    if (useV7Circuit) {
+      // v7: use whatever exportSolidityCallData returned (should be 8 signals)
       publicSignalsArray = exportSignals;
+    } else {
+      // v5: pad to 7 if needed
+      publicSignalsArray = exportSignals.length === 6
+        ? [...exportSignals, params.asset || "0"]
+        : exportSignals;
     }
+
+    console.log("  Final public signals count:", publicSignalsArray.length);
+    console.log("  Final public signals:", publicSignalsArray);
 
     return {
       proof: formattedProof,

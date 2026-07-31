@@ -216,8 +216,10 @@ export async function buildMerkleTreeFromContract(
 
   // Fetch events from where we left off
   // V5 contract signatures (bytecode_hash = "none" requires manual decoding)
-  // Deposit(address indexed asset, bytes32 commitment, uint256 nullifierHash)
-  const depositTopic = ethers.id("Deposit(address,bytes32,uint256)");
+  // Deposit(address indexed asset, bytes32 commitment, uint256 nullifierHash) — v5/v6
+  // Deposit(address indexed asset, bytes32 commitment) — v7
+  const depositTopic3 = ethers.id("Deposit(address,bytes32,uint256)");
+  const depositTopic2 = ethers.id("Deposit(address,bytes32)");
   // Withdrawal(address indexed asset, uint256 amount, address indexed recipient, uint256 newCommitment)
   const withdrawalTopic = ethers.id(
     "Withdrawal(address,uint256,address,uint256)",
@@ -258,7 +260,7 @@ export async function buildMerkleTreeFromContract(
         address: contractAddress,
         fromBlock,
         toBlock: effectiveBlock,
-        topics: [[depositTopic, withdrawalTopic, newCommitmentTopic]],
+        topics: [[depositTopic3, depositTopic2, withdrawalTopic, newCommitmentTopic]],
       });
       console.log(
         `Using RPC endpoint ${rpcEndpoint}, fetched ${logs.length} events from blocks ${fromBlock}-${effectiveBlock}`,
@@ -279,7 +281,7 @@ export async function buildMerkleTreeFromContract(
         address: contractAddress,
         fromBlock,
         toBlock: currentBlock,
-        topics: [[depositTopic, withdrawalTopic, newCommitmentTopic]],
+        topics: [[depositTopic3, depositTopic2, withdrawalTopic, newCommitmentTopic]],
       });
       console.log(
         `Fetched ${logs.length} events from blocks ${fromBlock}-${currentBlock} using wallet provider`,
@@ -339,15 +341,13 @@ export async function buildMerkleTreeFromContract(
   const insertedCommitments = new Set<string>(); // Track to avoid duplicates
 
   for (const log of logs) {
-    if (log.topics[0] === depositTopic) {
-      // Deposit(address,bytes32,uint256) - address is indexed (in topics[1])
-      // Data: commitment (32 bytes) + uint256 (32 bytes) = 64 bytes
+    if (log.topics[0] === depositTopic3 || log.topics[0] === depositTopic2) {
+      // Deposit event — two formats: v5/v6 (3-param) and v7 (2-param)
 
       let commitment: bigint;
       if (log.data && log.data.length >= 66) {
-        // 0x + 64 hex chars
         try {
-          // Try to decode
+          // Try v5/v6 format first: Deposit(address,bytes32,uint256)
           const ifaceDeposit = new ethers.Interface([
             "event Deposit(address indexed asset, bytes32 commitment, uint256 nullifierHash)",
           ]);
@@ -358,17 +358,30 @@ export async function buildMerkleTreeFromContract(
           );
           commitment = BigInt(decoded[1]); // bytes32 commitment is second parameter
         } catch (decodeError) {
-          console.error("Failed to decode Deposit event:", decodeError);
-          // Fallback: extract first 32 bytes from data (commitment)
-          const dataHex = log.data.startsWith("0x")
-            ? log.data.slice(2)
-            : log.data;
-          if (dataHex.length >= 64) {
-            const commitmentHex = "0x" + dataHex.slice(0, 64);
-            commitment = BigInt(commitmentHex);
-          } else {
-            console.error("Cannot extract commitment from Deposit event");
-            continue;
+          // Try v7 format: Deposit(address,bytes32)
+          try {
+            const ifaceDepositV7 = new ethers.Interface([
+              "event Deposit(address indexed asset, bytes32 commitment)",
+            ]);
+            const decoded = ifaceDepositV7.decodeEventLog(
+              "Deposit",
+              log.data,
+              log.topics,
+            );
+            commitment = BigInt(decoded[1]); // bytes32 commitment
+          } catch (decodeError2) {
+            console.error("Failed to decode Deposit event:", decodeError2);
+            // Fallback: extract first 32 bytes from data (commitment)
+            const dataHex = log.data.startsWith("0x")
+              ? log.data.slice(2)
+              : log.data;
+            if (dataHex.length >= 64) {
+              const commitmentHex = "0x" + dataHex.slice(0, 64);
+              commitment = BigInt(commitmentHex);
+            } else {
+              console.error("Cannot extract commitment from Deposit event");
+              continue;
+            }
           }
         }
       } else {
@@ -479,7 +492,7 @@ export async function buildMerkleTreeFromContract(
   // We inserted `insertionIndex - (cached?.leaves.length ?? 0)` new leaves.
   // Reconstruct from the logs we just processed.
   for (const log of logs) {
-    if (log.topics[0] === depositTopic) {
+    if (log.topics[0] === depositTopic3 || log.topics[0] === depositTopic2) {
       // Extract commitment from Deposit event
       let commitmentStr: string;
       try {

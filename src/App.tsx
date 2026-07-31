@@ -73,29 +73,7 @@ const amountOptions = [0.5, 1, 5, 10, 100, 500, 1000, 10000];
 
 // window.ethereum type is provided by wagmi/viem
 
-// Networks: name, endpoint, native asset
-const NETWORKS = {
-  moonbase: {
-    name: "Moonbase Testnet",
-    wsEndpoint: "wss://moonbase-alpha.public.blastapi.io",
-    rpcEndpoint: "https://moonbase.public.curie.radiumblock.co/http",
-    asset: "DEV",
-    faucet: "https://faucet.moonbeam.network/",
-    chain_id: 1287,
-    block_explorer: "https://moonbase.moonscan.io",
-    docs: "https://kusamashield.codeberg.page/networks/moonbase.html",
-  },
-  shibuya: {
-    name: "Shibuya (parachain testnet)",
-    rpcEndpoint: "https://evm.shibuya.astar.network",
-    asset: "SBY",
-    chain_id: 81,
-    faucet: "https://portal.astar.network/shibuya-testnet/assets",
-    block_explorer: "https://shibuya.subscan.io/",
-    vk_address: "0x66021DF8Ce2b63f99ea9C501497Ce70ec49f5724",
-    shield_address: "",
-    deploymentBlock: 0,
-  },
+export const NETWORKS = {
   westend_assethub: {
     name: "Westend Assethub",
     wsEndpoint: "wss://westend-asset-hub-rpc.polkadot.io",
@@ -108,7 +86,7 @@ const NETWORKS = {
   },
   paseo_assethub: {
     name: "Paseo AssetHub",
-    asset: "PAS",
+    asset: "DOT",
     logo: "/paseo-icon.png",
     chain_id: 420420417,
     rpcEndpoint: "https://paseo-assethub-rpc.laissez-faire.trade/",
@@ -119,27 +97,25 @@ const NETWORKS = {
     wsEndpoint: "wss://asset-hub-paseo-rpc.n.dwellir.com",
     faucet: "https://faucet.polkadot.io",
     block_explorer: "https://testnet.routescan.io",
-    // V5 Pool (FixedIlopPhase2Paseo_v5.sol) - deployed 2026-06-11
-    shield_address: "0xE433f84B086faefD0034C4C4C759F3d31adC18E8",
-    verifier_address: "0xfdF835fC14FCcE20aa845644FfcD1EB0514FC2F7",
-    leanIMT_address: "0x9e9f0b88e3d1d742AC4A1FF7E019bBBDebe5FB71",
+    // v7 Pool (FixedIlopPhase2Paseo_v7.sol) - linkability fix, 8 signals, known-roots window
+    shield_address: "0xbcE09D4De052b2816df1285663ac89528DF45380",
+    verifier_address: "0xcA4cBc5d31eccd08d393C43aF492F729FF30b685",
     poseidonT3_address: "0x1d165f6fe5a30422e0e2140e91c8a9b800380637",
-    deploymentBlock: 9592061,
+    deploymentBlock: 11273491,
     abi: [
-      "function depositNative(bytes32 commitment, bytes32 nullifierHash) external payable",
-      "function depositAsset(uint256 assetId, uint256 amount, bytes32 commitment, bytes32 nullifierHash) external",
-      "function depositAssetDirect(uint256 assetId, uint256 amount, bytes32 commitment, bytes32 nullifierHash) external",
-      "function withdraw(uint256[2] calldata pA, uint256[2][2] calldata pB, uint256[2] calldata pC, uint[7] calldata pubSignals, address asset, uint256 amount, address recipient) external",
-      "function withdrawNative(uint256[2] calldata pA, uint256[2][2] calldata pB, uint256[2] calldata pC, uint[7] calldata pubSignals, uint256 amount) external",
-      "function withdrawAsset(uint256[2] calldata pA, uint256[2][2] calldata pB, uint256[2] calldata pC, uint[7] calldata pubSignals, uint256 assetId, uint256 amount) external",
-      "function proxy_withdraw(uint256[2] calldata pA, uint256[2][2] calldata pB, uint256[2] calldata pC, uint[7] calldata pubSignals, address asset, uint256 amount, address recipient) external",
+      "function depositNative(bytes32 commitment) external payable",
+      "function depositAsset(uint256 assetId, uint256 amount, bytes32 commitment) external",
+      "function depositAssetDirect(uint256 assetId, uint256 amount, bytes32 commitment) external",
+      "function withdraw(uint256[2] calldata pA, uint256[2][2] calldata pB, uint256[2] calldata pC, uint[8] calldata pubSignals, address recipient) external",
+      "function proxy_withdraw(uint256[2] calldata pA, uint256[2][2] calldata pB, uint256[2] calldata pC, uint[8] calldata pubSignals, address recipient) external",
       "function currentRoot() external view returns (uint256)",
       "function treeSize() external view returns (uint256)",
-      "function escrow(address) external view returns (uint256)",
-      "function deposits(bytes32 nullifierHash) external view returns (address asset, uint256 assetId, uint256 amount, bool isSpent)",
-      "function usedCommitments(bytes32 commitment) external view returns (bool)",
-      "function isDepositSpent(bytes32 nullifierHash) external view returns (bool)",
+      "function getEscrowBalance(address) external view returns (uint256)",
+      "function isNullifierSpent(bytes32) external view returns (bool)",
+      "function isCommitmentUsed(bytes32) external view returns (bool)",
+      "function isKnownRoot(uint256) external view returns (bool)",
       "function getPrecompileAddress(uint256 assetId) external pure returns (address)",
+      "function verifier() external view returns (address)",
     ],
     docs: "https://kusamashield.codeberg.page/networks/PaseoAH.html",
   },
@@ -149,29 +125,34 @@ const NETWORKS = {
     logo: "/favicon-dark.svg",
     chain_id: 420420419,
     rpcEndpoint: "https://eth-rpc.polkadot.io/",
+    rpcEndpoints: [
+      "https://polkadot-assethub-rpc.laissez-faire.trade",
+      "https://eth-rpc.polkadot.io/",
+    ],
     wsEndpoint: "wss://asset-hub-polkadot-rpc.polkadot.io",
     faucet: "",
     block_explorer: "https://blockscout.polkadot.io/",
-    shield_address: "0xe55b85441bc39532f279cf24059f02dfbcf87051",
-    verifier_address: "0x0f5cd32b2157992d268eba8ecf6ae0a661986e8",
-    leanIMT_address: "0x3d92af838f117c9bbc9a1641980b14431e5dd04a",
-    poseidonT3_address: "0x4fae22c018839d60ab6db3863528f9c8526f5333",
+    // v7 Pool (FixedIlopPhase2Paseo_v7_Polkadot.sol) - redeployed with circomlibjs hasher
+    shield_address: "0x0D694Da746e73D1e255c1894F90e38170db45809",
+    verifier_address: "0x6A13781E43AEA21918120CD0E7a2ed8614c01e14",
+    leanIMT_address: "0x0D694Da746e73D1e255c1894F90e38170db45809",
+    poseidonT3_address: "0xB8F0C6679D6Cc56450470522Bd96573C3D615052",
     abi: [
-      "function depositNative(bytes32 commitment, bytes32 nullifierHash) external payable",
-      "function depositAsset(uint256 assetId, uint256 amount, bytes32 commitment, bytes32 nullifierHash) external",
-      "function depositAssetDirect(uint256 assetId, uint256 amount, bytes32 commitment, bytes32 nullifierHash) external",
-      "function withdraw(uint256[2] calldata pA, uint256[2][2] calldata pB, uint256[2] calldata pC, uint[6] calldata pubSignals, address asset, uint256 amount, address recipient) external",
-      "function withdrawNative(uint256[2] calldata pA, uint256[2][2] calldata pB, uint256[2] calldata pC, uint[6] calldata pubSignals, uint256 amount) external",
-      "function withdrawAsset(uint256[2] calldata pA, uint256[2][2] calldata pB, uint256[2] calldata pC, uint[6] calldata pubSignals, uint256 assetId, uint256 amount) external",
+      "function depositNative(bytes32 commitment) external payable",
+      "function depositAsset(uint256 assetId, uint256 amount, bytes32 commitment) external",
+      "function depositAssetDirect(uint256 assetId, uint256 amount, bytes32 commitment) external",
+      "function withdraw(uint256[2] calldata pA, uint256[2][2] calldata pB, uint256[2] calldata pC, uint[8] calldata pubSignals, address recipient) external",
+      "function proxy_withdraw(uint256[2] calldata pA, uint256[2][2] calldata pB, uint256[2] calldata pC, uint[8] calldata pubSignals, address recipient) external",
       "function currentRoot() external view returns (uint256)",
       "function treeSize() external view returns (uint256)",
-      "function escrow(address) external view returns (uint256)",
-      "function deposits(bytes32 nullifierHash) external view returns (address asset, uint256 assetId, uint256 amount, bool isSpent)",
-      "function usedCommitments(bytes32 commitment) external view returns (bool)",
-      "function isDepositSpent(bytes32 nullifierHash) external view returns (bool)",
+      "function getEscrowBalance(address) external view returns (uint256)",
+      "function isNullifierSpent(bytes32) external view returns (bool)",
+      "function isCommitmentUsed(bytes32) external view returns (bool)",
+      "function isKnownRoot(uint256) external view returns (bool)",
       "function getPrecompileAddress(uint256 assetId) external pure returns (address)",
+      "function verifier() external view returns (address)",
     ],
-    deploymentBlock: 0,
+    deploymentBlock: 18460000,
     docs: "https://kusamashield.codeberg.page/",
   },
 
@@ -287,16 +268,33 @@ function generateDot2KsmInput(dotAmount: any, ksmAmount: any) {
   };
 }
 
+// Check if selected network is a testnet
+const isTestnet = (networkKey: string): boolean => {
+  const testnetKeys: (keyof typeof NETWORKS)[] = ["paseo_assethub", "westend_assethub"];
+  return testnetKeys.includes(networkKey as keyof typeof NETWORKS);
+};
+
 export function App() {
   const [isWalletConnected, setIsWalletConnected] = useState(false);
   const [selectedWallet, setSelectedWallet] = useState<any>(null); // Consider using proper type instead of any
   const [selectedWalletEVM, setSelectedWalletEVM] = useState<any>(null);
   const [evmAddress, setEvmAddress] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<
-    "shield" | "unshield" | "bridge" | "offramp"
+    "shield" | "unshield" | "send" | "bridge" | "offramp"
   >("shield");
   const [secret, setSecret] = useState("");
   const [amount, setAmount] = useState("");
+  const [sendRecipient, setSendRecipient] = useState("");
+  const [sendAmount, setSendAmount] = useState("");
+  const [sendFromCurrency, setSendFromCurrency] = useState("DOT");
+  const [sendToCurrency, setSendToCurrency] = useState("DOT");
+  const [sendDestinationNetwork, setSendDestinationNetwork] = useState("polkadot");
+  const [sendGasEstimate, setSendGasEstimate] = useState<string | null>(null);
+  const [sendGasLoading, setSendGasLoading] = useState(false);
+  const [estimatedReceive, setEstimatedReceive] = useState<string | null>(null);
+  const [estimatedReceiveLoading, setEstimatedReceiveLoading] = useState(false);
+  const [swapRate, setSwapRate] = useState<string | null>(null);
+  const [sendGasFee, setSendGasFee] = useState<string | null>(null);
   const [selectedToken, setSelectedToken] = useState<any>(null); //('KSM')
   const [userAssets, setUserAssets] = useState<
     {
@@ -310,7 +308,7 @@ export function App() {
   >([]);
   const [isLoadingAssets, setIsLoadingAssets] = useState(false);
   const [selectedNetwork, setSelectedNetwork] =
-    useState<keyof typeof NETWORKS>("moonbase");
+    useState<keyof typeof NETWORKS>("paseo_assethub");
   const [isNetworkDropdownOpen, setIsNetworkDropdownOpen] = useState(false);
   const [fromNetwork, setfromNetwork] = useState<any>(null);
   const [toNetwork, settoNetwork] = useState<any>(null);
@@ -357,6 +355,15 @@ export function App() {
     document.documentElement.style.setProperty("--bg-primary", backgroundColor);
     document.documentElement.style.setProperty("--bg-gradient", gradientColor);
   }, [backgroundColor, gradientColor]);
+
+  // Add send-active class to body when on send tab
+  useEffect(() => {
+    if (activeTab === "send") {
+      document.body.classList.add("send-active");
+    } else {
+      document.body.classList.remove("send-active");
+    }
+  }, [activeTab]);
 
   // Theme mode states
   const [rainMode, setRainMode] = useState(false);
@@ -504,7 +511,7 @@ export function App() {
 
   // Pre-load circuit artifacts when Paseo network is selected
   useEffect(() => {
-    if (selectedNetwork === "paseo_assethub") {
+if (selectedNetwork === "paseo_assethub") {
       // Pre-load WASM into worker memory (avoids re-fetch on proof generation)
       preloadWasm("/withdraw.wasm").catch((e) =>
         console.warn("Failed to pre-load withdraw wasm:", e),
@@ -528,8 +535,8 @@ export function App() {
   const availableCurrencies = [
     {
       symbol: "DOT",
-      name: "Polkadot Assethub",
-      logo: "/coin_logos/images/assethub.svg",
+      name: "Polkadot",
+      logo: "/coin_logos/images/dot.svg",
     },
     { symbol: "KSM", name: "Kusama", logo: "/coin_logos/images/kusama.svg" },
     {
@@ -681,7 +688,7 @@ export function App() {
       logo: "/coin_logos/images/usdcsol.svg",
     },
     { symbol: "USDP", name: "Pax Dollar", logo: "/coin_logos/images/usdp.svg" },
-    { symbol: "USDT", name: "Tether", logo: "/coin_logos/images/usdt.svg" },
+    { symbol: "USDT", name: "USDT (TRON)", logo: "/coin_logos/images/usdttrc.svg" },
     {
       symbol: "USDTARBITRUM",
       name: "USDT (Arbitrum)",
@@ -703,9 +710,9 @@ export function App() {
       logo: "/coin_logos/images/usdtsol.svg",
     },
     {
-      symbol: "USDTTRC",
-      name: "USDT (TRON)",
-      logo: "/coin_logos/images/usdttrc.svg",
+      symbol: "USDTETH",
+      name: "USDT (Ethereum)",
+      logo: "/coin_logos/images/usdt.svg",
     },
     { symbol: "VET", name: "VeChain", logo: "/coin_logos/images/vet.svg" },
     {
@@ -775,11 +782,11 @@ export function App() {
   const isTestnet = (networkKey: string) =>
     getNetworkType(networkKey) === "testnet";
 
-  // Switch away from bridge/offramp tabs when selecting testnet
+  // Switch away from bridge/offramp/send tabs when selecting testnet
   useEffect(() => {
     if (
       isTestnet(selectedNetwork) &&
-      (activeTab === "bridge" || activeTab === "offramp")
+      (activeTab === "bridge" || activeTab === "offramp" || activeTab === "send")
     ) {
       setActiveTab("shield");
     }
@@ -1110,7 +1117,7 @@ export function App() {
 
   // Check if wallet connection is required for the current operation
   const requiresWalletConnection = () => {
-    if (activeTab === "shield" || activeTab === "unshield") {
+    if (activeTab === "shield" || activeTab === "unshield" || activeTab === "send") {
       return true; // Always need wallet for shield/unshield
     }
     if (activeTab === "bridge") {
@@ -1240,7 +1247,7 @@ export function App() {
   };
 
   // Swap API base URL - will be deployed to public endpoint
-  const SWAP_API_BASE = "https://proxyswap.laissez-faire.trade";
+  const SWAP_API_BASE = "/api/swap";
 
   // DOT/KSM price checker function
   const getDotToKsmRate = async () => {
@@ -1551,50 +1558,37 @@ export function App() {
       console.log(`signed tx`);
       //  console.log(`westend pool:`, westend_pool);
       var shieldedContract;
-      if (selectedNetwork == "moonbase") {
-        console.log(`moonbase`);
-        shieldedContract = new ethers.Contract(
-          SHIELD_CONTRACT_ADDRESS.SHIELD_CONTRACT_ADDRESS, // Using the fake ERC-20 address from your constants
-          SHIELD_CONTRACT_ADDRESS.shielderAbi,
-          ETHsigner,
-        );
-      } else if (selectedNetwork == "kusama") {
-        shieldedContract = new ethers.Contract(
-          NETWORKS[selectedNetwork].shield_address,
-          NETWORKS[selectedNetwork].abi, //["function deposit(address,uint256,bytes32) payable"],
-          ETHsigner,
-        );
-      } else if (selectedNetwork == "westend_assethub") {
-        console.log(`westend shielded contract`);
-        shieldedContract = new ethers.Contract(
-          westend_pool, // Using the fake ERC-20 address from your constants
-          ["function deposit(address,uint256,bytes32) payable"],
-          ETHsigner,
-        );
-      } else if (selectedNetwork == "paseo_assethub") {
-        console.log(
-          `paseo assethub: `,
-          NETWORKS["paseo_assethub"].shield_address,
-        );
-
-        shieldedContract = new ethers.Contract(
-          NETWORKS["paseo_assethub"].shield_address,
-          NETWORKS["paseo_assethub"].abi,
-          ETHsigner,
-        );
-      } else if (
-        selectedNetwork == "paseo_assethub" ||
-        selectedNetwork == "polkadot"
-      ) {
-        console.log(`paseo v3/polkadot contract initialized`);
+      if (selectedNetwork == "kusama") {
         shieldedContract = new ethers.Contract(
           NETWORKS[selectedNetwork].shield_address,
           NETWORKS[selectedNetwork].abi,
           ETHsigner,
         );
+      } else if (selectedNetwork == "westend_assethub") {
+        console.log(`westend`);
+        sendamount = ethers.parseUnits(amount, 12);
+        shieldedContract = new ethers.Contract(
+          SHIELD_CONTRACT_ADDRESS.SHIELD_CONTRACT_ADDRESS,
+          SHIELD_CONTRACT_ADDRESS.shielderAbi,
+          ETHsigner,
+        );
+      } else if (selectedNetwork == "paseo_assethub") {
+        console.log(`paseo assethub:`, NETWORKS["paseo_assethub"].shield_address);
+        shieldedContract = new ethers.Contract(
+          NETWORKS["paseo_assethub"].shield_address,
+          NETWORKS["paseo_assethub"].abi,
+          ETHsigner,
+        );
+      } else if (selectedNetwork == "polkadot") {
+        console.log(`polkadot contract initialized`);
+        shieldedContract = new ethers.Contract(
+          NETWORKS["polkadot"].shield_address,
+          NETWORKS["polkadot"].abi,
+          ETHsigner,
+        );
       } else {
         throw new Error(
-          "Only Moonbase and Westend Assethub is currently supported",
+          "Only Paseo, Polkadot, Westend AssetHub, and Kusama AssetHub are currently supported",
         );
       }
 
@@ -1718,20 +1712,18 @@ export function App() {
         selectedNetwork == "paseo_assethub" ||
         selectedNetwork == "polkadot"
       ) {
-        // FixedIlop v3 deposit: uses CommitmentHasher circuit logic
+        // FixedIlop V5/V7 deposit: uses CommitmentHasher circuit logic
         const selectedAsset = userAssets.find(
           (a) => a.symbol === selectedToken,
         );
         const assetNumeric = selectedAsset ? BigInt(selectedAsset.assetId) : 0n;
         const decimals = selectedAsset ? selectedAsset.decimals : 18;
         const depositAmount = BigInt(ethers.parseUnits(amount, decimals));
-        // Derive nullifier and secret from user secret
-        const nullifierVal = BigInt(
-          ethers.keccak256(ethers.toUtf8Bytes(secret + "_nullifier")),
-        );
-        const secretVal = BigInt(
-          ethers.keccak256(ethers.toUtf8Bytes(secret + "_secret")),
-        );
+        // Derive nullifier and secret matching the v7 circuit:
+        // nullifier = Poseidon2(secret, 1), secret = raw secret (not keccak-derived)
+        const secretBN = BigInt(secret);
+        const nullifierVal = poseidon2([secretBN, 1n]);
+        const secretVal = secretBN;
         // Compute commitment: Poseidon( Poseidon(amount, asset), Poseidon(nullifier, secret) )
         const precommitment = poseidon2([nullifierVal, secretVal]);
         const valueAssetHash = poseidon2([depositAmount, assetNumeric]);
@@ -1740,16 +1732,14 @@ export function App() {
         const nullifierHashBN = poseidon1([nullifierVal]);
         const commitment = ethers.toBeHex(commitmentBigInt, 32);
         nullifierHash = ethers.toBeHex(nullifierHashBN, 32);
-        console.log(`=== Paseo V5 Deposit Debug ===`);
+        console.log(`=== Paseo V7 Deposit Debug ===`);
         console.log(`Secret input: "${secret}"`);
+        console.log(`Secret (BigInt):`, secretBN.toString());
         console.log(
-          `Derived nullifierVal (keccak256(secret + "_nullifier")):`,
+          `Derived nullifierVal (poseidon2(secret, 1)):`,
           nullifierVal.toString(),
         );
-        console.log(
-          `Derived secretVal (keccak256(secret + "_secret")):`,
-          secretVal.toString(),
-        );
+        console.log(`secretVal (raw secret):`, secretVal.toString());
         console.log(`Asset numeric:`, assetNumeric.toString());
         console.log(`Deposit amount (wei):`, depositAmount.toString());
         console.log(
@@ -1805,7 +1795,7 @@ export function App() {
         if (selectedNetwork == "westend_assethub") {
           sendamount = ethers.parseUnits(amount, 18);
           console.log(`westend assethub`);
-        } else if (selectedNetwork == "paseo_assethub") {
+} else if (selectedNetwork == "paseo_assethub") {
           console.log(`paseo assethub amount`);
           sendamount = ethers.parseUnits(amount, 18);
         } else {
@@ -1837,15 +1827,12 @@ export function App() {
             */
         console.log(`calling abi66`);
         console.log(`sending paseo deposit`);
-        if (
-          selectedNetwork == "paseo_assethub" ||
-          selectedNetwork == "polkadot"
-        ) {
-          const commitmentBytes = ethers.toBeArray(BigInt(x));
-          const nullifierBytes = ethers.toBeArray(BigInt(nullifierHash));
+        if (selectedNetwork == "polkadot") {
+          const commitmentBytes = ethers.zeroPadValue(ethers.toBeArray(BigInt(x)), 32);
+          const nullifierBytes = ethers.zeroPadValue(ethers.toBeArray(BigInt(nullifierHash)), 32);
           const depositAmount = ethers.parseEther(amount);
           console.log(
-            `Sending v3 depositNative on ${selectedNetwork} with params:`,
+            `Sending polkadot depositNative with params:`,
             {
               commitment: x,
               nullifierHash: nullifierHash,
@@ -1871,10 +1858,37 @@ export function App() {
               gasLimit: gasEstimate || 5000000,
             },
           );
+        } else if (selectedNetwork == "paseo_assethub") {
+          // v7: depositNative(bytes32 commitment) — single param
+          const commitmentBytes = ethers.zeroPadValue(ethers.toBeArray(BigInt(x)), 32);
+          const depositAmount = ethers.parseEther(amount);
+          console.log("Sending v7 depositNative with params:", {
+            commitment: x,
+            amount: depositAmount.toString(),
+          });
+
+          var gasEstimate;
+          try {
+            gasEstimate = await shieldedContract.depositNative.estimateGas(
+              commitmentBytes,
+              { value: depositAmount },
+            );
+            console.log("Gas estimate:", gasEstimate);
+          } catch (e) {
+            console.error("Estimation failed:", e);
+          }
+
+          txResponse2 = await shieldedContract.depositNative(
+            commitmentBytes,
+            {
+              value: depositAmount,
+              gasLimit: gasEstimate || 5000000,
+            },
+          );
         } else if (selectedNetwork == "paseo_assethub_v2") {
           // FixedIlopPhase2Paseo_v3: depositNative(bytes32 commitment, bytes32 nullifierHash)
-          const commitmentBytes = ethers.toBeArray(BigInt(x));
-          const nullifierBytes = ethers.toBeArray(BigInt(nullifierHash));
+          const commitmentBytes = ethers.zeroPadValue(ethers.toBeArray(BigInt(x)), 32);
+          const nullifierBytes = ethers.zeroPadValue(ethers.toBeArray(BigInt(nullifierHash)), 32);
           const depositAmount = ethers.parseEther(amount);
           console.log("Sending paseo v2 depositNative with params:", {
             commitment: x,
@@ -1902,7 +1916,7 @@ export function App() {
               gasLimit: gasEstimate,
             },
           );
-        } else if (selectedNetwork == "paseo_assethub") {
+} else if (selectedNetwork == "paseo_assethub") {
           // FixedIlop: deposit(address asset, uint256 amount, uint256 commitment)
           const commitmentUint256 = BigInt(x);
           const depositAmount = ethers.parseEther(amount);
@@ -2025,8 +2039,8 @@ export function App() {
         const assetId = selectedAsset.assetId;
         const decimals = selectedAsset.decimals;
         const depositAmount = ethers.parseUnits(amount, decimals);
-        const commitmentBytes = ethers.toBeArray(BigInt(x));
-        const nullifierBytes = ethers.toBeArray(BigInt(nullifierHash));
+        const commitmentBytes = ethers.zeroPadValue(ethers.toBeArray(BigInt(x)), 32);
+        const nullifierBytes = ethers.zeroPadValue(ethers.toBeArray(BigInt(nullifierHash)), 32);
 
         console.log(
           `Sending paseo ${selectedNetwork.includes("v3") ? "v3" : "v2"} depositAsset:`,
@@ -2471,8 +2485,7 @@ export function App() {
               ETHsigner,
             );
           } else if (
-            selectedNetwork == "paseo_assethub" ||
-            selectedNetwork == "polkadot"
+            selectedNetwork == "polkadot"  // OLD v3/polkadot path only
           ) {
             console.log(
               `paseo assethub v3/polkadot (Phase 2 ZK - 6 signals): `,
@@ -2492,7 +2505,8 @@ export function App() {
               ETHsigner,
             );
           } else if (selectedNetwork == "paseo_assethub") {
-            console.log(`set shielded contract to paseo`);
+            // v7 FixedIlop withdraw — uses NETWORKS["paseo_assethub"] ABI (8-signal withdraw)
+            console.log(`paseo_assethub: using NEW v7 FixedIlop withdraw path`);
             shieldedContract = new ethers.Contract(
               NETWORKS["paseo_assethub"].shield_address,
               NETWORKS["paseo_assethub"].abi,
@@ -2579,18 +2593,16 @@ export function App() {
               },
             );
           } else if (selectedNetwork === "paseo_assethub") {
-            // FixedIlop withdraw: UTXO model with nullifier+secret pairs
+            // FixedIlop v7 withdraw: UTXO model with nullifier+secret pairs
+            // Match the SDK's derivation: nullifier = Poseidon2(secret, 1)
             const recipient = evmAddress;
             if (!recipient) throw new Error("No wallet address connected");
             const withdrawAmount = ethers.parseEther(amount);
 
-            // Derive nullifier and secret from user input (same derivation as deposit)
-            const existingNullifier = BigInt(
-              ethers.keccak256(ethers.toUtf8Bytes(secret + "_nullifier")),
-            ).toString();
-            const existingSecret = BigInt(
-              ethers.keccak256(ethers.toUtf8Bytes(secret + "_secret")),
-            ).toString();
+            // Derive nullifier and secret from user input (v7 circuit expects Poseidon2)
+            const secretBN = BigInt(secret);
+            const existingNullifier = poseidon2([secretBN, 1n]).toString();
+            const existingSecret = secret; // Pass secret directly to circuit
 
             // Connect to contract for pre-checks and tree data
             const checkContract = new ethers.Contract(
@@ -2600,14 +2612,14 @@ export function App() {
             );
 
             // Pre-check: check nullifier hasn't been spent
-            // Circuit uses PoseidonBN254(1) — single-input Poseidon, not Poseidon(nullifier, 0)
+            // Circuit uses Poseidon1(nullifier) for nullifierHash
             const nullifierHash = poseidon1([BigInt(existingNullifier)]);
             const nullifierHashBytes32 = ethers.zeroPadValue(
               ethers.toBeArray(nullifierHash),
               32,
             );
             const nullifierSpent =
-              await checkContract.isDepositSpent(nullifierHashBytes32);
+              await checkContract.isNullifierSpent(nullifierHashBytes32);
             if (nullifierSpent) {
               toast(`Already withdrawn! This nullifier has been spent.`, {
                 position: "top-right",
@@ -2617,8 +2629,8 @@ export function App() {
               throw new Error("Nullifier already spent");
             }
 
-            // Check escrow has funds
-            const escrowBalance = await checkContract.escrow(
+            // Check escrow has funds (v7 uses getEscrowBalance instead of escrow)
+            const escrowBalance = await checkContract.getEscrowBalance(
               ethers.ZeroAddress,
             );
             console.log(`Escrow balance:`, ethers.formatEther(escrowBalance));
@@ -2644,7 +2656,7 @@ export function App() {
               provider,
               NETWORKS["paseo_assethub"].shield_address,
               NETWORKS["paseo_assethub"].abi,
-              false,
+              true,
               NETWORKS["paseo_assethub"].rpcEndpoint,
               NETWORKS["paseo_assethub"].deploymentBlock || 0,
             );
@@ -2754,6 +2766,7 @@ export function App() {
             }
 
             // For V5 Paseo: Use contract root since our tree reconstruction is incomplete
+            // For v7 Paseo: Use contract root (local tree may have more leaves due to better event parsing)
             const rootToUse =
               selectedNetwork === "paseo_assethub"
                 ? currentRoot.toString()
@@ -2763,25 +2776,35 @@ export function App() {
               `Using root: ${rootToUse} (${selectedNetwork === "paseo_assethub" ? "contract root" : "local root"})`,
             );
 
-            const isValidRoot = rootToUse === currentRoot.toString();
-            if (!isValidRoot) {
-              console.error(
-                `Root mismatch: using ${rootToUse} but contract has ${currentRoot}.`,
+            // Only validate root match for v5/v6 (not v7 where we use contract root directly)
+            if (selectedNetwork !== "paseo_assethub") {
+              const isValidRoot = rootToUse === currentRoot.toString();
+              if (!isValidRoot) {
+                console.error(
+                  `Root mismatch: using ${rootToUse} but contract has ${currentRoot}.`,
+                );
+                toast(
+                  `Merkle tree reconstruction failed — root does not match contract.`,
+                  { position: "top-right", autoClose: 8000, theme: "dark" },
+                );
+                throw new Error(
+                  "Local Merkle root does not match contract current root",
+                );
+              }
+              console.log(
+                `Root ${rootToUse} matches contract current root. Depth: ${Math.ceil(Math.log2(merkleTree.size))}`,
               );
-              toast(
-                `Merkle tree reconstruction failed — root does not match contract.`,
-                { position: "top-right", autoClose: 8000, theme: "dark" },
-              );
-              throw new Error(
-                "Local Merkle root does not match contract current root",
+            } else {
+              console.log(
+                `Using contract root ${rootToUse} for ${selectedNetwork}`,
               );
             }
-            console.log(
-              `Local root ${merkleTree.root} matches contract current root. Depth: ${Math.ceil(Math.log2(merkleTree.size))}`,
-            );
 
-            // Store local root and depth for proof generation
-            const localRoot = merkleTree.root;
+            // Store root and depth for proof generation
+            // For v7, use contract root (merkleTree.root may differ due to pruning)
+            const isPaseoV7 = selectedNetwork === "paseo_assethub";
+            const rootToUseForProof = isPaseoV7 ? currentRoot.toString() : merkleTree.root.toString();
+            const localRoot = isPaseoV7 ? BigInt(rootToUseForProof) : merkleTree.root;
             const localDepth = Math.ceil(Math.log2(merkleTree.size));
 
             // Compute context = keccak256(abi.encodePacked(recipient, asset)) % SNARK_SCALAR_FIELD
@@ -2797,13 +2820,11 @@ export function App() {
               BigInt(contextHash) % SNARK_SCALAR_FIELD
             ).toString();
 
-            // Generate fresh nullifier+secret for change UTXO
-            const newNullifier = BigInt(
-              ethers.toBigInt(ethers.randomBytes(16)),
-            ).toString();
-            const newSecret = BigInt(
-              ethers.toBigInt(ethers.randomBytes(16)),
-            ).toString();
+            // Generate fresh nullifier+secret for change UTXO (v7 uses Poseidon2 derivation)
+            // nullifier = Poseidon2(secret, 1), secret = random 32 bytes
+            const newSecretRaw = ethers.randomBytes(32);
+            const newSecret = ethers.hexlify(newSecretRaw);
+            const newNullifier = poseidon2([BigInt(newSecret), 1n]).toString();
 
             const proofToastId = toast.loading(
               `🔐 Generating ZK proof — this may take up to a minute...`,
@@ -2811,6 +2832,7 @@ export function App() {
             );
 
             // Generate the Groth16 proof — use LOCAL root & depth (consistent with local siblings)
+            // For paseo_assethub (v7), use v7 circuit with 8 public signals
             let proofResult;
             try {
               proofResult = await zkWithdraw(
@@ -2829,8 +2851,8 @@ export function App() {
                   leafIndex: leafIdx.toString(),
                 },
                 {
-                  padTo7Signals:
-                    (selectedNetwork as string) === "paseo_assethub",
+                  padTo7Signals: false, // v7 has 8 signals, v5/v6 have 7
+                  useV7Circuit: isPaseoV7,
                 },
               );
               toast.update(proofToastId, {
@@ -2857,20 +2879,33 @@ export function App() {
             // calldata format: [a, b, c, pubSignals]
             const [a, b, c, pubSignals] = proofResult.calldata;
 
-            // staticCall pre-check
+            // staticCall pre-check - v7 has different ABI (no asset/amount params)
             try {
               const staticCallFunction = useProxyWithdraw
                 ? shieldedContract.proxy_withdraw.staticCall
                 : shieldedContract.withdraw.staticCall;
-              await staticCallFunction(
-                a,
-                b,
-                c,
-                pubSignals,
-                ethers.ZeroAddress,
-                withdrawAmount,
-                recipient,
-              );
+              
+              if (isPaseoV7) {
+                // v7: 8 public signals, no asset/amount params
+                await staticCallFunction(
+                  a,
+                  b,
+                  c,
+                  pubSignals.slice(0, 8), // ensure 8 signals
+                  recipient,
+                );
+              } else {
+                // v5/v6: 7 public signals with asset/amount params
+                await staticCallFunction(
+                  a,
+                  b,
+                  c,
+                  pubSignals,
+                  ethers.ZeroAddress,
+                  withdrawAmount,
+                  recipient,
+                );
+              }
               console.log(`staticCall succeeded`);
             } catch (staticError: any) {
               console.error(
@@ -2915,20 +2950,38 @@ export function App() {
             console.log(`  b:`, b);
             console.log(`  c:`, c);
             console.log(`  pubSignals:`, pubSignals);
-            console.log(`  asset:`, ethers.ZeroAddress);
-            console.log(`  amount:`, withdrawAmount.toString());
-            console.log(`  recipient:`, recipient);
-            console.log(`=============================`);
-
-            txResponse = await withdrawFunction(
-              a,
-              b,
-              c,
-              pubSignals,
-              ethers.ZeroAddress,
-              withdrawAmount,
-              recipient,
-            );
+            
+            if (isPaseoV7) {
+              // v7: 8 public signals, no asset/amount params
+              console.log(`  pubSignals[3] (withdrawnValue):`, pubSignals[3]);
+              console.log(`  pubSignals[7] (asset):`, pubSignals[7]);
+              console.log(`  recipient:`, recipient);
+              console.log(`=============================`);
+              
+              txResponse = await withdrawFunction(
+                a,
+                b,
+                c,
+                pubSignals.slice(0, 8), // ensure 8 signals
+                recipient,
+              );
+            } else {
+              // v5/v6: 7 public signals with asset/amount params
+              console.log(`  asset:`, ethers.ZeroAddress);
+              console.log(`  amount:`, withdrawAmount.toString());
+              console.log(`  recipient:`, recipient);
+              console.log(`=============================`);
+              
+              txResponse = await withdrawFunction(
+                a,
+                b,
+                c,
+                pubSignals,
+                ethers.ZeroAddress,
+                withdrawAmount,
+                recipient,
+              );
+            }
           } else if (selectedNetwork === "paseo_assethub_v2") {
             // FixedIlopPhase2Paseo_v3 withdraw: UTXO model with 7 public signals
             const recipient = evmAddress;
@@ -3720,6 +3773,634 @@ export function App() {
     }
   };
 
+  const handleSendTransaction = async () => {
+    console.log("[SEND] handleSendTransaction triggered");
+    console.log("[SEND] wallet connected:", isWalletConnected, "recipient:", sendRecipient, "amount:", sendAmount);
+    
+    if (!isWalletConnected || !sendRecipient || !sendAmount) {
+      console.log("[SEND] Aborted - missing:", { wallet: isWalletConnected, recipient: sendRecipient, amount: sendAmount });
+      return;
+    }
+
+    const isSameToken = sendFromCurrency === sendToCurrency;
+    console.log("[SEND] isSameToken:", isSameToken, "from:", sendFromCurrency, "to:", sendToCurrency);
+
+    // Resolve destination: accept EVM (0x..), EVM-derived SS58, and native SS58 addresses
+    let recipientPayload: string;
+    if (!isSameToken) {
+      // Cross-currency: pass address through to swap partner without validation
+      recipientPayload = sendRecipient;
+    } else if (isEvmAddress(sendRecipient)) {
+      recipientPayload = sendRecipient;
+    } else {
+      // Try SS58: check if EVM-derived (H160 + 12×0xEE) or native
+      try {
+        const { decodeAddress, encodeAddress } = await import("@polkadot/util-crypto");
+        const decoded = decodeAddress(sendRecipient);
+        const last12 = Buffer.from(decoded.slice(-12));
+        const isEvmDerived = last12.every(b => b === 0xEE);
+        if (isEvmDerived && decoded.length >= 32) {
+          // EVM-derived SS58 → convert to H160
+          recipientPayload = "0x" + Buffer.from(decoded.slice(0, 20)).toString("hex");
+          if (!isEvmAddress(recipientPayload)) {
+            throw new Error("Invalid H160 derived from SS58");
+          }
+        } else if (ispolkadotaddress(sendRecipient)) {
+          // Native SS58 → pass through (backend handles forwarding via Account 1)
+          recipientPayload = sendRecipient;
+        } else {
+          throw new Error("Not a valid address");
+        }
+      } catch {
+        setError("Invalid address. Enter an Ethereum address (0x...) or a Polkadot native address (e.g. 16Ziip...).");
+        toast.error("Invalid destination address", { position: "top-right", autoClose: 5000, theme: "dark" });
+        return;
+      }
+    }
+
+    try {
+      setIsLoading(true);
+      setError("");
+      setSendGasEstimate(null);
+      
+      const sourceNetwork = selectedNetwork === "kusama" ? "kusama" : "polkadot";
+      console.log("[SEND] sourceNetwork:", sourceNetwork);
+      
+      // For DOT -> DOT: first do deposit, then withdraw via Flask API
+      if (isSameToken) {
+        console.log("[SEND] Same token detected, doing deposit + withdraw");
+        
+        toast(`Step 1/3: Depositing ${sendAmount} DOT to shielded pool...`, {
+          position: "top-right",
+          autoClose: 6000,
+          hideProgressBar: false,
+          closeOnClick: false,
+          pauseOnHover: true,
+          draggable: true,
+          progress: undefined,
+          theme: "dark",
+        });
+
+        const networkConfig = NETWORKS[selectedNetwork];
+        const provider = new ethers.BrowserProvider(
+          (window as any).ethereum || (window as any).talismanEth,
+        );
+        const signer = await provider.getSigner();
+        
+        const poolContract = new ethers.Contract(
+          networkConfig.shield_address,
+          networkConfig.abi,
+          signer
+        );
+
+        // Generate 31-byte secret (must be < BN254_R = 0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001)
+        const secretBytes = ethers.randomBytes(31);
+        const secretHex = "0x" + Array.from(secretBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+        const amountWei = ethers.parseEther(sendAmount);
+        
+        // Compute commitment using poseidon-lite (matches Python SDK's generate_commitment)
+        const secretBN = BigInt(secretHex);
+        const { poseidon1, poseidon2 } = await import("poseidon-lite");
+        
+        const nullifier = poseidon2([secretBN, 1n]);
+        const nullifierHash = poseidon1([nullifier]);
+        const precommitment = poseidon2([nullifier, secretBN]);
+        const valueAssetHash = poseidon2([amountWei.toString(), 0n]);
+        const commitment = poseidon2([valueAssetHash, precommitment]);
+        
+        // Convert commitment to bytes32 hex for the contract
+        const commitmentHex = "0x" + commitment.toString(16).padStart(64, '0');
+        
+        console.log("[SEND] Generated commitment:", commitmentHex);
+        
+        // Estimate gas before sending
+        let gasLimit = 150000n;
+        let gasPrice = 1000000000n;
+        try {
+          const feeData = await provider.getFeeData();
+          gasPrice = feeData.gasPrice || gasPrice;
+          try {
+            gasLimit = await poolContract.depositNative.estimateGas(commitmentHex, { value: amountWei });
+          } catch (e) {
+            console.log("Gas est failed, using fallback:", e);
+          }
+        } catch (e) {}
+        console.log("[SEND] Using gasLimit:", gasLimit.toString(), "gasPrice:", gasPrice.toString());
+        
+        // Send deposit transaction with estimated gas
+        let tx;
+        tx = await poolContract.depositNative(commitmentHex, { value: amountWei, gasLimit, gasPrice });
+
+        toast(`Deposit sent! Tx: ${tx.hash.slice(0, 10)}... Waiting for confirmation...`, {
+          position: "top-right",
+          autoClose: 10000,
+          hideProgressBar: false,
+          closeOnClick: false,
+          pauseOnHover: true,
+          draggable: true,
+          progress: undefined,
+          theme: "dark",
+        });
+
+const receipt = await tx.wait();
+        console.log("Deposit confirmed:", receipt.hash);
+
+        // Single persistent loading toast for the entire withdrawal process
+        const loadingToastId = toast.loading(`Deposit confirmed. Processing shielded transfer...`, {
+          position: "top-right",
+          hideProgressBar: false,
+          closeOnClick: false,
+          pauseOnHover: true,
+          draggable: true,
+          theme: "dark",
+        });
+
+        // Wait for deposit finality
+        await new Promise(r => setTimeout(r, 5000));
+        
+// Rebuild Merkle tree
+        toast.update(loadingToastId, { render: "Doing cryptography stuff, hold.." });
+        
+        console.log("[SEND] Tree rebuild URL:", `${SWAP_API_BASE}/tree-rebuild/${sourceNetwork}`);
+        const treeResult = await fetch(`${SWAP_API_BASE}/tree-rebuild/${sourceNetwork}`, {
+          method: "POST",
+        });
+        const treeData = await treeResult.json();
+        console.log("[SEND] Tree rebuild response:", JSON.stringify(treeData));
+
+        // Call Flask /pool-withdraw
+        toast.update(loadingToastId, { render: `Submitting withdrawal to ${recipientPayload.slice(0, 6)}...` });
+
+        const withdrawPayload = {
+          secret: secretHex,
+          network: sourceNetwork,
+          amount_wei: amountWei.toString(),
+          asset_id: 0,
+          recipient: recipientPayload,
+        };
+
+        console.log("[SEND] Pool-withdraw URL:", `${SWAP_API_BASE}/pool-withdraw`);
+        console.log("[SEND] Pool-withdraw payload:", JSON.stringify(withdrawPayload));
+        
+        const response = await fetch(`${SWAP_API_BASE}/pool-withdraw`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(withdrawPayload),
+        });
+
+        console.log("[SEND] Pool-withdraw status:", response.status);
+        const result = await response.json();
+        console.log("[SEND] Pool-withdraw result:", JSON.stringify(result));
+
+        if (result.error) {
+          toast.dismiss(loadingToastId);
+          throw new Error(result.error);
+        }
+
+        if (result.withdraw_id) {
+          console.log("[SEND] Starting status poll for withdraw_id:", result.withdraw_id);
+          let withdrawStatus = "pending";
+          let pollCount = 0;
+          const maxPolls = 120;
+          
+          while ((withdrawStatus === "pending" || withdrawStatus === "building_proof" || 
+                  withdrawStatus === "building_tree" || withdrawStatus === "generating_proof" ||
+                  withdrawStatus === "sending_tx" || withdrawStatus === "retrying" ||
+                  withdrawStatus === "forwarding") && pollCount < maxPolls) {
+            await new Promise(r => setTimeout(r, 3000));
+            const statusUrl = `${SWAP_API_BASE}/pool-withdraw-status/${result.withdraw_id}`;
+            console.log(`[SEND] Poll #${pollCount+1}:`, statusUrl);
+            const statusRes = await fetch(statusUrl);
+            console.log(`[SEND] Poll #${pollCount+1} status:`, statusRes.status);
+            const statusData = await statusRes.json();
+            console.log(`[SEND] Poll #${pollCount+1} data:`, JSON.stringify(statusData));
+            console.log(`[SEND] Poll #${pollCount+1} withdrawStatus from API:`, statusData.status);
+            
+            withdrawStatus = statusData.status;
+            pollCount++;
+            
+            toast.update(loadingToastId, { 
+              render: `${statusData.message || "Processing..."} (${pollCount * 3}s)` 
+            });
+            
+            if (withdrawStatus === "completed") {
+              toast.dismiss(loadingToastId);
+              const shortTx = (statusData.forward_tx_hash || statusData.tx_hash || "").slice(0, 10);
+              toast.success(`Shielded transfer complete! Sent ${sendAmount} DOT to ${recipientPayload.slice(0, 6)}...${shortTx ? ` (tx: ${shortTx}...)` : ""}`, {
+                position: "top-right",
+                autoClose: 10000,
+                hideProgressBar: false,
+                closeOnClick: false,
+                pauseOnHover: true,
+                draggable: true,
+                progress: undefined,
+                theme: "dark",
+              });
+            } else if (withdrawStatus === "failed") {
+              toast.dismiss(loadingToastId);
+              throw new Error(statusData.message || "Withdrawal failed");
+            }
+          }
+          
+          if (withdrawStatus !== "completed" && pollCount >= maxPolls) {
+            toast.dismiss(loadingToastId);
+            toast.info(`Withdrawal ${result.withdraw_id} still processing. Check status later.`, {
+              position: "top-right",
+              autoClose: 10000,
+              hideProgressBar: false,
+              closeOnClick: false,
+              pauseOnHover: true,
+              draggable: true,
+              progress: undefined,
+              theme: "dark",
+            });
+          }
+        }
+
+        setSendRecipient("");
+        setSendAmount("");
+        setIsLoading(false);
+        return;
+      }
+
+      // For cross-token: create swap order, user deposits, proxy withdraws to swap address
+      toast(`Step 1/4: Creating ${sendFromCurrency} → ${sendToCurrency} swap order...`, {
+        position: "top-right",
+        autoClose: 6000,
+        hideProgressBar: false,
+        closeOnClick: false,
+        pauseOnHover: true,
+        draggable: true,
+        progress: undefined,
+        theme: "dark",
+      });
+
+      const toFixedFloat = (ccy: string) => ccy === "DOT" ? "DOTAH" : ccy;
+      const ffOrderResult = await fetch(`${SWAP_API_BASE}/ff-create-order`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          from_ccy: toFixedFloat(sendFromCurrency),
+          to_ccy: toFixedFloat(sendToCurrency),
+          amount: parseFloat(sendAmount),
+          destination_address: sendRecipient,
+        }),
+      });
+
+      const ffOrder = await ffOrderResult.json();
+      if (ffOrder.error) {
+        throw new Error(ffOrder.error);
+      }
+
+      console.log("[SEND] Swap order created:", ffOrder);
+      const ffDepositAddress = ffOrder.deposit_address;
+      const ffOrderId = ffOrder.order_id;
+
+      toast(`Step 2/4: Depositing ${sendAmount} DOT to shielded pool...`, {
+        position: "top-right",
+        autoClose: 6000,
+        hideProgressBar: false,
+        closeOnClick: false,
+        pauseOnHover: true,
+        draggable: true,
+        progress: undefined,
+        theme: "dark",
+      });
+
+      const networkConfig = NETWORKS[selectedNetwork];
+      const provider = new ethers.BrowserProvider(
+        (window as any).ethereum || (window as any).talismanEth,
+      );
+      const signer = await provider.getSigner();
+
+      const poolContract = new ethers.Contract(
+        networkConfig.shield_address,
+        networkConfig.abi,
+        signer
+      );
+
+      const secretBytes = ethers.randomBytes(31);
+      const secretHex = "0x" + Array.from(secretBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+      const amountWei = ethers.parseEther(sendAmount);
+
+      const secretBN = BigInt(secretHex);
+      const { poseidon1, poseidon2 } = await import("poseidon-lite");
+
+      const nullifier = poseidon2([secretBN, 1n]);
+      const nullifierHash = poseidon1([nullifier]);
+      const precommitment = poseidon2([nullifier, secretBN]);
+      const valueAssetHash = poseidon2([amountWei.toString(), 0n]);
+      const commitment = poseidon2([valueAssetHash, precommitment]);
+
+      const commitmentHex = "0x" + commitment.toString(16).padStart(64, '0');
+      console.log("[SEND] Generated commitment:", commitmentHex);
+
+      let gasLimit = 150000n;
+      let gasPrice = 1000000000n;
+      try {
+        const feeData = await provider.getFeeData();
+        gasPrice = feeData.gasPrice || gasPrice;
+        try {
+          gasLimit = await poolContract.depositNative.estimateGas(commitmentHex, { value: amountWei });
+        } catch (e) {
+          console.log("Gas est failed, using fallback:", e);
+        }
+      } catch (e) {}
+
+      const tx = await poolContract.depositNative(commitmentHex, { value: amountWei, gasLimit, gasPrice });
+      toast(`Deposit sent! Tx: ${tx.hash.slice(0, 10)}... Waiting for confirmation...`, {
+        position: "top-right",
+        autoClose: 10000,
+        hideProgressBar: false,
+        closeOnClick: false,
+        pauseOnHover: true,
+        draggable: true,
+        progress: undefined,
+        theme: "dark",
+      });
+
+      const receipt = await tx.wait();
+      console.log("Deposit confirmed:", receipt.hash);
+
+      const loadingToastId = toast.loading(`Deposit confirmed. Processing shielded swap to ${ffDepositAddress.slice(0, 6)}...`, {
+        position: "top-right",
+        hideProgressBar: false,
+        closeOnClick: false,
+        pauseOnHover: true,
+        draggable: true,
+        theme: "dark",
+      });
+
+      await new Promise(r => setTimeout(r, 5000));
+
+      toast.update(loadingToastId, { render: "Doing cryptography stuff, hold.." });
+      console.log("[SEND] Tree rebuild URL:", `${SWAP_API_BASE}/tree-rebuild/${sourceNetwork}`);
+      const treeResult = await fetch(`${SWAP_API_BASE}/tree-rebuild/${sourceNetwork}`, {
+        method: "POST",
+      });
+      const treeData = await treeResult.json();
+      console.log("[SEND] Tree rebuild response:", JSON.stringify(treeData));
+
+      toast.update(loadingToastId, { render: `Withdrawing to swap address...` });
+      const withdrawPayload = {
+        secret: secretHex,
+        network: sourceNetwork,
+        amount_wei: amountWei.toString(),
+        asset_id: 0,
+        recipient: ffDepositAddress,
+      };
+      console.log("[SEND] Pool-withdraw payload:", JSON.stringify(withdrawPayload));
+      const response = await fetch(`${SWAP_API_BASE}/pool-withdraw`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(withdrawPayload),
+      });
+      const result = await response.json();
+      console.log("[SEND] Pool-withdraw result:", JSON.stringify(result));
+
+      if (result.error) {
+        toast.dismiss(loadingToastId);
+        throw new Error(result.error);
+      }
+
+      if (result.withdraw_id) {
+        let withdrawStatus = "pending";
+        let pollCount = 0;
+        const maxPolls = 120;
+
+        while ((withdrawStatus === "pending" || withdrawStatus === "building_proof" ||
+                withdrawStatus === "building_tree" || withdrawStatus === "generating_proof" ||
+                withdrawStatus === "sending_tx" || withdrawStatus === "retrying" ||
+                withdrawStatus === "forwarding") && pollCount < maxPolls) {
+          await new Promise(r => setTimeout(r, 3000));
+          const statusUrl = `${SWAP_API_BASE}/pool-withdraw-status/${result.withdraw_id}`;
+          const statusRes = await fetch(statusUrl);
+          const statusData = await statusRes.json();
+
+          withdrawStatus = statusData.status;
+          pollCount++;
+
+          toast.update(loadingToastId, {
+            render: `${statusData.message || "Processing..."} (${pollCount * 3}s)`
+          });
+
+          if (withdrawStatus === "completed") {
+            toast.dismiss(loadingToastId);
+            toast.success(`Shielded swap initiated! ${sendAmount} DOT → ${sendToCurrency} to ${sendRecipient.slice(0, 6)}... (swap order: ${ffOrderId})`, {
+              position: "top-right",
+              autoClose: 10000,
+              hideProgressBar: false,
+              closeOnClick: false,
+              pauseOnHover: true,
+              draggable: true,
+              progress: undefined,
+              theme: "dark",
+            });
+          } else if (withdrawStatus === "failed") {
+            toast.dismiss(loadingToastId);
+            throw new Error(statusData.message || "Withdrawal failed");
+          }
+        }
+
+        if (withdrawStatus !== "completed" && pollCount >= maxPolls) {
+          toast.dismiss(loadingToastId);
+          toast.info(`Withdrawal ${result.withdraw_id} still processing. Swap order ${ffOrderId}. Check status later.`, {
+            position: "top-right",
+            autoClose: 10000,
+            hideProgressBar: false,
+            closeOnClick: false,
+            pauseOnHover: true,
+            draggable: true,
+            progress: undefined,
+            theme: "dark",
+          });
+        }
+      }
+
+      setSendRecipient("");
+      setSendAmount("");
+      setSendGasEstimate(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Send failed");
+      toast(`Send failed: ${err instanceof Error ? err.message : "Unknown error"}`, {
+        position: "top-right",
+        autoClose: 7000,
+        hideProgressBar: false,
+        closeOnClick: false,
+        pauseOnHover: true,
+        draggable: true,
+        progress: undefined,
+        theme: "dark",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const estimateSendGas = useCallback(async () => {
+    if (!sendAmount || parseFloat(sendAmount) <= 0 || isTestnet(selectedNetwork)) {
+      setSendGasEstimate(null);
+      return;
+    }
+
+    setSendGasLoading(true);
+    try {
+      const sourceNetwork = selectedNetwork === "kusama" ? "kusama" : "polkadot";
+      const networkConfig = NETWORKS[selectedNetwork];
+      if (!networkConfig?.shield_address) {
+        setSendGasEstimate(null);
+        return;
+      }
+
+      const provider = new ethers.BrowserProvider(
+        (window as any).ethereum || (window as any).talismanEth,
+      );
+      
+      const poolContract = new ethers.Contract(
+        networkConfig.shield_address,
+        networkConfig.abi,
+        provider
+      );
+
+      // Use static gas estimates - deposit ~50k, withdraw ~150k
+      const depositGas = 50000n;
+      const withdrawGas = 150000n;
+      
+      const totalGas = depositGas + withdrawGas;
+      const gasEstimateEth = Number(totalGas) / 1e18;
+      
+      if (gasEstimateEth > 0) {
+        setSendGasEstimate(`~${gasEstimateEth.toFixed(4)} ${networkConfig.asset || "DOT"}`);
+      } else {
+        setSendGasEstimate(null);
+      }
+    } catch (err) {
+      console.error("Gas estimation error:", err);
+      setSendGasEstimate(null);
+    } finally {
+      setSendGasLoading(false);
+    }
+  }, [sendAmount, sendFromCurrency, sendToCurrency, sendRecipient, selectedNetwork]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      estimateSendGas();
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [estimateSendGas]);
+
+  // Fetch exchange rate for estimated receive amount
+  useEffect(() => {
+    if (!sendAmount || parseFloat(sendAmount) <= 0) {
+      setEstimatedReceive(null);
+      setSwapRate(null);
+      return;
+    }
+
+    const fetchRate = async () => {
+      const estimateGasFee = async () => {
+        try {
+          const networkConfig = NETWORKS[selectedNetwork];
+          if (!networkConfig?.shield_address) return "0.01";
+          const provider = new ethers.BrowserProvider(
+            (window as any).ethereum || (window as any).talismanEth,
+          );
+          const poolContract = new ethers.Contract(networkConfig.shield_address, networkConfig.abi, provider);
+          const amountWei = ethers.parseEther(sendAmount || "1");
+          let gasPrice = 2000000000n;
+          try {
+            const feeData = await provider.getFeeData();
+            gasPrice = feeData.maxFeePerGas || feeData.gasPrice || gasPrice;
+          } catch (e) {}
+          let depositGas = 50000n;
+          try {
+            const secretBytes = ethers.randomBytes(31);
+            const secretHex = "0x" + Array.from(secretBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+            const secretBN = BigInt(secretHex);
+            const { poseidon1, poseidon2 } = await import("poseidon-lite");
+            const nullifier = poseidon2([secretBN, 1n]);
+            const precommitment = poseidon2([nullifier, secretBN]);
+            const valueAssetHash = poseidon2([amountWei.toString(), 0n]);
+            const commitment = poseidon2([valueAssetHash, precommitment]);
+            const commitmentHex = "0x" + commitment.toString(16).padStart(64, '0');
+            depositGas = await poolContract.depositNative.estimateGas(commitmentHex, { value: amountWei });
+          } catch (e) {
+            console.log("Gas estimation failed, using default:", e);
+          }
+          const feeEth = Number(depositGas * gasPrice) / 1e18;
+          return feeEth > 0 ? feeEth.toFixed(6) : "0.01";
+        } catch (e) {
+          return "0.01";
+        }
+      };
+
+      // Always estimate gas fee
+      const gasFee = await estimateGasFee();
+      setSendGasFee(gasFee);
+      
+      if (sendFromCurrency === sendToCurrency) {
+        setEstimatedReceive(gasFee);
+        setEstimatedReceiveLoading(false);
+        return;
+      }
+
+      // Different currencies - fetch exchange rate too
+      const toFixedFloat = (ccy: string) => ccy === "DOT" ? "DOTAH" : ccy;
+      
+      setEstimatedReceiveLoading(true);
+      try {
+        const response = await fetch(`${SWAP_API_BASE}/exchange_rate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fromCcy: toFixedFloat(sendFromCurrency),
+            toCcy: toFixedFloat(sendToCurrency),
+            amount: parseFloat(sendAmount) || 0,
+          }),
+        });
+        const data = await response.json();
+        console.log("[DEBUG fetchRate] Response data:", data);
+        
+        if (data.error) {
+          if (data.errors && data.errors.length > 0) {
+            const errorMsg = data.errors[0];
+            if (errorMsg === 'OFFLINE_FROM' || errorMsg === 'OFFLINE_TO')
+              setSwapRate('Currency temporarily unavailable, try later');
+            else if (errorMsg === 'MAINTENANCE_FROM' || errorMsg === 'MAINTENANCE_TO')
+              setSwapRate('Currency under maintenance, try later');
+            else
+              setSwapRate('Pair temporarily unavailable');
+          } else {
+            setSwapRate(data.error);
+          }
+          setEstimatedReceive(null);
+        } else if (data.response?.data?.to?.amount) {
+          const receivedAmount = parseFloat(data.response.data.to.amount);
+          setEstimatedReceive(receivedAmount.toFixed(4));
+          if (data.response.data.from?.rate && data.response.data.to?.rate) {
+            const rate = data.response.data.to.rate / data.response.data.from.rate;
+            setSwapRate(`1 ${sendFromCurrency} ≈ ${rate.toFixed(6)} ${sendToCurrency}`);
+          } else if (receivedAmount > 0) {
+            setSwapRate(`1 ${sendFromCurrency} ≈ ${(receivedAmount / parseFloat(sendAmount)).toFixed(6)} ${sendToCurrency}`);
+          }
+        } else {
+          setEstimatedReceive(null);
+          setSwapRate(null);
+        }
+      } catch (err) {
+        console.error("[DEBUG fetchRate] Error:", err);
+        setEstimatedReceive(null);
+        setSwapRate(null);
+      }
+      setEstimatedReceiveLoading(false);
+    };
+
+    const timer = setTimeout(() => {
+      fetchRate();
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [sendAmount, sendFromCurrency, sendToCurrency]);
+
   const handleBridge = async () => {
     if (evmAddress && isEvmAddress(evmAddress)) {
       toast(`ERROR: select a polkadot address not ethereum address`, {
@@ -4050,15 +4731,16 @@ export function App() {
       return;
     }
 
-    // Validate DOT destination address format
+    // Validate DOT destination address format (accepts both Polkadot and EVM)
     if (
       toCurrency === "DOT" &&
       destinationAddress.trim() &&
-      !ispolkadotaddress(destinationAddress.trim())
+      !ispolkadotaddress(destinationAddress.trim()) &&
+      !isEvmAddress(destinationAddress.trim())
     ) {
-      toast.error("Invalid Polkadot address format for DOT destination");
-      toast.error("Select another Polkadot address");
-      console.error("Invalid Polkadot address format provided for DOT swap");
+      toast.error("Invalid address format for DOT destination");
+      toast.error("Enter a Polkadot address or Ethereum address (0x...)");
+      console.error("Invalid address format provided for DOT swap");
       return;
     }
     console.log(
@@ -4075,33 +4757,22 @@ export function App() {
       return;
     }
 
-    // Check if DOT destination address is EVM format (invalid)
-    const finalDestination = requiresDestinationAddress(
+    // Support both EVM and Polkadot addresses for DOT destinations
+    let finalDestination = requiresDestinationAddress(
       fromCurrency,
       toCurrency,
     )
       ? destinationAddress.trim()
       : evmAddress;
 
+    // EVM address for DOT destination: convert to AccountId32 (append 24×0xEE)
     if (
-      toCurrency == "DOT" &&
+      toCurrency === "DOT" &&
       finalDestination &&
       isEvmAddress(finalDestination)
     ) {
-      toast.error(
-        `Invalid address format: DOT requires a Polkadot address, not EVM address`,
-        {
-          position: "top-right",
-          autoClose: 5000,
-          hideProgressBar: false,
-          closeOnClick: false,
-          pauseOnHover: true,
-          draggable: true,
-          progress: undefined,
-          theme: "dark",
-        },
-      );
-      return;
+      const { eth2account32 } = await import("./transactions/adresses");
+      finalDestination = eth2account32(finalDestination);
     }
 
     // Handle DOT→KSM cross-chain swap with local price checker
@@ -4709,10 +5380,11 @@ export function App() {
     }
   }, [evmAddress, fromCurrency, toCurrency, destinationAddress]);
 
-  // Validate destination address for DOT swaps
+  // Validate destination address for DOT swaps (accepts both Polkadot and EVM addresses)
   useEffect(() => {
     if (toCurrency === "DOT" && destinationAddress.trim()) {
-      if (!ispolkadotaddress(destinationAddress.trim())) {
+      const isValid = ispolkadotaddress(destinationAddress.trim()) || isEvmAddress(destinationAddress.trim());
+      if (!isValid) {
         toast.error("Invalid Polkadot address format for DOT destination", {
           position: "top-right",
           autoClose: 5000,
@@ -5214,6 +5886,9 @@ export function App() {
             }
           } else if (activeTab === "unshield") {
             throw new Error("unshield estimate not implemented via contract");
+          } else if (activeTab === "send") {
+            // Simple transfer — use fixed estimate
+            gasUnits = 21000n; // standard ETH transfer
           } else {
             throw new Error("unknown tab");
           }
@@ -5329,7 +6004,7 @@ export function App() {
 
       <div className="swap-container">
         <div
-          className={`swap-box ${activeTab === "bridge" || activeTab === "offramp" ? "no-shield-shape" : ""}`}
+          className={`swap-box ${activeTab === "bridge" || activeTab === "offramp" || activeTab === "send" ? "no-shield-shape" : ""}`}
         >
           <div className="tabs">
             {selectedNetwork !== "base" && (
@@ -5345,6 +6020,23 @@ export function App() {
                   onClick={() => setActiveTab("unshield")}
                 >
                   Unshield
+                </button>
+                <button
+                  className={`tab ${activeTab === "send" ? "active" : ""}`}
+                  onClick={() => setActiveTab("send")}
+                  disabled={isTestnet(selectedNetwork)}
+                  title={
+                    isTestnet(selectedNetwork)
+                      ? "Send not available on testnet"
+                      : undefined
+                  }
+                  style={
+                    isTestnet(selectedNetwork)
+                      ? { opacity: 0.6, cursor: "not-allowed" }
+                      : undefined
+                  }
+                >
+                  Send
                 </button>
                 <button
                   className={`tab ${activeTab === "bridge" ? "active" : ""}`}
@@ -5873,7 +6565,218 @@ export function App() {
                   </div>
                 )}
 
-                {activeTab !== "bridge" && (
+                {activeTab === "send" && (
+                  <div className="input-group">
+                    <div
+                      style={{
+                        textAlign: "center",
+                        padding: "1rem 0 0.5rem 0",
+                        fontSize: "1.1rem",
+                        fontWeight: 500,
+                        color: "#a78bfa",
+                      }}
+                    >
+                      Pay any invoice privatly
+                    </div>
+
+                    <div
+                      className="send-info-box"
+                      style={{
+                        margin: "0.5rem 1rem 1rem 1rem",
+                        padding: "0.75rem 1rem",
+                        background: "rgba(124, 58, 237, 0.08)",
+                        border: "1px solid rgba(124, 58, 237, 0.2)",
+                        borderRadius: "10px",
+                        fontSize: "0.8rem",
+                        color: "#b0a0d0",
+                        lineHeight: "1.5",
+                        textAlign: "left",
+                      }}
+                    >
+                      <strong style={{ color: "#a78bfa" }}>How it works</strong><br />
+                      Your coins are sent into the shielded<br />
+                      pool on Polkadot, withdrawn<br />
+                      anonymously, and swapped into {sendToCurrency} —<br />
+                      with no on-chain link between sender<br />
+                      and receiver.
+                    </div>
+
+                    <div className="swap-interface">
+                      <div className="currency-selection">
+                        <div className="currency-input">
+                          <label>Send Coin:</label>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, overflow: "hidden" }}>
+                            {getAvailableCurrencies(selectedNetwork).find(c => c.symbol === sendFromCurrency)?.logo && (
+                              <img 
+                                src={getAvailableCurrencies(selectedNetwork).find(c => c.symbol === sendFromCurrency)?.logo} 
+                                alt={sendFromCurrency}
+                                style={{ width: 24, height: 24, flexShrink: 0 }} 
+                              />
+                            )}
+                            <select
+                              value={sendFromCurrency}
+                              onChange={(e) => setSendFromCurrency(e.target.value)}
+                              className="currency-select"
+                              style={{ flex: 1, minWidth: 0 }}
+                            >
+                              {getAvailableCurrencies(selectedNetwork).map((c) => (
+                                <option key={c.symbol} value={c.symbol}>
+                                  {c.symbol} - {c.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        <div
+                          className="swap-arrow"
+                          onClick={() => {
+                            const temp = sendFromCurrency;
+                            setSendFromCurrency(sendToCurrency);
+                            setSendToCurrency(temp);
+                          }}
+                        >
+                          ⇄
+                        </div>
+
+                        <div className="currency-input">
+                          <label>Receiver Coin:</label>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, overflow: "hidden" }}>
+                            {getAvailableCurrencies(selectedNetwork).find(c => c.symbol === sendToCurrency)?.logo && (
+                              <img 
+                                src={getAvailableCurrencies(selectedNetwork).find(c => c.symbol === sendToCurrency)?.logo} 
+                                alt={sendToCurrency}
+                                style={{ width: 24, height: 24, flexShrink: 0 }} 
+                              />
+                            )}
+                            <select
+                              value={sendToCurrency}
+                              onChange={(e) => setSendToCurrency(e.target.value)}
+                              className="currency-select"
+                              style={{ flex: 1, minWidth: 0 }}
+                            >
+                              {getAvailableCurrencies(selectedNetwork)
+                                .map((c) => (
+                                  <option key={c.symbol} value={c.symbol}>
+                                    {c.symbol} - {c.name}
+                                  </option>
+                                ))}
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="token-input">
+                        <label>Recipient Address:</label>
+                        <input
+                          type="text"
+                          placeholder={sendFromCurrency === sendToCurrency 
+                            ? "Enter recipient address (0x... or SS58 address)"
+                            : `Enter your ${sendToCurrency} wallet address`}
+                          value={sendRecipient}
+                          onChange={(e) => setSendRecipient(e.target.value)}
+                          className="amount-input"
+                          style={{
+                            boxSizing: "border-box",
+                          }}
+                        />
+                      </div>
+
+                      <div className="token-input">
+                        <label>
+                          Amount: {sendAmount || "0"} {sendFromCurrency}
+                        </label>
+                        <input
+                          type="number"
+                          placeholder="0.0"
+                          value={sendAmount}
+                          onChange={(e) => setSendAmount(e.target.value)}
+                          min="1"
+                          step="0.1"
+                          className="amount-input"
+                          style={{
+                            boxSizing: "border-box",
+                          }}
+                        />
+                      </div>
+
+                      {estimatedReceiveLoading && (
+                        <div style={{ textAlign: "center", marginTop: "0.5rem", color: "#a855f7" }}>
+                          Getting rate...
+                        </div>
+                      )}
+
+                      {estimatedReceive && !estimatedReceiveLoading && (
+                        <div style={{ textAlign: "center", marginTop: "0.5rem", color: "#10b981" }}>
+                          {sendFromCurrency === sendToCurrency 
+                            ? `Estimated tx fee: ~${estimatedReceive} ${sendToCurrency}`
+                            : `Estimated Receiver amount: ${estimatedReceive} ${sendToCurrency}`}
+                        </div>
+                      )}
+                      
+                      {swapRate && sendFromCurrency !== sendToCurrency && (
+                        <div style={{ textAlign: "center", marginTop: "0.25rem", color: "#a78bfa", fontSize: "0.85rem" }}>
+                          {swapRate}
+                        </div>
+                      )}
+                      
+                      {sendGasFee && !estimatedReceiveLoading && (
+                        <div style={{ textAlign: "center", marginTop: "0.25rem", color: "#f59e0b", fontSize: "0.8rem" }}>
+                          Est. network fee: ~{sendGasFee} {sendFromCurrency}
+                        </div>
+                      )}
+
+                      {sendGasLoading && (
+                        <div style={{ textAlign: "center", marginTop: "0.5rem", color: "#a855f7" }}>
+                          Estimating gas...
+                        </div>
+                      )}
+
+                      <button
+                        className={`action-button swap-button ${isLoading ? "loading" : ""}`}
+                        onClick={handleSendTransaction}
+                        disabled={!sendRecipient || !sendAmount || isTestnet(selectedNetwork) || isLoading}
+                        style={{
+                          width: "100%",
+                          marginTop: "1rem",
+                          padding: "1rem",
+                          background:
+                            !sendRecipient || !sendAmount || isTestnet(selectedNetwork) || isLoading
+                              ? "#333"
+                              : "linear-gradient(135deg, #7c3aed, #a78bfa)",
+                          border: "none",
+                          borderRadius: "12px",
+                          color: "#fff",
+                          fontSize: "1rem",
+                          fontWeight: 600,
+                          cursor:
+                            !sendRecipient || !sendAmount || isTestnet(selectedNetwork) || isLoading
+                              ? "not-allowed"
+                              : "pointer",
+                        }}
+                      >
+                        {isLoading
+                          ? "Processing shielded transfer..."
+                          : isTestnet(selectedNetwork)
+                            ? "Send disabled for testnet"
+                            : `Send ${sendFromCurrency} → ${sendToCurrency}`}
+                      </button>
+
+                      <div
+                        style={{
+                          textAlign: "center",
+                          marginTop: "0.75rem",
+                          fontSize: "0.8rem",
+                          color: "#666",
+                        }}
+                      >
+                        Shielded swap & send — receiver gets {sendToCurrency}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {activeTab !== "bridge" && activeTab !== "send" && (
                   <div className="token-input">
                     <div className="amount-slider-container">
                       <label>
@@ -6180,7 +7083,7 @@ export function App() {
                 )}
               </div>
               {error && <div className="error-message">{error}</div>}
-              {(activeTab !== "bridge" || swapStage === "input") && (
+              {(activeTab !== "bridge" || swapStage === "input") && activeTab !== "send" && (
                 <button
                   className={`swap-button ${isLoading ? "loading" : ""}`}
                   onClick={

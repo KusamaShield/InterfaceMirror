@@ -4,7 +4,7 @@
 
 import { ethers } from "ethers";
 import * as snarkjs from "snarkjs";
-import { poseidon2, poseidon3 } from "poseidon-lite";
+import { poseidon1, poseidon2, poseidon3 } from "poseidon-lite";
 // types/zkp.ts
 export interface ZKProof {
   pi_a: string[];
@@ -86,7 +86,7 @@ export class ZKPService {
   // nullifierHash = Poseidon(nullifier) — used to prevent double-spend
   generateNullifierHash(nullifier: string): string {
     const nullifierBN = BigInt(nullifier);
-    const hash = poseidon2([nullifierBN, 0n]);
+    const hash = poseidon1([nullifierBN]);
     return hash.toString();
   }
 
