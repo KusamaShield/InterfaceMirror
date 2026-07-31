@@ -11,10 +11,10 @@ import { Buffer } from "buffer";
 
 // Test configuration matching App.tsx logic
 const TEST_CONFIG = {
-  shieldAddress: "0x4f862778245e6C684AcE9cc32e1B870b6AF04b34",
+  shieldAddress: "0xbcE09D4De052b2816df1285663ac89528DF45380",
   rpcEndpoint: "https://paseo-assethub-rpc.laissez-faire.trade/",
   wsEndpoint: "wss://asset-hub-paseo-rpc.n.dwellir.com",
-  nativeAsset: "PAS",
+  nativeAsset: "DOT",
   abi: ["function escrow(address) external view returns (uint256)"],
 };
 

@@ -5,6 +5,42 @@
     <link rel="icon" type="image/svg+xml" href="/bird.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Kusama Shield</title>
+    <!-- AppKit Modal Positioning Fixes -->
+    <style>
+      /* Force overlay and modal positioning */
+      body > w3m-modal-overlay,
+      body > .w3m-overlay {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        display: flex !important;
+        align-items: flex-start !important;
+        justify-content: center !important;
+        padding-top: 5vh !important;
+        z-index: 9999 !important;
+      }
+      
+      /* Force modal card positioning */
+      wui-card[data-testid="w3m-modal-card"],
+      .w3m-modal-card {
+        max-height: 70vh !important;
+        height: auto !important;
+        width: 90vw !important;
+        max-width: 90vw !important;
+        top: 0 !important;
+        position: relative !important;
+        margin-top: 0 !important;
+        transform: none !important;
+      }
+      
+      /* Ensure router fits inside */
+      w3m-router {
+        max-height: 65vh !important;
+        overflow: hidden !important;
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>

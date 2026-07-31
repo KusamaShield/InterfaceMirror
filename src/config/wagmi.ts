@@ -125,28 +125,6 @@ export const moonbaseAlpha = defineChain({
   testnet: true,
 });
 
-export const shibuya = defineChain({
-  id: 81,
-  name: "Shibuya",
-  nativeCurrency: {
-    name: "Shibuya",
-    symbol: "SBY",
-    decimals: 18,
-  },
-  rpcUrls: {
-    default: {
-      http: ["https://evm.shibuya.astar.network"],
-    },
-  },
-  blockExplorers: {
-    default: {
-      name: "Subscan",
-      url: "https://shibuya.subscan.io",
-    },
-  },
-  testnet: true,
-});
-
 export const polkadotAssetHub = defineChain({
   id: 420420419,
   name: "Polkadot Asset Hub",
@@ -196,7 +174,6 @@ export const networks = [
   paseoAssetHubV3,
   paseoAssetHub,
   moonbaseAlpha,
-  shibuya,
   polkadotAssetHub,
   base,
 ];

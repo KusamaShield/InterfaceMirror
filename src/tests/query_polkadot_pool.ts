@@ -11,16 +11,21 @@ import { Buffer } from "buffer";
 
 const CONFIG = {
   network: "Polkadot AssetHub",
-  shieldAddress: "0xe55B85441Bc39532f279Cf24059f02DFbcf87051",
-  rpcEndpoint: "https://eth-rpc.polkadot.io/",
-  wsEndpoint: "wss://statemint-rpc.polkadot.io",
+  // v7 Pool (FixedIlopPhase2Paseo_v7_Polkadot.sol) - linkability fix, 8 signals
+  shieldAddress: "0x6f54d64C5619363722e4D1E4E53176F7f2FD57bf",
+  rpcEndpoint: "https://polkadot-assethub-rpc.laissez-faire.trade",
+  wsEndpoint: "wss://asset-hub-polkadot-rpc.polkadot.io",
   nativeAsset: "DOT",
   chainId: 420420419,
   abi: [
     "function escrow(address) external view returns (uint256)",
+    "function getEscrowBalance(address) external view returns (uint256)",
     "function currentRoot() external view returns (uint256)",
     "function treeSize() external view returns (uint256)",
+    "function isNullifierSpent(bytes32) external view returns (bool)",
+    "function isKnownRoot(uint256) external view returns (bool)",
     "function getPrecompileAddress(uint256 assetId) external pure returns (address)",
+    "function verifier() external view returns (address)",
   ],
 };
 

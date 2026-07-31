@@ -39,6 +39,11 @@ export default defineConfig({
           });
         }
       },
+      '/api/swap': {
+        target: 'https://proxyswap.laissez-faire.trade',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/swap/, ''),
+      },
       '/api/mail-proxy': {
         target: 'https://mail.thc.org',
         changeOrigin: true,
