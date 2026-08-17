@@ -11,13 +11,16 @@ import * as snarkjs from "snarkjs";
 import { poseidon1, poseidon2 } from "poseidon-lite";
 import * as path from "path";
 import * as fs from "fs";
+import * as dotenv from "dotenv";
+dotenv.config();
 
 // ============================================================================ //
 // Configuration
 // ============================================================================ //
 
-const PRIVATE_KEY = "";
-const ACCOUNT = "";
+const PRIVATE_KEY = process.env.ETH_PRIVATE_KEY;
+if (!PRIVATE_KEY) throw new Error("Set ETH_PRIVATE_KEY in .env");
+const ACCOUNT = "0x7915705d3B9A2caf798A86A8abB3882ea9BA7647";
 
 const CONFIG = {
   rpcUrl: "https://paseo-assethub-rpc.laissez-faire.trade/",

@@ -5,6 +5,52 @@
     <link rel="icon" type="image/svg+xml" href="/bird.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Kusama Shield</title>
+    <script>
+      // Polyfill crypto.randomUUID for non-secure contexts (e.g. http://<host>:5173).
+      // WalletConnect/AppKit and several wallet extensions require it, but it is
+      // only natively available on HTTPS or localhost.
+      (function () {
+        var c =
+          (typeof globalThis !== "undefined" && globalThis.crypto) ||
+          (typeof window !== "undefined" && window.crypto);
+        if (c && typeof c.randomUUID !== "function") {
+          var randomUUID = function () {
+            var bytes = new Uint8Array(16);
+            c.getRandomValues(bytes);
+            bytes[6] = (bytes[6] & 0x0f) | 0x40; // version 4
+            bytes[8] = (bytes[8] & 0x3f) | 0x80; // variant 10xx
+            var hex = "";
+            for (var i = 0; i < 16; i++) {
+              hex += (bytes[i] + 0x100).toString(16).slice(1);
+            }
+            return (
+              hex.slice(0, 8) +
+              "-" +
+              hex.slice(8, 12) +
+              "-" +
+              hex.slice(12, 16) +
+              "-" +
+              hex.slice(16, 20) +
+              "-" +
+              hex.slice(20)
+            );
+          };
+          try {
+            Object.defineProperty(c, "randomUUID", {
+              value: randomUUID,
+              configurable: true,
+              writable: true,
+            });
+          } catch (e) {
+            try {
+              c.randomUUID = randomUUID;
+            } catch (e2) {
+              /* ignore */
+            }
+          }
+        }
+      })();
+    </script>
     <!-- AppKit Modal Positioning Fixes -->
     <style>
       /* Force overlay and modal positioning */

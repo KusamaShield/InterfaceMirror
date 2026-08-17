@@ -1,4 +1,5 @@
 :root {
+  --accent-color: #9333ea;
   --talisman-connect-control-background: #383838;
   --talisman-connect-control-foreground: inherit;
   --talisman-connect-active-background: #5a5a5a;

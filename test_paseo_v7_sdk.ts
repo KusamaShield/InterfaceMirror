@@ -10,12 +10,15 @@
 
 import { ethers } from "ethers";
 import { poseidon1, poseidon2 } from "poseidon-lite";
+import * as dotenv from "dotenv";
+dotenv.config();
 
 // ============================================================================ //
 // Configuration
 // ============================================================================ //
 
-const PRIVATE_KEY = "0xfc8092c2a70a1217d487bf2e05eb7c61fba243ae6ed354707f65aa0908e09f76";
+const PRIVATE_KEY = process.env.ETH_PRIVATE_KEY;
+if (!PRIVATE_KEY) throw new Error("Set ETH_PRIVATE_KEY in .env");
 const ACCOUNT = "0x7915705d3B9A2caf798A86A8abB3882ea9BA7647";
 
 const CONFIG = {

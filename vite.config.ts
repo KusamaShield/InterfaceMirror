@@ -17,18 +17,18 @@ export default defineConfig({
     format: 'es',
   },
   resolve: {},
-  // Cross-Origin-Isolation headers enable SharedArrayBuffer, which lets
-  // snarkjs/ffjavascript use multi-threaded WASM for multiexponentiation.
-  // Without these, groth16.prove() runs single-threaded (~40s → ~5-10s).
+  // Note: COOP/COEP headers enable SharedArrayBuffer for multi-threaded WASM
+  // But they can cause issues with some wallet SDKs (Coinbase, WalletConnect)
+  // For production, consider using a reverse proxy or separate domains
   server: {
     allowedHosts: ['pi'],
     headers: {
-      'Cross-Origin-Opener-Policy': 'same-origin',
-      'Cross-Origin-Embedder-Policy': 'require-corp',
+      // 'Cross-Origin-Opener-Policy': 'same-origin',
+      // 'Cross-Origin-Embedder-Policy': 'require-corp',
     },
     proxy: {
       '/api/rpc-proxy': {
-        target: 'https://kusama-rpc.laissez-faire.trade',
+        target: 'https://proxyswap.laissez-faire.trade',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/rpc-proxy/, ''),
         configure: (proxy, options) => {
@@ -53,8 +53,8 @@ export default defineConfig({
   },
   preview: {
     headers: {
-      'Cross-Origin-Opener-Policy': 'same-origin',
-      'Cross-Origin-Embedder-Policy': 'require-corp',
+      // 'Cross-Origin-Opener-Policy': 'same-origin',
+      // 'Cross-Origin-Embedder-Policy': 'require-corp',
     },
   },
   assetsInclude: ['**/*.wasm'],
