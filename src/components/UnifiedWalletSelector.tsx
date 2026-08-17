@@ -5,6 +5,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useAppKit, useAppKitAccount } from "@reown/appkit/react";
 import { useDisconnect, useWalletClient } from "wagmi";
+import { toast } from "react-toastify";
 import { WalletSelect } from "@talismn/connect-components";
 import {
   TalismanWallet,
@@ -18,6 +19,11 @@ import {
   AlephZeroWallet,
 } from "@talismn/connect-wallets";
 import { ethers } from "ethers";
+import {
+  getAccountsFromProvider,
+  hasPolkadotNamespace,
+  getPolkadotAddress,
+} from "../hooks/useWalletConnectPolkadot";
 
 // Custom provider wrapper that works with wagmi's wallet client
 class WagmiEthersProvider {
@@ -30,17 +36,8 @@ class WagmiEthersProvider {
 
   async getSigner(): Promise<ethers.Signer> {
     const { account, chain, transport } = this.walletClient;
-
-    if (!account || !chain) {
-      throw new Error("Wallet not connected");
-    }
-
-    const network = {
-      chainId: chain.id,
-      name: chain.name,
-    };
-
-    // Create provider from the wallet client's transport
+    if (!account || !chain) throw new Error("Wallet not connected");
+    const network = { chainId: chain.id, name: chain.name };
     const provider = new ethers.BrowserProvider(transport, network);
     return new ethers.JsonRpcSigner(provider, account.address);
   }
@@ -56,21 +53,25 @@ class WagmiEthersProvider {
 interface UnifiedWalletSelectorProps {
   isWalletConnected: boolean;
   evmAddress: string | null;
+  selectedNetwork: string;
   onAccountSelected: (account: any) => void;
   onWalletSelected: (wallet: any) => void;
   setEvmAddress: (address: string) => void;
   setSelectedWalletEVM: (provider: any) => void;
   setIsWalletConnected: (connected: boolean) => void;
+  setPolkadotAddress?: (address: string | null) => void;
 }
 
 export const UnifiedWalletSelector: React.FC<UnifiedWalletSelectorProps> = ({
   isWalletConnected,
   evmAddress,
+  selectedNetwork,
   onAccountSelected,
   onWalletSelected,
   setEvmAddress,
   setSelectedWalletEVM,
   setIsWalletConnected,
+  setPolkadotAddress,
 }) => {
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -99,12 +100,49 @@ export const UnifiedWalletSelector: React.FC<UnifiedWalletSelectorProps> = ({
       const wagmiProvider = new WagmiEthersProvider(walletClient);
       setSelectedWalletEVM(wagmiProvider);
       setShowDropdown(false);
+
+      // Check for polkadot namespace in WalletConnect session (for Nova/Substrate wallets)
+      const checkPolkadot = async () => {
+        try {
+          const appKit = (window as any).__appKit;
+          if (!appKit) return;
+          const provider = await appKit.getUniversalProvider();
+          if (provider && hasPolkadotNamespace(provider)) {
+            const addr = getPolkadotAddress(provider);
+            if (addr && setPolkadotAddress) {
+              console.log("Detected polkadot namespace wallet:", addr);
+              setPolkadotAddress(addr);
+            }
+          }
+        } catch (e) {
+          // Silently ignore - polkadot namespace not available
+        }
+      };
+      checkPolkadot();
     }
   }, [appKitConnected, appKitAddress, walletClient]);
 
   const handleEvmWalletsClick = () => {
     setShowDropdown(false);
     openAppKit();
+  };
+
+  // On Polkadot, Nova Wallet can only connect via WalletConnect (QR code),
+  // not the polkadot-js browser extension — show a popup guiding the user.
+  const handleNovaInfo = () => {
+    toast.info(
+      <div style={{ fontSize: "12px", lineHeight: "1.4" }}>
+        <strong>Nova Wallet on Polkadot</strong>
+        <br />
+        Please select <strong>EVM Wallets → WalletConnect</strong> and scan the
+        QR code with your Nova mobile app.
+      </div>,
+      {
+        position: "top-right",
+        autoClose: 15000,
+        theme: "dark",
+      },
+    );
   };
 
   const formatAddress = (addr: string) => `${addr.slice(0, 6)}...${addr.slice(-4)}`;
@@ -129,6 +167,7 @@ export const UnifiedWalletSelector: React.FC<UnifiedWalletSelectorProps> = ({
                 setEvmAddress("");
                 setSelectedWalletEVM(null);
                 setShowDropdown(false);
+                if (setPolkadotAddress) setPolkadotAddress(null);
               }}
             >
               Disconnect Wallet
@@ -151,12 +190,27 @@ export const UnifiedWalletSelector: React.FC<UnifiedWalletSelectorProps> = ({
       {showDropdown && (
         <div className="wallet-dropdown">
           <div className="wallet-section-header">Polkadot Wallets</div>
+          {selectedNetwork === "polkadot" && (
+            <div
+              className="wallet-option"
+              onClick={handleNovaInfo}
+              style={{ border: "1px solid rgba(233, 30, 99, 0.35)" }}
+            >
+              <span>
+                Nova Wallet{" "}
+                <span style={{ fontSize: "10px", opacity: 0.5 }}>
+                  (use WalletConnect)
+                </span>
+              </span>
+              <span className="wallet-arrow">→</span>
+            </div>
+          )}
           <WalletSelect
             dappName="KusamaShield"
             showAccountsList
             walletList={[
               new TalismanWallet(),
-              new NovaWallet(),
+              ...(selectedNetwork === "polkadot" ? [] : [new NovaWallet()]),
               new SubWallet(),
               new MantaWallet(),
               new PolkaGate(),
@@ -167,7 +221,11 @@ export const UnifiedWalletSelector: React.FC<UnifiedWalletSelectorProps> = ({
             ]}
             triggerComponent={
               <div className="wallet-option">
-                <span>Talisman, SubWallet, Nova...</span>
+                <span>
+                  {selectedNetwork === "polkadot"
+                    ? "Talisman, SubWallet..."
+                    : "Talisman, SubWallet, Nova..."}
+                </span>
                 <span className="wallet-arrow">→</span>
               </div>
             }
@@ -182,7 +240,7 @@ export const UnifiedWalletSelector: React.FC<UnifiedWalletSelectorProps> = ({
             EVM Wallets
           </div>
           <div className="wallet-option" onClick={handleEvmWalletsClick}>
-            <span>MetaMask, WalletConnect, Coinbase...</span>
+            <span>MetaMask, WalletConnect...</span>
             <span className="wallet-arrow">→</span>
           </div>
         </div>

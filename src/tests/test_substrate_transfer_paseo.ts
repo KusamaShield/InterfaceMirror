@@ -7,6 +7,8 @@ import { ApiPromise, WsProvider } from "@polkadot/api";
 import { Keyring } from "@polkadot/keyring";
 import { readFileSync } from "fs";
 import { ethers } from "ethers";
+import * as dotenv from "dotenv";
+dotenv.config();
 
 const CHAINSPEC_PATH = "/tmp/paseo-asset-hub-2.json";
 
@@ -22,7 +24,8 @@ const PASEO_WSS = "wss://asset-hub-paseo-rpc.n.dwellir.com";
 const PASEO_RPC = "https://paseo-assethub-rpc.laissez-faire.trade";
 
 // Account 1: Prefunded Substrate (sr25519)
-const ACCOUNT_1_SEED = "0xf2c558be8911a7032ac8186983fab42f4c3c96cc17ea20b2abaeaa31fe13f28e";
+const ACCOUNT_1_SEED = process.env.FORWARDER_SEED;
+if (!ACCOUNT_1_SEED) throw new Error("Set FORWARDER_SEED in .env");
 
 async function main() {
   console.log("🔗 Connecting to", PASEO_WSS);

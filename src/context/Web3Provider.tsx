@@ -10,9 +10,9 @@ import { createAppKit, useAppKit } from "@reown/appkit/react";
 import {
   wagmiConfig,
   wagmiAdapter,
-  networks,
+  allNetworks,
   projectId,
-  kusamaAssetHub,
+  polkadotAssetHub,
 } from "../config/wagmi";
 
 const queryClient = new QueryClient();
@@ -26,16 +26,21 @@ const metadata = {
 
 // Initialize AppKit outside the component render cycle
 if (projectId) {
-  createAppKit({
+  const appKit = createAppKit({
     adapters: [wagmiAdapter],
     projectId,
-    networks: [...networks],
-    defaultNetwork: kusamaAssetHub,
+    networks: allNetworks as any,
+    defaultNetwork: polkadotAssetHub,
     metadata,
+    universalProviderConfigOverride: {
+      methods: {
+        polkadot: ["polkadot_signTransaction", "polkadot_signMessage"],
+      },
+    },
     features: {
       analytics: true,
-      email: false, // Disable email login
-      socials: [], // Disable social logins
+      email: false,
+      socials: [],
     },
     themeMode: "dark",
     themeVariables: {
@@ -43,6 +48,8 @@ if (projectId) {
       "--w3m-border-radius-master": "8px",
     },
   });
+  // Store AppKit globally for wallet selector to access
+  (window as any).__appKit = appKit;
 }
 
 // Hook to inject modal positioning styles
@@ -55,18 +62,21 @@ function useModalPositioning() {
       if (modalElement && modalElement.shadowRoot) {
         const style = document.createElement("style");
         style.textContent = `
-          /* Override the overlay container */
+          /* Override the overlay container — anchor to top so the QR card
+             isn't pushed below the fold */
           wui-flex[data-testid="w3m-modal-overlay"] {
             align-items: flex-start !important;
-            padding-top: 5vh !important;
+            justify-content: center !important;
+            padding: 2vh 20px 20px 20px !important;
           }
           
-          /* Position the card near the top */
+          /* Position the card and allow full height */
           wui-card[data-testid="w3m-modal-card"] {
-            max-height: 70vh !important;
+            max-height: 92vh !important;
             height: auto !important;
+            min-height: auto !important;
             width: 90vw !important;
-            max-width: 90vw !important;
+            max-width: 420px !important;
             margin-top: 0 !important;
             position: relative !important;
             transform: none !important;
@@ -74,8 +84,19 @@ function useModalPositioning() {
           
           /* Ensure router fits inside */
           w3m-router {
-            max-height: 65vh !important;
+            max-height: 85vh !important;
             overflow-y: auto !important;
+          }
+          
+          /* Stretch QR code container */
+          w3m-qrcode {
+            width: 100% !important;
+          }
+          
+          w3m-qrcode img {
+            width: 100% !important;
+            height: auto !important;
+            max-width: 280px !important;
           }
         `;
         modalElement.shadowRoot.appendChild(style);
