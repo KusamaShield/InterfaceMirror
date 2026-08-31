@@ -26,8 +26,20 @@ import {
 } from "./transactions/xcm";
 import { ZKPService } from "./transactions/zklib";
 import { buildMerkleTreeFromContract } from "./transactions/merkle";
-import { deriveH160, ss58ToEth } from "./transactions/forwarder";
-
+import worker from "./workers/snarkjs-client";
+import {
+  connectSubstrate,
+  ensureAccountMapped,
+  fetchProxyTree,
+  getChainRoot,
+  submitReviveDeposit,
+  submitReviveWithdraw,
+  generateWithdrawProof,
+  formatProof,
+  parseDotAmount,
+  deriveV7Commitment,
+  ss58ToEth,
+} from "./transactions/revivePolkadot";
 import { poseidon1, poseidon2, poseidon3 } from "poseidon-lite";
 import {
   westend_pool,
@@ -75,7 +87,29 @@ const amountOptions = [0.5, 1, 5, 10, 100, 500, 1000, 10000];
 
 // window.ethereum type is provided by wagmi/viem
 
-export const NETWORKS = {
+// Networks: name, endpoint, native asset
+const NETWORKS = {
+  moonbase: {
+    name: "Moonbase Testnet",
+    wsEndpoint: "wss://moonbase-alpha.public.blastapi.io",
+    rpcEndpoint: "https://moonbase.public.curie.radiumblock.co/http",
+    asset: "DEV",
+    faucet: "https://faucet.moonbeam.network/",
+    chain_id: 1287,
+    block_explorer: "https://moonbase.moonscan.io",
+    docs: "https://kusamashield.codeberg.page/networks/moonbase.html",
+  },
+  shibuya: {
+    name: "Shibuya (parachain testnet)",
+    rpcEndpoint: "https://evm.shibuya.astar.network",
+    asset: "SBY",
+    chain_id: 81,
+    faucet: "https://portal.astar.network/shibuya-testnet/assets",
+    block_explorer: "https://shibuya.subscan.io/",
+    vk_address: "0x66021DF8Ce2b63f99ea9C501497Ce70ec49f5724",
+    shield_address: "",
+    deploymentBlock: 0,
+  },
   westend_assethub: {
     name: "Westend Assethub",
     wsEndpoint: "wss://westend-asset-hub-rpc.polkadot.io",
@@ -88,7 +122,7 @@ export const NETWORKS = {
   },
   paseo_assethub: {
     name: "Paseo AssetHub",
-    asset: "DOT",
+    asset: "PAS",
     logo: "/paseo-icon.png",
     chain_id: 420420417,
     rpcEndpoint: "https://paseo-assethub-rpc.laissez-faire.trade/",
@@ -99,25 +133,27 @@ export const NETWORKS = {
     wsEndpoint: "wss://asset-hub-paseo-rpc.n.dwellir.com",
     faucet: "https://faucet.polkadot.io",
     block_explorer: "https://testnet.routescan.io",
-    // v7 Pool (FixedIlopPhase2Paseo_v7.sol) - linkability fix, 8 signals, known-roots window
-    shield_address: "0xbcE09D4De052b2816df1285663ac89528DF45380",
-    verifier_address: "0xcA4cBc5d31eccd08d393C43aF492F729FF30b685",
+    // V5 Pool (FixedIlopPhase2Paseo_v5.sol) - deployed 2026-06-11
+    shield_address: "0xE433f84B086faefD0034C4C4C759F3d31adC18E8",
+    verifier_address: "0xfdF835fC14FCcE20aa845644FfcD1EB0514FC2F7",
+    leanIMT_address: "0x9e9f0b88e3d1d742AC4A1FF7E019bBBDebe5FB71",
     poseidonT3_address: "0x1d165f6fe5a30422e0e2140e91c8a9b800380637",
-    deploymentBlock: 11273491,
+    deploymentBlock: 9592061,
     abi: [
-      "function depositNative(bytes32 commitment) external payable",
-      "function depositAsset(uint256 assetId, uint256 amount, bytes32 commitment) external",
-      "function depositAssetDirect(uint256 assetId, uint256 amount, bytes32 commitment) external",
-      "function withdraw(uint256[2] calldata pA, uint256[2][2] calldata pB, uint256[2] calldata pC, uint[8] calldata pubSignals, address recipient) external",
-      "function proxy_withdraw(uint256[2] calldata pA, uint256[2][2] calldata pB, uint256[2] calldata pC, uint[8] calldata pubSignals, address recipient) external",
+      "function depositNative(bytes32 commitment, bytes32 nullifierHash) external payable",
+      "function depositAsset(uint256 assetId, uint256 amount, bytes32 commitment, bytes32 nullifierHash) external",
+      "function depositAssetDirect(uint256 assetId, uint256 amount, bytes32 commitment, bytes32 nullifierHash) external",
+      "function withdraw(uint256[2] calldata pA, uint256[2][2] calldata pB, uint256[2] calldata pC, uint[7] calldata pubSignals, address asset, uint256 amount, address recipient) external",
+      "function withdrawNative(uint256[2] calldata pA, uint256[2][2] calldata pB, uint256[2] calldata pC, uint[7] calldata pubSignals, uint256 amount) external",
+      "function withdrawAsset(uint256[2] calldata pA, uint256[2][2] calldata pB, uint256[2] calldata pC, uint[7] calldata pubSignals, uint256 assetId, uint256 amount) external",
+      "function proxy_withdraw(uint256[2] calldata pA, uint256[2][2] calldata pB, uint256[2] calldata pC, uint[7] calldata pubSignals, address asset, uint256 amount, address recipient) external",
       "function currentRoot() external view returns (uint256)",
       "function treeSize() external view returns (uint256)",
-      "function getEscrowBalance(address) external view returns (uint256)",
-      "function isNullifierSpent(bytes32) external view returns (bool)",
-      "function isCommitmentUsed(bytes32) external view returns (bool)",
-      "function isKnownRoot(uint256) external view returns (bool)",
+      "function escrow(address) external view returns (uint256)",
+      "function deposits(bytes32 nullifierHash) external view returns (address asset, uint256 assetId, uint256 amount, bool isSpent)",
+      "function usedCommitments(bytes32 commitment) external view returns (bool)",
+      "function isDepositSpent(bytes32 nullifierHash) external view returns (bool)",
       "function getPrecompileAddress(uint256 assetId) external pure returns (address)",
-      "function verifier() external view returns (address)",
     ],
     docs: "https://kusamashield.codeberg.page/networks/PaseoAH.html",
   },
@@ -131,36 +167,42 @@ export const NETWORKS = {
       "https://polkadot-assethub-rpc.laissez-faire.trade",
       "https://eth-rpc.polkadot.io/",
     ],
-    wsEndpoint: "wss://polkadot-asset-hub-rpc.polkadot.io",
+    wsEndpoint: "wss://asset-hub-polkadot-rpc.n.dwellir.com",
     wsEndpoints: [
+      "wss://asset-hub-polkadot-rpc.n.dwellir.com",
+      "wss://asset-hub-polkadot.gatotech.network",
+      "wss://rpc-asset-hub-polkadot.helixstreet.io",
+      "wss://rpc-asset-hub-polkadot.luckyfriday.io",
+      "wss://statemint.api.onfinality.io/public-ws",
       "wss://polkadot-asset-hub-rpc.polkadot.io",
       "wss://rpc-asset-hub-polkadot.stakeworld.io",
-      "wss://rpc-asset-hub-polkadot.luckyfriday.io",
-      "wss://asset-hub-polkadot-rpc.n.dwellir.com",
     ],
     faucet: "",
     block_explorer: "https://blockscout.polkadot.io/",
-    // v7 Pool (FixedIlopPhase2Paseo_v7_Polkadot.sol) - redeployed with circomlibjs hasher
     shield_address: "0x0D694Da746e73D1e255c1894F90e38170db45809",
     verifier_address: "0x6A13781E43AEA21918120CD0E7a2ed8614c01e14",
     leanIMT_address: "0x0D694Da746e73D1e255c1894F90e38170db45809",
     poseidonT3_address: "0xB8F0C6679D6Cc56450470522Bd96573C3D615052",
     abi: [
+      "event Deposit(address indexed asset, bytes32 commitment)",
+      "event Withdrawal(address indexed asset, uint256 amount, address indexed recipient, uint256 newCommitment)",
+      "event NewCommitment(bytes32 newCommitmentHash)",
       "function depositNative(bytes32 commitment) external payable",
       "function depositAsset(uint256 assetId, uint256 amount, bytes32 commitment) external",
       "function depositAssetDirect(uint256 assetId, uint256 amount, bytes32 commitment) external",
-      "function withdraw(uint256[2] calldata pA, uint256[2][2] calldata pB, uint256[2] calldata pC, uint[8] calldata pubSignals, address recipient) external",
-      "function proxy_withdraw(uint256[2] calldata pA, uint256[2][2] calldata pB, uint256[2] calldata pC, uint[8] calldata pubSignals, address recipient) external",
+      "function withdraw(uint256[2] calldata pA, uint256[2][2] calldata pB, uint256[2] calldata pC, uint256[8] calldata pubSignals, address recipient) external",
+      "function proxy_withdraw(uint256[2] calldata pA, uint256[2][2] calldata pB, uint256[2] calldata pC, uint256[8] calldata pubSignals, address recipient) external",
       "function currentRoot() external view returns (uint256)",
       "function treeSize() external view returns (uint256)",
-      "function getEscrowBalance(address) external view returns (uint256)",
-      "function isNullifierSpent(bytes32) external view returns (bool)",
-      "function isCommitmentUsed(bytes32) external view returns (bool)",
-      "function isKnownRoot(uint256) external view returns (bool)",
+      "function escrow(address) external view returns (uint256)",
+      "function usedCommitments(bytes32 commitment) external view returns (bool)",
+      "function spentNullifiers(bytes32 nullifierHash) external view returns (bool)",
+      "function isNullifierSpent(bytes32 nullifierHash) external view returns (bool)",
+      "function isCommitmentUsed(bytes32 commitment) external view returns (bool)",
+      "function getEscrowBalance(address asset) external view returns (uint256)",
       "function getPrecompileAddress(uint256 assetId) external pure returns (address)",
-      "function verifier() external view returns (address)",
     ],
-    deploymentBlock: 18460000,
+    deploymentBlock: 0,
     docs: "https://kusamashield.codeberg.page/",
   },
 
@@ -276,12 +318,6 @@ function generateDot2KsmInput(dotAmount: any, ksmAmount: any) {
   };
 }
 
-// Check if selected network is a testnet
-const isTestnet = (networkKey: string): boolean => {
-  const testnetKeys: (keyof typeof NETWORKS)[] = ["paseo_assethub", "westend_assethub"];
-  return testnetKeys.includes(networkKey as keyof typeof NETWORKS);
-};
-
 export function App() {
   const [isWalletConnected, setIsWalletConnected] = useState(false);
   const [selectedWallet, setSelectedWallet] = useState<any>(null); // Consider using proper type instead of any
@@ -289,21 +325,10 @@ export function App() {
   const [evmAddress, setEvmAddress] = useState<string | null>(null);
   const [polkadotAddress, setPolkadotAddress] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<
-    "shield" | "unshield" | "send" | "bridge" | "offramp"
+    "shield" | "unshield" | "bridge" | "offramp"
   >("shield");
   const [secret, setSecret] = useState("");
   const [amount, setAmount] = useState("");
-  const [sendRecipient, setSendRecipient] = useState("");
-  const [sendAmount, setSendAmount] = useState("");
-  const [sendFromCurrency, setSendFromCurrency] = useState("DOT");
-  const [sendToCurrency, setSendToCurrency] = useState("DOT");
-  const [sendDestinationNetwork, setSendDestinationNetwork] = useState("polkadot");
-  const [sendGasEstimate, setSendGasEstimate] = useState<string | null>(null);
-  const [sendGasLoading, setSendGasLoading] = useState(false);
-  const [estimatedReceive, setEstimatedReceive] = useState<string | null>(null);
-  const [estimatedReceiveLoading, setEstimatedReceiveLoading] = useState(false);
-  const [swapRate, setSwapRate] = useState<string | null>(null);
-  const [sendGasFee, setSendGasFee] = useState<string | null>(null);
   const [selectedToken, setSelectedToken] = useState<any>(null); //('KSM')
   const [userAssets, setUserAssets] = useState<
     {
@@ -317,7 +342,7 @@ export function App() {
   >([]);
   const [isLoadingAssets, setIsLoadingAssets] = useState(false);
   const [selectedNetwork, setSelectedNetwork] =
-    useState<keyof typeof NETWORKS>("paseo_assethub");
+    useState<keyof typeof NETWORKS>("moonbase");
   const [isNetworkDropdownOpen, setIsNetworkDropdownOpen] = useState(false);
   const [fromNetwork, setfromNetwork] = useState<any>(null);
   const [toNetwork, settoNetwork] = useState<any>(null);
@@ -358,61 +383,12 @@ export function App() {
   // Background color customization
   const [backgroundColor, setBackgroundColor] = useState("#09002b");
   const [gradientColor, setGradientColor] = useState("#000000");
-  const [modalBackgroundColor, setModalBackgroundColor] = useState("#1a1a2e");
-  const [accentColor, setAccentColor] = useState("#9333ea");
-  const [activeTheme, setActiveTheme] = useState<"default" | "darkblue" | "slate" | "ghost">("default");
-
-  // Ghost theme background rotation
-  const ghostImages = [
-    "/ghost-backgrounds/gis0.png",
-    "/ghost-backgrounds/gis1.png",
-    "/ghost-backgrounds/gs2.png",
-    "/ghost-backgrounds/gis3.png",
-    "/ghost-backgrounds/gis4.png",
-    "/ghost-backgrounds/gis5.png",
-  ];
-  const [currentGhostIndex, setCurrentGhostIndex] = useState(0);
-
-  useEffect(() => {
-    if (activeTheme === "ghost") {
-      const interval = setInterval(() => {
-        setCurrentGhostIndex((prev) => (prev + 1) % ghostImages.length);
-      }, 8000);
-      return () => clearInterval(interval);
-    }
-  }, [activeTheme]);
 
   // Update CSS variables when colors change
   useEffect(() => {
-    if (activeTheme !== "ghost") {
-      document.documentElement.style.setProperty("--bg-primary", backgroundColor);
-      document.documentElement.style.setProperty("--bg-gradient", gradientColor);
-    }
-    document.documentElement.style.setProperty("--modal-bg", `linear-gradient(145deg, ${modalBackgroundColor}, ${modalBackgroundColor})`);
-    document.documentElement.style.setProperty("--swap-box-bg", `linear-gradient(145deg, ${modalBackgroundColor}, #0a0515)`);
-    document.documentElement.style.setProperty("--accent-color", accentColor);
-  }, [backgroundColor, gradientColor, activeTheme, modalBackgroundColor, accentColor]);
-
-  // Apply ghost theme background (layer with gradient)
-  useEffect(() => {
-    if (activeTheme === "ghost") {
-      document.body.style.backgroundImage = `url(${ghostImages[currentGhostIndex]}), radial-gradient(ellipse at center, ${backgroundColor} 0%, ${gradientColor} 100%)`;
-      document.body.style.backgroundSize = "cover";
-      document.body.style.backgroundPosition = "center";
-      document.body.style.backgroundRepeat = "no-repeat";
-    } else {
-      document.body.style.backgroundImage = "";
-    }
-  }, [activeTheme, currentGhostIndex, backgroundColor, gradientColor]);
-
-  // Add send-active class to body when on send tab
-  useEffect(() => {
-    if (activeTab === "send") {
-      document.body.classList.add("send-active");
-    } else {
-      document.body.classList.remove("send-active");
-    }
-  }, [activeTab]);
+    document.documentElement.style.setProperty("--bg-primary", backgroundColor);
+    document.documentElement.style.setProperty("--bg-gradient", gradientColor);
+  }, [backgroundColor, gradientColor]);
 
   // Theme mode states
   const [rainMode, setRainMode] = useState(false);
@@ -484,9 +460,9 @@ export function App() {
 
   // Fetch native token balance from RPC
   useEffect(() => {
-    const fetchNativeBalance = () => {
+    const fetchNativeBalance = async () => {
       // Nova / Substrate wallet — the balance comes from queryUserAssets
-      // (which reads api.query.system.account over WSS). eth_getBalance
+      // (which reads api.query.system.account over WS). eth_getBalance
       // returns 0 for sr25519 accounts, so never use it here.
       if (
         polkadotAddress &&
@@ -518,41 +494,59 @@ export function App() {
         }
       }
 
-      const rpcEndpoint = (() => {
-        let ep = NETWORKS[selectedNetwork].rpcEndpoint;
-        if (
-          typeof window !== "undefined" &&
-          window.location.hostname === "localhost" &&
-          !ep.includes("eth-rpc.polkadot.io")
-        ) {
-          ep = "http://localhost:5173/api/rpc-proxy";
-        }
-        return ep;
-      })();
+      // For polkadot & paseo, queryUserAssets already provides the native
+      // balance (via EVM RPC). Skip the redundant eth_getBalance to avoid
+      // hitting the localhost proxy which doesn't support it.
+      if (
+        selectedNetwork === "polkadot" ||
+        selectedNetwork.includes("paseo")
+      ) {
+        return;
+      }
 
-      fetch(rpcEndpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          method: "eth_getBalance",
-          params: [evmAddress, "latest"],
-          id: 1,
-          jsonrpc: "2.0",
-        }),
-      })
-        .then((response) => response.json())
-        .then((data) => {
-          if (data.result) {
-            // Convert hex balance to decimal and format (18 decimals for native token)
-            const balanceWei = BigInt(data.result);
-            const balanceEth = Number(balanceWei) / 1e18;
-            setUserBalance(balanceEth.toFixed(4));
-          }
-        })
-        .catch((error) => {
-          console.error("Failed to fetch balance:", error);
-          setUserBalance("0");
+      // SS58 (Substrate) addresses: balance is handled above.
+      if (!evmAddress.startsWith("0x")) {
+        return;
+      }
+
+      const rpcEndpoint = NETWORKS[selectedNetwork].rpcEndpoint;
+
+      try {
+        const response = await fetch(rpcEndpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            method: "eth_getBalance",
+            params: [evmAddress, "latest"],
+            id: 1,
+            jsonrpc: "2.0",
+          }),
         });
+
+        const data = await response.json();
+        if (data.result) {
+          // Convert hex balance to decimal and format (18 decimals for native token)
+          const balanceWei = BigInt(data.result);
+          const balanceEth = Number(balanceWei) / 1e18;
+          setUserBalance(balanceEth.toFixed(4));
+        }
+      } catch (error) {
+        console.error("Failed to fetch balance:", error);
+        // Fallback: use userAssets balance if available
+        if (
+          (selectedNetwork.includes("paseo") ||
+            selectedNetwork === "polkadot") &&
+          userAssets.length > 0
+        ) {
+          const nativeSymbol = NETWORKS[selectedNetwork].asset;
+          const nativeAsset = userAssets.find((a) => a.symbol === nativeSymbol);
+          if (nativeAsset) {
+            setUserBalance(formatBalance(nativeAsset));
+            return;
+          }
+        }
+        setUserBalance("0");
+      }
     };
 
     fetchNativeBalance();
@@ -562,7 +556,7 @@ export function App() {
 
   // Pre-load circuit artifacts when Paseo network is selected
   useEffect(() => {
-if (selectedNetwork === "paseo_assethub") {
+    if (selectedNetwork === "paseo_assethub") {
       // Pre-load WASM into worker memory (avoids re-fetch on proof generation)
       preloadWasm("/withdraw.wasm").catch((e) =>
         console.warn("Failed to pre-load withdraw wasm:", e),
@@ -586,8 +580,8 @@ if (selectedNetwork === "paseo_assethub") {
   const availableCurrencies = [
     {
       symbol: "DOT",
-      name: "Polkadot",
-      logo: "/coin_logos/images/dot.svg",
+      name: "Polkadot Assethub",
+      logo: "/coin_logos/images/assethub.svg",
     },
     { symbol: "KSM", name: "Kusama", logo: "/coin_logos/images/kusama.svg" },
     {
@@ -739,7 +733,7 @@ if (selectedNetwork === "paseo_assethub") {
       logo: "/coin_logos/images/usdcsol.svg",
     },
     { symbol: "USDP", name: "Pax Dollar", logo: "/coin_logos/images/usdp.svg" },
-    { symbol: "USDT", name: "USDT (TRON)", logo: "/coin_logos/images/usdttrc.svg" },
+    { symbol: "USDT", name: "Tether", logo: "/coin_logos/images/usdt.svg" },
     {
       symbol: "USDTARBITRUM",
       name: "USDT (Arbitrum)",
@@ -761,9 +755,9 @@ if (selectedNetwork === "paseo_assethub") {
       logo: "/coin_logos/images/usdtsol.svg",
     },
     {
-      symbol: "USDTETH",
-      name: "USDT (Ethereum)",
-      logo: "/coin_logos/images/usdt.svg",
+      symbol: "USDTTRC",
+      name: "USDT (TRON)",
+      logo: "/coin_logos/images/usdttrc.svg",
     },
     { symbol: "VET", name: "VeChain", logo: "/coin_logos/images/vet.svg" },
     {
@@ -824,13 +818,8 @@ if (selectedNetwork === "paseo_assethub") {
   // Ref to track current query request to prevent stale calls
   const queryRequestIdRef = useRef<number>(0);
 
-  // Ref to prevent overlapping balance queries (the 20s poll interval must not
-  // start a second query while the first is still connecting, otherwise the
-  // second query disconnects the first one's WS connection mid-flight).
-  const queryInProgressRef = useRef(false);
-
   // Ref to prevent balance polling from killing the connection during a Nova tx
-  const isSubstrateTxRef = useRef(false);
+  const isSubstrateTxRef = useRef<boolean>(false);
 
   useEffect(() => {
     evmAddressRef.current = evmAddress;
@@ -841,11 +830,11 @@ if (selectedNetwork === "paseo_assethub") {
   const isTestnet = (networkKey: string) =>
     getNetworkType(networkKey) === "testnet";
 
-  // Switch away from bridge/offramp/send tabs when selecting testnet
+  // Switch away from bridge/offramp tabs when selecting testnet
   useEffect(() => {
     if (
       isTestnet(selectedNetwork) &&
-      (activeTab === "bridge" || activeTab === "offramp" || activeTab === "send")
+      (activeTab === "bridge" || activeTab === "offramp")
     ) {
       setActiveTab("shield");
     }
@@ -894,7 +883,7 @@ if (selectedNetwork === "paseo_assethub") {
   const formatBalance = (asset: { balance: string; decimals: number }) => {
     const balanceWei = BigInt(asset.balance);
     const balance = Number(balanceWei) / Math.pow(10, asset.decimals);
-    return balance.toFixed(1);
+    return balance.toFixed(4);
   };
 
   const pickRandom = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)];
@@ -973,12 +962,7 @@ if (selectedNetwork === "paseo_assethub") {
       return;
     }
 
-    // Skip if another query is already running (the 20 s poll interval must not
-    // overlap — a second query disconnects the first one's WS mid-flight).
-    if (queryInProgressRef.current) {
-      console.log("queryUserAssets: skipped (previous query still in progress)");
-      return;
-    }
+    const isEvmAddress = address.startsWith("0x");
 
     // Increment request ID and capture it for this call
     const requestId = ++queryRequestIdRef.current;
@@ -990,10 +974,6 @@ if (selectedNetwork === "paseo_assethub") {
       return;
     }
 
-    // Mark in-progress AFTER the synchronous early-returns above so the flag
-    // is always reset in the finally block below.
-    queryInProgressRef.current = true;
-
     setIsLoadingAssets(true);
     try {
       // Check if this request is still valid (not superseded by a newer one)
@@ -1002,362 +982,155 @@ if (selectedNetwork === "paseo_assethub") {
         return;
       }
 
-      const { ApiPromise, WsProvider } = await import("@polkadot/api");
       const { ethers: ethersLib } = await import("ethers");
 
-      // Re-check before touching the shared WS connection: a newer query may
-      // have started while we awaited the dynamic imports above (e.g. when both
-      // the EVM and Substrate addresses resolve during Nova connect). Otherwise
-      // this stale request would disconnect the newer request's connection.
-      if (requestId !== queryRequestIdRef.current) {
-        console.log(
-          `queryUserAssets: request ${requestId} cancelled before connect (superseded by ${queryRequestIdRef.current})`,
-        );
-        return;
-      }
-
-      // Resolve the Substrate AccountId32 hex for foreign-asset lookups.
-      //   - Substrate (Nova) address: decode the SS58 directly.
-      //   - EVM address: fallback format = H160 + 12 bytes of 0xee.
-      let substrateAddress: string;
-      if (isSubstrateAddress) {
-        const { decodeAddress } = await import("@polkadot/util-crypto");
-        substrateAddress =
-          "0x" + Buffer.from(decodeAddress(address)).toString("hex");
-      } else {
-        substrateAddress = address.toLowerCase() + "eeeeeeeeeeeeeeeeeeeeeeee";
-      }
-
-      const wsEndpoints = NETWORKS[networkKey]?.wsEndpoints ?? [
-        NETWORKS[networkKey]?.wsEndpoint,
-      ];
-      const allEndpoints = wsEndpoints.filter(Boolean) as string[];
-
-      console.log(`queryUserAssets: using address ${address} for network ${networkKey}`);
-
-      // Rotate through WS endpoints with random selection + timeout on each,
-      // matching fundViaSubstrateTransfer's pattern.  One shot isn't enough
-      // when a public endpoint is briefly unreachable.
-      let api: any = null;
-      let wsProvider: any = null;
-      let lastConnectError: any;
-
-      const maxAttempts = allEndpoints.length * 2;
-      for (let attempt = 0; attempt < maxAttempts; attempt++) {
-        // Re-check before each attempt — a newer request may have superseded us.
-        if (requestId !== queryRequestIdRef.current) {
-          console.log(
-            `queryUserAssets: request ${requestId} cancelled during connect loop (superseded by ${queryRequestIdRef.current})`,
-          );
-          return;
-        }
-
-        const wsUrl =
-          allEndpoints[Math.floor(Math.random() * allEndpoints.length)];
-
-        console.log(
-          `queryUserAssets: connecting to ${wsUrl} (attempt ${attempt + 1}/${maxAttempts})`,
-        );
-
-        wsProvider = new WsProvider(wsUrl);
-        api = new ApiPromise({ provider: wsProvider, noInitWarn: true });
-
-        try {
-          await Promise.race([
-            api.isReady,
-            new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error("WS connection timed out")), 15000),
-            ),
-          ]);
-          lastConnectError = null;
-          break;
-        } catch (err: any) {
-          lastConnectError = err;
-          console.warn(
-            `queryUserAssets: ws connect attempt ${attempt + 1}/${maxAttempts} (${wsUrl}):`,
-            err?.message || err,
-          );
-          try { await api.disconnect().catch(() => {}); } catch (_) {}
-          api = null;
-          wsProvider = null;
-        }
-      }
-
-      if (!api || !wsProvider) {
-        throw lastConnectError ?? new Error("All WS endpoints unreachable");
-      }
-
-      // Disconnect any existing API before storing the new one
-      if (substrateApiRef.current || substrateProviderRef.current) {
-        try {
-          if (substrateApiRef.current) {
-            await substrateApiRef.current.disconnect();
-          }
-          if (substrateProviderRef.current) {
-            await substrateProviderRef.current.disconnect();
-            const ws = (substrateProviderRef.current as any)._ws;
-            if (ws && ws.close) {
-              ws.close(1000, "Manual disconnect");
-            }
-          }
-        } catch (e) {
-          console.warn("Failed to disconnect old API/provider:", e);
-        }
-        substrateApiRef.current = null;
-        substrateProviderRef.current = null;
-      }
-
-      // Store both API and provider references for cleanup
-      substrateApiRef.current = api;
-      substrateProviderRef.current = wsProvider;
-
-      const assets: {
-        symbol: string;
-        name: string;
-        assetId: number;
-        balance: string;
-        decimals: number;
-        precompile: string;
-      }[] = [];
-
-      // Determine native asset info from network config
       const networkConfig = NETWORKS[networkKey];
-      const nativeSymbol = networkConfig.asset; // e.g., 'PAS', 'DOT', 'KSM', 'WND'
+      const nativeSymbol = networkConfig.asset;
       const nativeName = networkConfig.name || nativeSymbol;
+      const assets: any[] = [];
 
-      // For Asset Hub networks (Paseo, Polkadot), query EVM balance instead of Substrate native balance
-      try {
-        let nativeFree: string;
-        let decimals: number;
+      // Nova/Substrate address: query native balance directly from the SS58
+      // AccountId32 over WS (eth_getBalance returns 0 for these accounts).
+      if (isSubstrateAddress) {
+        const { ApiPromise, WsProvider } = await import("@polkadot/api");
+        const wsEndpoints: string[] =
+          (NETWORKS[networkKey] as any)?.wsEndpoints ||
+          [NETWORKS[networkKey]?.wsEndpoint].filter(Boolean);
 
-        if (isSubstrateAddress) {
-          // Nova / Substrate wallet — query the native balance directly from
-          // the SS58 AccountId32. (eth_getBalance returns 0 for sr25519
-          // accounts on Asset Hub because the derived H160 maps to a
-          // different AccountId32.)
-          const nativeBalance = (await api.query.system.account(
-            address,
-          )) as any;
-          nativeFree = nativeBalance.data.free.toString();
-          decimals = api.registry.chainDecimals[0] || 10;
-          console.log(
-            `${nativeSymbol} Substrate Balance for`,
-            address,
-            ":",
-            nativeFree,
-          );
-        } else if (networkKey.includes("paseo") || networkKey === "polkadot") {
-          // Query EVM balance for Asset Hub using raw JSON-RPC (avoids ethers
-          // CORS/network issues with public endpoints in the browser).
-          const rpcEndpoints = networkConfig.rpcEndpoints || [networkConfig.rpcEndpoint];
-          let evmBalanceHex: string | null = null;
-
-          for (const rpcUrl of rpcEndpoints) {
-            try {
-              const res = await fetch(rpcUrl, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  jsonrpc: "2.0",
-                  id: 1,
-                  method: "eth_getBalance",
-                  params: [address, "latest"],
-                }),
-              });
-              if (!res.ok) {
-                console.warn(
-                  `queryUserAssets: EVM RPC ${rpcUrl} returned ${res.status}`,
-                );
-                continue;
-              }
-              const data = await res.json();
-              if (data.result) {
-                evmBalanceHex = data.result;
-                console.log(
-                  `queryUserAssets: EVM RPC ${rpcUrl} ok, balance for ${address} = ${data.result}`,
-                );
-                break;
-              }
-            } catch (e: any) {
-              console.warn(
-                `queryUserAssets: EVM RPC ${rpcUrl} failed:`,
-                e?.message || e,
-              );
-            }
+        let api: any = null;
+        for (const wsUrl of wsEndpoints) {
+          try {
+            const wsProvider = new WsProvider(wsUrl);
+            api = new ApiPromise({ provider: wsProvider, noInitWarn: true });
+            await Promise.race([
+              api.isReady,
+              new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error(`WS timeout`)), 15000),
+              ),
+            ]);
+            break;
+          } catch (e) {
+            console.warn(`queryUserAssets WS ${wsUrl} failed:`, (e as any)?.message || e);
+            try { await api?.disconnect(); } catch (_) {}
+            api = null;
           }
-
-          if (evmBalanceHex !== null) {
-            const evmBalance = BigInt(evmBalanceHex);
-            nativeFree = evmBalance.toString();
-            decimals = 18; // EVM uses 18 decimals
-            console.log(
-              `${nativeSymbol} EVM Balance for`,
-              address,
-              ":",
-              nativeFree,
-              `(${ethers.formatEther(evmBalance)} ${nativeSymbol})`,
-            );
-          } else {
-            throw new Error(
-              `No EVM RPC available to query balance for ${address}`,
-            );
-          }
-        } else {
-          // For non-Asset Hub networks, query Substrate native balance
-          const nativeBalance = (await api.query.system.account(
-            substrateAddress,
-          )) as any;
-          nativeFree = nativeBalance.data.free.toString();
-          decimals = api.registry.chainDecimals[0] || 10;
-          console.log(
-            `${nativeSymbol} Substrate Balance for`,
-            substrateAddress,
-            ":",
-            nativeFree,
-          );
         }
 
-        assets.push({
-          symbol: nativeSymbol,
-          name: nativeName,
-          assetId: 0,
-          balance: nativeFree,
-          decimals: decimals,
-          precompile: "native",
-        });
-      } catch (e) {
-        console.error("Failed to query native balance:", e);
-      }
-
-      // Commit the native balance immediately so the UI isn't blocked by the
-      // best-effort foreign-asset query below (which can hang on public WS
-      // endpoints).
-      if (requestId === queryRequestIdRef.current && assets.length > 0) {
-        setUserAssets([...assets]);
-      }
-
-      // Query local assets pallet + foreignAssets pallet (best-effort).
-      // Iterates metadata entries (1 per asset, small) instead of the full
-      // double-map account scan (all-accounts × all-assets, which often hangs).
-      try {
-        const foreignAssetsQuery = (async () => {
-          const substrateHex = substrateAddress.toLowerCase();
-
-          // --- Local assets (assets pallet) ---
-          const metaEntries = await api.query.assets.metadata.entries();
-          if (metaEntries.length > 0) {
-            const assetIds: number[] = [];
-            const metaById: Record<number, any> = {};
-            for (const [key, value] of metaEntries) {
-              const id = (key.args[0] as any).toNumber();
-              const meta = value.toJSON() as any;
-              if (!meta) continue;
-              assetIds.push(id);
-              metaById[id] = meta;
-            }
-
-            const accountResults = await api.query.assets.account.multi(
-              assetIds.map((id) => [id, substrateHex]),
-            );
-
-            for (let i = 0; i < assetIds.length; i++) {
-              const assetId = assetIds[i];
-              const acct = accountResults[i].toJSON() as any;
-              if (!acct || BigInt(acct.balance || 0) === 0n) continue;
-
-              const meta = metaById[assetId];
-              const decimals = meta?.decimals ?? 0;
-              const name = meta?.name
-                ? Buffer.from(meta.name.slice(2), "hex").toString("utf8")
-                : "Unknown";
-              const symbol = meta?.symbol
-                ? Buffer.from(meta.symbol.slice(2), "hex").toString("utf8")
-                : "???";
-              const assetIdHex = assetId.toString(16).padStart(8, "0");
-              const precompile = `0x${assetIdHex}00000000000000000000000001200000`;
-
-              assets.push({
-                symbol,
-                name,
-                assetId,
-                balance: acct.balance.toString(),
-                decimals,
-                precompile,
-              });
-            }
-          }
-
-          // --- Foreign assets (foreignAssets pallet) ---
+        if (api) {
           try {
-            const foreignMeta = await api.query.foreignAssets.metadata.entries();
-            if (foreignMeta.length > 0) {
-              const locs = foreignMeta.map(([key]) => key.args[0]);
-              const foreignAccts = await api.query.foreignAssets.account.multi(
-                locs.map((loc) => [loc, substrateHex]),
-              );
+            const nativeBalance = (await api.query.system.account(address)) as any;
+            const nativeFree = nativeBalance.data.free.toString();
+            const decimals = api.registry.chainDecimals[0] || 10;
+            assets.push({
+              symbol: nativeSymbol,
+              name: nativeName,
+              assetId: 0,
+              balance: nativeFree,
+              decimals,
+              precompile: "native",
+            });
+            console.log(`${nativeSymbol} Substrate Balance for ${address}: ${nativeFree}`);
+          } finally {
+            await api.disconnect().catch(() => {});
+          }
+        }
+      } else {
+        // EVM address: derive H160 (or use as-is) and query eth_getBalance.
+        const h160 = isEvmAddress ? address : ss58ToEth(address);
 
-              // Derive a synthetic assetId from the location hash so each
-              // foreign asset has a stable, collision-tolerant key.
-              let foreignIdx = 0;
-              for (let i = 0; i < locs.length; i++) {
-                const acct = foreignAccts[i].toJSON() as any;
-                if (!acct || BigInt(acct.balance || 0) === 0n) continue;
+        const rpcEndpoints = (networkConfig as any).rpcEndpoints || [networkConfig.rpcEndpoint];
+        let provider: any = null;
+        for (const rpcUrl of rpcEndpoints) {
+          try {
+            provider = new ethersLib.JsonRpcProvider(rpcUrl);
+            await provider.getBlockNumber();
+            break;
+          } catch {
+            provider = null;
+          }
+        }
+        if (provider) {
+          const evmBalance = await provider.getBalance(h160);
+          assets.push({
+            symbol: nativeSymbol,
+            name: nativeName,
+            assetId: 0,
+            balance: evmBalance.toString(),
+            decimals: 18,
+            precompile: "native",
+          });
+          console.log(`${nativeSymbol} Balance for ${h160}: ${ethersLib.formatEther(evmBalance)}`);
+        }
 
-                const meta = foreignMeta[i][1].toJSON() as any;
-                const decimals = meta?.decimals ?? 6;
-                const name = meta?.name
-                  ? Buffer.from(meta.name.slice(2), "hex").toString("utf8")
-                  : `Foreign-${foreignIdx}`;
-                const symbol = meta?.symbol
-                  ? Buffer.from(meta.symbol.slice(2), "hex").toString("utf8")
-                  : `F${foreignIdx}`;
+        // Pallet assets require WS (no EVM precompile covers all assets).
+        if (isEvmAddress) {
+          try {
+            const substrateAddress = address + "eeeeeeeeeeeeeeeeeeeeeeee";
+            const { ApiPromise, WsProvider } = await import("@polkadot/api");
+            const { decodeAddress } = await import("@polkadot/util-crypto");
 
-                // Synthetic numeric id: negative to avoid collisions with local
-                // asset IDs, derived from index (which is stable per chain).
-                const syntheticAssetId = -(500000000 + foreignIdx);
-                foreignIdx++;
+            const wsEndpoints: string[] =
+              (NETWORKS[networkKey] as any)?.wsEndpoints ||
+              [NETWORKS[networkKey]?.wsEndpoint].filter(Boolean);
 
-                assets.push({
-                  symbol,
-                  name,
-                  assetId: syntheticAssetId,
-                  balance: acct.balance.toString(),
-                  decimals,
-                  precompile: "", // foreign asset precompile uses a different scheme
-                });
+            let api: any = null;
+            for (const wsUrl of wsEndpoints) {
+              try {
+                const wsProvider = new WsProvider(wsUrl);
+                api = new ApiPromise({ provider: wsProvider, noInitWarn: true });
+                await Promise.race([
+                  api.isReady,
+                  new Promise<never>((_, reject) =>
+                    setTimeout(() => reject(new Error(`WS timeout`)), 10000),
+                  ),
+                ]);
+                break;
+              } catch (e) {
+                console.warn(`queryUserAssets pallet WS ${wsUrl} failed:`, (e as any)?.message || e);
+                try { await api?.disconnect(); } catch (_) {}
+                api = null;
               }
             }
-          } catch (_) {
-            // foreignAssets pallet may not exist on all chains
+
+            if (api) {
+              const substrateHex =
+                "0x" +
+                Array.from(decodeAddress(address))
+                  .map((b) => b.toString(16).padStart(2, "0"))
+                  .join("");
+
+              const allAccounts = (await api.query.assets.account.entries()) as any;
+              const myAccounts = allAccounts.filter(([key]: [any, any]) => {
+                const accountId = key.args[1].toHex();
+                return accountId.toLowerCase() === substrateHex.toLowerCase();
+              });
+
+              const assetIds = myAccounts.map(([key]: [any, any]) =>
+                key.args[0].toNumber(),
+              );
+              if (assetIds.length > 0) {
+                const metadataResults = await api.query.assets.metadata.multi(assetIds);
+                for (let i = 0; i < myAccounts.length; i++) {
+                  const [key, accountInfo] = myAccounts[i];
+                  const assetId = key.args[0].toNumber();
+                  const balance = (accountInfo as any).unwrap().balance.toString();
+                  if (balance === "0") continue;
+                  const meta = metadataResults[i].toJSON() as any;
+                  let decimals = 0, name = "Unknown", symbol = "???";
+                  if (meta && meta.name) {
+                    decimals = meta.decimals;
+                    name = Buffer.from(meta.name.slice(2), "hex").toString("utf8") || "Unknown";
+                    symbol = Buffer.from(meta.symbol.slice(2), "hex").toString("utf8") || "???";
+                  }
+                  assets.push({ symbol, name, assetId, balance, decimals, precompile: `0x${assetId.toString(16).padStart(8, "0")}00000000000000000000000001200000` });
+                }
+              }
+              await api.disconnect();
+            }
+          } catch (e) {
+            console.warn("queryUserAssets pallet assets skipped (WS unreachable):", (e as any)?.message || e);
           }
-        })();
-
-        // Swallow a late rejection (e.g. after the timeout fires and the
-        // connection is torn down) so it doesn't surface as unhandled.
-        foreignAssetsQuery.catch(() => {});
-
-        await Promise.race([
-          foreignAssetsQuery,
-          new Promise<never>((_, reject) =>
-            setTimeout(
-              () => reject(new Error("Asset query timed out")),
-              15000,
-            ),
-          ),
-        ]);
-      } catch (e) {
-        console.warn("Failed to query user assets (using native only):", e);
-      }
-
-      await api.disconnect();
-
-      // Discard stale results — a newer query (e.g. after polkadotAddress
-      // resolves) supersedes this one.
-      if (requestId !== queryRequestIdRef.current) {
-        console.log(
-          `queryUserAssets: request ${requestId} discarded (superseded by ${queryRequestIdRef.current})`,
-        );
-        return;
+        }
       }
 
       setUserAssets(assets);
@@ -1367,7 +1140,6 @@ if (selectedNetwork === "paseo_assethub") {
       setUserAssets([]);
     } finally {
       setIsLoadingAssets(false);
-      queryInProgressRef.current = false;
     }
   };
 
@@ -1390,7 +1162,7 @@ if (selectedNetwork === "paseo_assethub") {
 
   // Check if wallet connection is required for the current operation
   const requiresWalletConnection = () => {
-    if (activeTab === "shield" || activeTab === "unshield" || activeTab === "send") {
+    if (activeTab === "shield" || activeTab === "unshield") {
       return true; // Always need wallet for shield/unshield
     }
     if (activeTab === "bridge") {
@@ -1520,7 +1292,7 @@ if (selectedNetwork === "paseo_assethub") {
   };
 
   // Swap API base URL - will be deployed to public endpoint
-  const SWAP_API_BASE = "/api/swap";
+  const SWAP_API_BASE = "https://proxyswap.laissez-faire.trade";
 
   // DOT/KSM price checker function
   const getDotToKsmRate = async () => {
@@ -1671,29 +1443,6 @@ if (selectedNetwork === "paseo_assethub") {
     try {
       console.log(`handle wallet selected called`);
       console.log(`gotten wal: `, wallet);
-
-      // Nova Wallet on Polkadot must connect via WalletConnect (QR code), not
-      // the polkadot-js browser extension — redirect the user with a popup.
-      const isNovaWallet =
-        wallet?.title === "Nova Wallet" ||
-        wallet?.constructor?.name === "NovaWallet";
-      if (isNovaWallet && selectedNetwork === "polkadot") {
-        toast.info(
-          <div style={{ fontSize: "12px", lineHeight: "1.4" }}>
-            <strong>Nova Wallet on Polkadot</strong>
-            <br />
-            Please select <strong>EVM Wallets → WalletConnect</strong> and scan
-            the QR code with your Nova mobile app.
-          </div>,
-          {
-            position: "top-right",
-            autoClose: 15000,
-            theme: "dark",
-          },
-        );
-        return;
-      }
-
       //await wallet.enable("KUSAMA SHIELD");
       setSelectedWallet(wallet);
       await wallet.enable(DAPP_NAME);
@@ -1707,21 +1456,12 @@ if (selectedNetwork === "paseo_assethub") {
         },
       );
 
-      //     window.talismanEth.enable()
-      //     const wl = (window as any);
-      //    console.log(`try it: `, wl);
-      const talismanEth = (window as any).talismanEth;
-      if (!talismanEth) {
-        console.warn(
-          "Talisman Ethereum provider not available, continuing with Substrate-only functionality",
-        );
-        setSelectedWalletEVM(null);
-      } else {
-        const provider3 = new ethers.BrowserProvider(talismanEth);
-        console.log(`selected wallet:`, talismanEth.selectedAddress);
-        setSelectedWalletEVM(provider3);
-        console.log(`provider3 ok`);
-      }
+      // This is a Substrate (polkadot.js extension) wallet connection — do NOT
+      // create an EVM provider here. EVM wallets are handled separately via
+      // AppKit/wagmi or by the onAccountSelected handler when a 0x account is
+      // picked. Creating a Talisman EVM provider here is what popped the
+      // Talisman extension for Substrate wallet users.
+      setSelectedWalletEVM(null);
       console.log("got talisman eth");
 
       //    const currentChainId = await talismanEth.request({
@@ -1768,22 +1508,119 @@ if (selectedNetwork === "paseo_assethub") {
       .join("");
   }
 
+  const getExtensionWalletAccount = async (): Promise<string> => {
+    // Use the account the user selected (stored in evmAddress) rather than
+    // accounts[0] — the user may have picked a different account from the list.
+    if (evmAddress) return evmAddress;
+    if (!selectedWallet) throw new Error("No polkadot.js wallet connected");
+    const accounts = await selectedWallet.getAccounts();
+    return accounts?.[0]?.address || "";
+  };
+
+  // Shield via revive.call — for polkadot.js browser extension wallets on Polkadot AH.
+  const handleShieldReviveCall = async () => {
+    setIsLoading(true);
+    setError("");
+    setIsGeneratingSecret(true);
+    let api: any = null;
+    const loadingToast = toast.loading(`Shielding ${amount} DOT...`, {
+      position: "top-right",
+      theme: "dark",
+    });
+    try {
+      const ss58 = await getExtensionWalletAccount();
+      if (!ss58) throw new Error("No account found in wallet");
+      const h160 = ss58ToEth(ss58);
+      const signer = selectedWallet?.signer;
+      if (!signer) throw new Error("Wallet signer not available");
+
+      const { amountPlanck, amountWei } = parseDotAmount(amount);
+      const secretVal = generateRandomSecret();
+      const { commitmentHex } = deriveV7Commitment(amountWei, secretVal);
+
+      api = await connectSubstrate();
+
+      toast.update(loadingToast, {
+        render: `1/2: Mapping account for revive...`,
+      });
+      await ensureAccountMapped(api, ss58, h160, signer);
+
+      toast.update(loadingToast, {
+        render: `2/2: Sending deposit of ${amount} DOT...`,
+      });
+      const { txHash, block } = await submitReviveDeposit(
+        api,
+        ss58,
+        signer,
+        amountPlanck,
+        commitmentHex,
+      );
+
+      try {
+        const existing = JSON.parse(
+          localStorage.getItem("revive_deposits") || "[]",
+        );
+        existing.push({
+          commitment: commitmentHex,
+          amount,
+          amountWei: amountWei.toString(),
+          secret: secretVal,
+          ss58,
+          h160,
+          txHash,
+          block,
+        });
+        localStorage.setItem("revive_deposits", JSON.stringify(existing));
+      } catch (e) {
+        console.warn("Failed to persist deposit info", e);
+      }
+
+      setSecret(secretVal);
+      setAmount("");
+      toast.update(loadingToast, {
+        render: `Deposit confirmed${block ? ` in block ${block}` : ""}: ${txHash}`,
+        type: "success",
+        isLoading: false,
+        autoClose: 8000,
+      });
+      toast.info(`🔑 Save your secret for later withdrawal`, {
+        position: "top-right",
+        autoClose: 10000,
+        theme: "dark",
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "An error occurred";
+      setError(msg);
+      toast.update(loadingToast, {
+        render: `❌ Shield failed: ${msg}`,
+        type: "error",
+        isLoading: false,
+        autoClose: 8000,
+      });
+    } finally {
+      if (api) {
+        try {
+          await api.disconnect();
+        } catch (_) {}
+      }
+      setIsLoading(false);
+      setIsGeneratingSecret(false);
+    }
+  };
+
+  // Shield via Nova/WalletConnect — Substrate signing (ECDSA temp wallet + Nova-signed funding).
   const handleShieldSubstrate = async () => {
     if (!polkadotAddress) return;
-
     isSubstrateTxRef.current = true;
     setIsGeneratingSecret(true);
     const generatedSecret = generateRandomSecret();
     setIsLoading(true);
     setError("");
 
-    const shieldToastId = toast.loading(
-      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-        <div className="loading-spinner"></div>
-        <span>Generating shielded transaction...</span>
-      </div>,
-      { position: "top-right", theme: "dark", autoClose: false, closeOnClick: false },
-    );
+    const shieldToastId = toast.loading(`Generating shielded transaction...`, {
+      position: "top-right",
+      theme: "dark",
+    });
 
     try {
       console.log("=== Substrate Shield: ECDSA + Nova-signed funding ===");
@@ -1798,7 +1635,15 @@ if (selectedNetwork === "paseo_assethub") {
       ];
 
       const depositAmount = ethers.parseEther(amount);
-      const { generateEcdsaWallet, computeCommitment, waitForEthBalance, submitDeposit, sweepBalance, fundViaSubstrateTransfer, ss58ToEth } = await import("./transactions/forwarder");
+      const {
+        generateEcdsaWallet,
+        computeCommitment,
+        waitForEthBalance,
+        submitDeposit,
+        sweepBalance,
+        fundViaSubstrateTransfer,
+        ss58ToEth,
+      } = await import("./transactions/forwarder");
 
       const seedCommitment = computeCommitment(depositAmount, 0n, generatedSecret);
       const userH160 = ss58ToEth(polkadotAddress);
@@ -1808,12 +1653,10 @@ if (selectedNetwork === "paseo_assethub") {
       console.log("Temporary wallet:", ethAddress);
 
       // Step 2: Fund the temp wallet via a Nova-signed Substrate transfer
-      // amount + ~0.05 DOT buffer for deposit + sweep gas
       const fundDot = Number(amount) + 0.05;
       const fundPlanck = BigInt(Math.floor(fundDot * 1e10));
 
       toast.update(shieldToastId, { render: "Confirm the funding transfer in Nova..." });
-
       const fundTxHash = await fundViaSubstrateTransfer(polkadotAddress, fallbackSS58, fundPlanck, wsEndpoints);
       console.log("Funding transfer:", fundTxHash);
 
@@ -1825,41 +1668,26 @@ if (selectedNetwork === "paseo_assethub") {
       const { receipt, gasPrice: usedGasPrice } = await submitDeposit(wallet, evmRpcs, chainId, contractAddress, seedCommitment.commitmentHex, depositAmount);
       console.log("Deposit tx:", receipt.hash);
 
-      // Step 4: EVM transfer of leftover gas to user's H160
+      // Step 4: Sweep leftover gas to user's H160
       await sweepBalance(wallet, evmRpcs, chainId, userH160, usedGasPrice).catch((e: any) => console.warn("Sweep failed:", e));
 
-      const explorerUrl = networkConfig.block_explorer;
-      toast.update(
-        shieldToastId,
-        {
-          render: (
-            <div>
-              Shielded {amount} DOT!{" "}
-              {explorerUrl ? (
-                <a href={`${explorerUrl}/tx/${receipt.hash}`} target="_blank" rel="noopener noreferrer" style={{ color: "#58a6ff", textDecoration: "underline" }}>
-                  View tx
-                </a>
-              ) : receipt.hash.slice(0, 10) + "..."}
-            </div>
-          ),
-          type: "success",
-          isLoading: false,
-          autoClose: 10000,
-        },
-      );
+      toast.update(shieldToastId, {
+        render: `Shielded! Deposit tx: ${receipt.hash.slice(0, 10)}...`,
+        type: "success",
+        isLoading: false,
+        autoClose: 10000,
+      });
 
-      toast.info(
-        <div style={{ fontSize: "11px", lineHeight: "1.4" }}>
-          <strong>Save for withdrawal:</strong><br />
-          Secret: {generatedSecret.slice(0, 20)}...<br />
-          Commitment: {seedCommitment.commitmentHex.slice(0, 20)}...
-        </div>,
-        { position: "top-right", autoClose: 15000, theme: "dark" },
-      );
-
+      setSecret(generatedSecret);
+      setAmount("");
+      toast.info(`🔑 Save your secret for later withdrawal`, {
+        position: "top-right",
+        autoClose: 10000,
+        theme: "dark",
+      });
     } catch (err: any) {
-      console.error("Substrate shield error:", err);
-      const msg = err instanceof Error ? err.message : "Substrate shield failed";
+      console.error("Shield substrate error:", err);
+      const msg = err instanceof Error ? err.message : "Shield failed";
       setError(msg);
       toast.update(shieldToastId, {
         render: msg,
@@ -1874,198 +1702,29 @@ if (selectedNetwork === "paseo_assethub") {
     }
   };
 
-  const handleSendSubstrate = async () => {
-    if (!polkadotAddress || !sendRecipient || !sendAmount) return;
-    isSubstrateTxRef.current = true;
-    setIsLoading(true);
-    setError("");
-
-    try {
-      console.log("=== Substrate Send: ECDSA + Nova-signed funding ===");
-      const networkConfig = NETWORKS[selectedNetwork] as any;
-      const contractAddress = networkConfig.shield_address;
-      const evmRpcs: string[] = networkConfig.rpcEndpoints?.length
-        ? networkConfig.rpcEndpoints
-        : [networkConfig.rpcEndpoint];
-      const chainId = networkConfig.chain_id;
-      const wsEndpoints = networkConfig.wsEndpoints ?? [
-        networkConfig.wsEndpoint ?? "wss://polkadot-asset-hub-rpc.polkadot.io",
-      ];
-
-      const depositAmount = ethers.parseEther(sendAmount);
-      const { generateEcdsaWallet, computeCommitment, waitForEthBalance, submitDeposit, sweepBalance, fundViaSubstrateTransfer, ss58ToEth } = await import("./transactions/forwarder");
-
-      const seedCommitment = computeCommitment(depositAmount, 0n);
-      const userH160 = ss58ToEth(polkadotAddress);
-
-      // Resolve recipient to H160 so the proxy withdraws directly (no
-      // SS58 forwarding, which requires substrateinterface on the backend).
-      // Accept EVM (0x..) and SS58 (EVM-derived or native) addresses.
-      let recipientH160: string;
-      if (isEvmAddress(sendRecipient)) {
-        recipientH160 = sendRecipient;
-      } else {
-        try {
-          recipientH160 = ss58ToEth(sendRecipient);
-          if (!isEvmAddress(recipientH160)) {
-            throw new Error("Invalid address");
-          }
-        } catch {
-          setError("Invalid address. Enter an Ethereum address (0x...) or a Polkadot native address (e.g. 16Ziip...).");
-          toast.error("Invalid destination address", { position: "top-right", autoClose: 5000, theme: "dark" });
-          setIsLoading(false);
-          isSubstrateTxRef.current = false;
-          return;
-        }
-      }
-      console.log("[SEND] Recipient H160:", recipientH160);
-
-      // Step 1: Generate temporary ECDSA wallet
-      const { wallet, ethAddress, fallbackSS58 } = generateEcdsaWallet();
-      console.log("[SEND] Temp wallet:", ethAddress);
-
-      // Step 2: Fund temp wallet via Nova-signed transfer
-      const fundDot = Number(sendAmount) + 0.05;
-      const fundPlanck = BigInt(Math.floor(fundDot * 1e10));
-
-      toast("Confirm the funding transfer in Nova...", {
-        position: "top-right", autoClose: 8000, theme: "dark",
-      });
-      await fundViaSubstrateTransfer(polkadotAddress, fallbackSS58, fundPlanck, wsEndpoints);
-
-      toast("Funding confirmed! Waiting for balance...", { position: "top-right", autoClose: 4000, theme: "dark" });
-      await waitForEthBalance(evmRpcs, ethAddress);
-
-      // Step 3: Submit deposit
-      const { receipt, gasPrice: usedGasPrice } = await submitDeposit(wallet, evmRpcs, chainId, contractAddress, seedCommitment.commitmentHex, depositAmount);
-      console.log("[SEND] Deposit tx:", receipt.hash);
-
-      // EVM transfer of leftover gas to user's H160
-      await sweepBalance(wallet, evmRpcs, chainId, userH160, usedGasPrice).catch((e: any) => console.warn("[SEND] Sweep failed:", e));
-
-      // Step 4: Proxy withdrawal via backend. The backend keeps the Merkle tree
-      // updated in the background (WebSocket/smoldot block subscription), so we
-      // do NOT trigger a full /tree-rebuild here — /pool-withdraw uses the
-      // cached tree and only rebuilds if the commitment is genuinely missing.
-      const sourceNetwork = selectedNetwork === "kusama" ? "kusama" : "polkadot";
-      const loadingToastId = toast.loading(
-        `Deposit confirmed. Processing shielded transfer to ${sendRecipient.slice(0, 6)}...`,
-        {
-          position: "top-right",
-          hideProgressBar: false,
-          closeOnClick: false,
-          pauseOnHover: true,
-          draggable: true,
-          theme: "dark",
-        },
-      );
-
-      const withdrawPayload = {
-        secret: seedCommitment.secretHex,
-        network: sourceNetwork,
-        amount_wei: depositAmount.toString(),
-        asset_id: 0,
-        recipient: recipientH160,
-      };
-      const response = await fetch(`${SWAP_API_BASE}/pool-withdraw`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(withdrawPayload),
-      });
-      const result = await response.json();
-      if (result.error) {
-        toast.dismiss(loadingToastId);
-        throw new Error(result.error);
-      }
-
-      if (result.withdraw_id) {
-        let withdrawStatus = "pending";
-        let polling: string | undefined;
-        let pollCount = 0;
-        const maxPolls = 120;
-        while (
-          (withdrawStatus === "pending" ||
-            withdrawStatus === "building_proof" ||
-            withdrawStatus === "building_tree" ||
-            withdrawStatus === "syncing" ||
-            withdrawStatus === "generating_proof" ||
-            withdrawStatus === "sending_tx" ||
-            withdrawStatus === "retrying" ||
-            withdrawStatus === "forwarding") &&
-          pollCount < maxPolls
-        ) {
-          await new Promise((r) => setTimeout(r, 3000));
-          try {
-            const statusRes = await fetch(`${SWAP_API_BASE}/pool-withdraw-status/${result.withdraw_id}`);
-            const statusData = await statusRes.json();
-            withdrawStatus = statusData.status;
-            polling = statusData.message;
-            toast.update(loadingToastId, {
-              render: `${polling || "Processing..."} (${pollCount * 3}s)`,
-            });
-          } catch { /* continue polling */ }
-          pollCount++;
-        }
-
-        if (withdrawStatus === "completed") {
-          toast.dismiss(loadingToastId);
-          toast.success(`Send submitted! Sent ${sendAmount} DOT to ${sendRecipient.slice(0, 6)}...`, {
-            position: "top-right", autoClose: 6000, theme: "dark",
-          });
-        } else if (withdrawStatus === "failed") {
-          toast.dismiss(loadingToastId);
-          throw new Error(polling || "Withdrawal failed");
-        } else {
-          toast.dismiss(loadingToastId);
-          toast.info(`Withdrawal ${result.withdraw_id} still processing. Check status later.`, {
-            position: "top-right", autoClose: 10000, theme: "dark",
-          });
-        }
-      }
-
-    } catch (err: any) {
-      console.error("[SEND] Substrate send error:", err);
-      setError(err instanceof Error ? err.message : "Send failed");
-      toast(`${err instanceof Error ? err.message : "Send failed"}`, {
-        position: "top-right", autoClose: 8000, theme: "dark",
-      });
-    } finally {
-      setIsLoading(false);
-      isSubstrateTxRef.current = false;
-    }
-  };
-
+  // Unshield via Nova/WalletConnect — ZK proof locally, withdraw via Flask proxy.
   const handleUnshieldSubstrate = async () => {
     if (!polkadotAddress || !secret) return;
     isSubstrateTxRef.current = true;
     setIsLoading(true);
     setError("");
 
-    const unshieldToastId = toast.loading(
-      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-        <div className="loading-spinner"></div>
-        <span>Preparing unshield...</span>
-      </div>,
-      { position: "top-right", theme: "dark", autoClose: false, closeOnClick: false },
-    );
+    const unshieldToastId = toast.loading(`Preparing unshield...`, {
+      position: "top-right",
+      theme: "dark",
+    });
 
     try {
       console.log("=== Substrate Unshield: ECDSA + Self-Funding ===");
       const networkConfig = NETWORKS[selectedNetwork] as any;
       const contractAddress = networkConfig.shield_address;
       const evmRpc = networkConfig.rpcEndpoints?.[0] || networkConfig.rpcEndpoint;
-      const evmRpcs: string[] = networkConfig.rpcEndpoints?.length
-        ? networkConfig.rpcEndpoints
-        : [networkConfig.rpcEndpoint];
       const chainId = networkConfig.chain_id;
       const deploymentBlock = networkConfig.deploymentBlock || 0;
 
-      // Step 1: Get user's H160 address via ss58ToEth
       const { ss58ToEth } = await import("./transactions/forwarder");
       const userH160 = ss58ToEth(polkadotAddress);
-      console.log("[UNSHIELD] User H160:", userH160);
 
-      // Step 2: Check escrow and nullifier
       toast.update(unshieldToastId, { render: "Checking contract state..." });
       const provider = new ethers.JsonRpcProvider(evmRpc, chainId, {
         staticNetwork: ethers.Network.from(chainId),
@@ -2076,86 +1735,75 @@ if (selectedNetwork === "paseo_assethub") {
       const nullifier = poseidon2([secretBN, 1n]);
       const nullifierHash = poseidon1([nullifier]);
       const nullifierHashBytes32 = ethers.zeroPadValue(ethers.toBeArray(nullifierHash), 32);
-
       const isNullifierSpent = await checkContract.isNullifierSpent(nullifierHashBytes32);
       if (isNullifierSpent) {
         throw new Error("Already withdrawn. This nullifier has been spent.");
       }
-
       const escrowBalance = await checkContract.getEscrowBalance(ethers.ZeroAddress);
       console.log("Escrow balance:", ethers.formatEther(escrowBalance));
 
-      // Step 3: Build Merkle tree
-      toast.update(unshieldToastId, { render: "Rebuilding Merkle tree from on-chain data..." });
-      const { buildMerkleTreeFromContract } = await import("./transactions/merkle");
-      const merkleTree = await buildMerkleTreeFromContract(
-        provider, contractAddress, networkConfig.abi, true, evmRpc, deploymentBlock,
-      );
+      toast.update(unshieldToastId, { render: "Loading Merkle tree from proxy..." });
+      // Use the Flask proxy's pre-computed leaf cache (authoritative, includes
+      // revive.call deposits that eth_getLogs misses). Building from contract
+      // events via eth_getLogs produces a desynced tree whose root doesn't
+      // match on-chain → circuit assertion fails.
+      const { tree: merkleTree } = await fetchProxyTree("polkadot");
 
-      // Step 4: Find commitment
       const withdrawAmount = ethers.parseEther(amount || "0.1");
       const precommitment = poseidon2([nullifier, secretBN]);
       const valueAssetHash = poseidon2([withdrawAmount, 0n]);
       const commitment = poseidon2([valueAssetHash, precommitment]);
+
+      // Ensure our deposit is in the tree (proxy monitor may lag slightly).
+      if (merkleTree.findLeafIndex(commitment) === -1) {
+        merkleTree.insert(commitment);
+      }
       const leafIdx = merkleTree.findLeafIndex(commitment);
       if (leafIdx === -1) throw new Error("Commitment not found in Merkle tree. Verify your secret.");
 
       const merkleProof = merkleTree.getProof(leafIdx);
       const currentRoot = await checkContract.currentRoot();
-      const rootToUse = currentRoot.toString();
+      if (merkleTree.root !== BigInt(currentRoot.toString())) {
+        throw new Error(
+          `Merkle tree out of sync (local ${merkleTree.root} vs chain ${currentRoot}). Try again shortly.`,
+        );
+      }
 
-      // Step 5: Generate ZK proof — recipient = user's keccak-fallback H160 via ss58ToEth.
-      //         The Nova account is mapped via reviveApi, so funds reach the native account.
-      //         The proxy will submit the tx and pay EVM gas.
-      toast.update(unshieldToastId, { render: "Generating ZK proof..." });
+      toast.update(unshieldToastId, { render: "Generating ZK proof locally..." });
 
-      const SNARK_SCALAR_FIELD = 21888242871839275222246405745257275088548364400416034343698204186575808495617n;
-      const contextHash = ethers.keccak256(ethers.solidityPacked(["address", "address"], [userH160, ethers.ZeroAddress]));
+      const SNARK_SCALAR_FIELD =
+        21888242871839275222246405745257275088548364400416034343698204186575808495617n;
+      const contextHash = ethers.keccak256(
+        ethers.solidityPacked(["address", "address"], [userH160, ethers.ZeroAddress]),
+      );
       const context = (BigInt(contextHash) % SNARK_SCALAR_FIELD).toString();
 
       const newSecretRaw = ethers.randomBytes(31);
-      const newSecret = "0x" + Array.from(newSecretRaw).map(b => b.toString(16).padStart(2, "0")).join("");
+      const newSecret =
+        "0x" + Array.from(newSecretRaw).map((b) => b.toString(16).padStart(2, "0")).join("");
       const newSecretBN = BigInt(newSecret);
       const newNullifier = poseidon2([newSecretBN, 1n]).toString();
 
-      const wasmPath = "/withdraw_phase2_fixed_v7.wasm";
-      const zkeyPath = "/withdraw_phase2_fixed_v7_0001.zkey";
-      const snarkjs = await import("snarkjs");
+      const { proof, publicSignals } = await worker.groth16FullProve(
+        {
+          withdrawnValue: withdrawAmount.toString(),
+          root: currentRoot.toString(),
+          treeDepth: "128",
+          context,
+          asset: "0x0000000000000000000000000000000000000000",
+          existingValue: withdrawAmount.toString(),
+          existingNullifier: nullifier.toString(),
+          existingSecret: secretBN.toString(),
+          newNullifier,
+          newSecret: newSecretBN.toString(),
+          siblings: merkleProof.siblings,
+          leafIndex: leafIdx.toString(),
+        },
+        "/withdraw_phase2_fixed_v7.wasm",
+        "/withdraw_phase2_fixed_v7_0001.zkey",
+      );
 
-      const circuitInput = {
-        withdrawnValue: withdrawAmount.toString(),
-        root: rootToUse,
-        treeDepth: "128",
-        context,
-        asset: "0x0000000000000000000000000000000000000000",
-        existingValue: withdrawAmount.toString(),
-        existingNullifier: nullifier.toString(),
-        existingSecret: secretBN.toString(),
-        newNullifier,
-        newSecret: newSecretBN.toString(),
-        siblings: merkleProof.siblings,
-        leafIndex: leafIdx.toString(),
-      };
-
-      const t0 = Date.now();
-      const { proof, publicSignals } = await snarkjs.groth16.fullProve(circuitInput, wasmPath, zkeyPath);
-      console.log("Proof generated in", ((Date.now() - t0) / 1000).toFixed(1), "s");
-
-      const formattedProof: [bigint, bigint] = [
-        BigInt(proof.pi_a[0]), BigInt(proof.pi_a[1]),
-      ];
-      const piB: [[bigint, bigint], [bigint, bigint]] = [
-        [BigInt(proof.pi_b[0][1]), BigInt(proof.pi_b[0][0])],
-        [BigInt(proof.pi_b[1][1]), BigInt(proof.pi_b[1][0])],
-      ];
-      const piC: [bigint, bigint] = [BigInt(proof.pi_c[0]), BigInt(proof.pi_c[1])];
-
-      // Step 6: Submit withdraw via proxy — proxy pays EVM gas, funds go directly to userH160.
       toast.update(unshieldToastId, { render: "Submitting withdrawal via proxy..." });
-      const pubSignalsBN = publicSignals.map((s: string) => BigInt(s));
-      
-      // snarkjs pi_b is a 3x2 matrix; the contract expects 2x2 (drop the trailing [1,0] row).
-      // Also swap G2 Fp2 coords [row[1], row[0]] to match Solidity verifier convention (see client.py _do_withdraw).
       const proofA = [proof.pi_a[0], proof.pi_a[1]].map((x: string) => "0x" + BigInt(x).toString(16));
       const proofB = [
         [proof.pi_b[0][1], proof.pi_b[0][0]],
@@ -2163,7 +1811,7 @@ if (selectedNetwork === "paseo_assethub") {
       ].map((row: string[]) => row.map((x: string) => "0x" + BigInt(x).toString(16)));
       const proofC = [proof.pi_c[0], proof.pi_c[1]].map((x: string) => "0x" + BigInt(x).toString(16));
       const pubSignalsHex = publicSignals.map((s: string) => "0x" + BigInt(s).toString(16));
-      
+
       const proxyRes = await fetch("/api/rpc-proxy/withdraw-with-proof-to-eth-ac", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2178,28 +1826,16 @@ if (selectedNetwork === "paseo_assethub") {
         }),
       });
       const proxyData = await proxyRes.json();
-      
-      if (proxyData.error) {
-        throw new Error(proxyData.error);
-      }
-      
+      if (proxyData.error) throw new Error(proxyData.error);
+
       console.log("[UNSHIELD] Withdraw tx:", proxyData.tx_hash);
-      const explorerUrl = networkConfig.block_explorer;
       toast.update(unshieldToastId, {
-        render: (
-          <div>
-            Unshielded!{" "}
-            {explorerUrl ? (
-              <a href={`${explorerUrl}/tx/${proxyData.tx_hash}`} target="_blank" rel="noopener noreferrer" style={{ color: "#58a6ff", textDecoration: "underline" }}>View tx</a>
-            ) : proxyData.tx_hash.slice(0, 10) + "..."}
-          </div>
-        ),
+        render: `Unshielded! ${proxyData.tx_hash.slice(0, 10)}...`,
         type: "success",
         isLoading: false,
         autoClose: 10000,
       });
       setSecret("");
-
     } catch (err: any) {
       console.error("Unshield substrate error:", err);
       const msg = err instanceof Error ? err.message : "Unshield failed";
@@ -2213,6 +1849,126 @@ if (selectedNetwork === "paseo_assethub") {
     } finally {
       setIsLoading(false);
       isSubstrateTxRef.current = false;
+    }
+  };
+
+  // Unshield via revive.call — for polkadot.js browser extension wallets on Polkadot AH.
+  const handleUnshieldReviveCall = async () => {    setIsLoading(true);
+    setError("");
+    let api: any = null;
+    const loadingToast = toast.loading(`Unshielding ${amount} DOT...`, {
+      position: "top-right",
+      theme: "dark",
+    });
+    try {
+      if (!secret) throw new Error("Enter your secret to unshield");
+      const ss58 = await getExtensionWalletAccount();
+      if (!ss58) throw new Error("No account found in wallet");
+      const h160 = ss58ToEth(ss58);
+      const signer = selectedWallet?.signer;
+      if (!signer) throw new Error("Wallet signer not available");
+
+      const { amountWei } = parseDotAmount(amount);
+      const { commitment, nullifier, secretBN } = deriveV7Commitment(
+        amountWei,
+        secret,
+      );
+
+      // Early check: is the nullifier already spent? Prevents wasting a
+      // 20+ second ZK proof on a double-spend attempt.
+      try {
+        const nullifierHash = ethers.zeroPadValue(
+          ethers.toBeArray(nullifier),
+          32,
+        );
+        const checkPool = new ethers.Contract(
+          NETWORKS.polkadot.shield_address,
+          ["function isNullifierSpent(bytes32) view returns (bool)"],
+          new ethers.JsonRpcProvider(NETWORKS.polkadot.rpcEndpoint),
+        );
+        const alreadySpent = await checkPool.isNullifierSpent(nullifierHash);
+        if (alreadySpent) {
+          toast.update(loadingToast, {
+            render: `Already withdrawn — this deposit has been spent.`,
+            type: "error",
+            isLoading: false,
+            autoClose: 8000,
+          });
+          return;
+        }
+      } catch (e) {
+        console.warn("isNullifierSpent pre-check failed, continuing:", (e as any)?.message || e);
+      }
+
+      api = await connectSubstrate();
+
+      toast.update(loadingToast, {
+        render: `1/2: Mapping account for revive...`,
+      });
+      await ensureAccountMapped(api, ss58, h160, signer);
+
+      const { tree } = await fetchProxyTree("polkadot");
+
+      // Ensure our deposit is in the tree (monitor may not have caught it yet).
+      if (tree.findLeafIndex(commitment) === -1) {
+        tree.insert(commitment);
+      }
+      const chainRoot = await getChainRoot();
+      if (tree.root !== chainRoot) {
+        throw new Error(
+          `Merkle tree out of sync (local ${tree.root} vs chain ${chainRoot}). Try again shortly.`,
+        );
+      }
+
+      toast.update(loadingToast, {
+        render: `Generating ZK proof locally...`,
+      });
+      const { proof, publicSignals } = await generateWithdrawProof({
+        h160,
+        amountWei,
+        tree,
+        commitment,
+        secretBN,
+        nullifier,
+        root: chainRoot,
+      });
+
+      toast.update(loadingToast, {
+        render: `2/2: Sending withdraw of ${amount} DOT...`,
+      });
+      const txHash = await submitReviveWithdraw(
+        api,
+        ss58,
+        signer,
+        h160,
+        proof,
+        publicSignals,
+      );
+
+      toast.update(loadingToast, {
+        render: `Withdraw confirmed: ${txHash}`,
+        type: "success",
+        isLoading: false,
+        autoClose: 8000,
+      });
+      setAmount("");
+      setSecret("");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "An error occurred";
+      setError(msg);
+      toast.update(loadingToast, {
+        render: `❌ Unshield failed: ${msg}`,
+        type: "error",
+        isLoading: false,
+        autoClose: 8000,
+      });
+    } finally {
+      if (api) {
+        try {
+          await api.disconnect();
+        } catch (_) {}
+      }
+      setIsLoading(false);
     }
   };
 
@@ -2233,17 +1989,28 @@ if (selectedNetwork === "paseo_assethub") {
       return;
     }
 
-    // If Nova/WalletConnect with polkadot namespace detected, use Substrate signing.
-    // Bypass EVM chain switching entirely — Nova signs Substrate extrinsics directly.
-    const isPolkadotNetwork = (NETWORKS[selectedNetwork]?.chain_id || 0) >= 420420417;
+    // Route polkadot.js extension wallets on Polkadot AH to the revive.call path.
+    if (
+      selectedNetwork === "polkadot" &&
+      selectedWallet &&
+      !selectedWalletEVM &&
+      evmAddress &&
+      !evmAddress.startsWith("0x")
+    ) {
+      await handleShieldReviveCall();
+      return;
+    }
+
+    // Nova/WalletConnect with polkadot namespace → Substrate signing (ECDSA
+    // temp wallet + Nova-signed funding). Bypass EVM chain switching entirely.
+    const isPolkadotNetwork =
+      (NETWORKS[selectedNetwork]?.chain_id || 0) >= 420420417;
     if (polkadotAddress && isPolkadotNetwork) {
       await handleShieldSubstrate();
       return;
     }
 
     // Check if connected to the correct chain for EVM wallets
-    // When using WalletConnect with Polkadot chains, the EVM chain check is not applicable
-    // because transactions go through Substrate (polkadot namespace), not EVM
     const expectedChainId = NETWORKS[selectedNetwork]?.chain_id;
     if (
       selectedWalletEVM &&
@@ -2251,29 +2018,26 @@ if (selectedNetwork === "paseo_assethub") {
       expectedChainId &&
       connectedChain.id !== expectedChainId
     ) {
-      // Only show error if this is a real EVM chain mismatch, not a Substrate chain
-      // Polkadot chains (420420417-420420429) use Substrate signing, not EVM
-      const isPolkadotChain = expectedChainId >= 420420417 && expectedChainId <= 420420429;
-      if (!isPolkadotChain) {
-        const chainName = NETWORKS[selectedNetwork].name;
-        toast(
-          `❌ Wrong network! Please switch to ${chainName} (Chain ID: ${expectedChainId}). You are on chain ${connectedChain.id}. Open your wallet app to approve the network switch.`,
-          {
-            position: "top-right",
-            autoClose: 10000,
-            hideProgressBar: false,
-            closeOnClick: false,
-            pauseOnHover: true,
-            draggable: true,
-            progress: undefined,
-            theme: "dark",
-          },
-        );
-        try { await switchChain({ chainId: expectedChainId }); } catch (e) {}
-        return;
+      toast(
+        `❌ Wrong network! Please switch to ${NETWORKS[selectedNetwork].name} (Chain ID: ${expectedChainId}). You are on chain ${connectedChain.id}.`,
+        {
+          position: "top-right",
+          autoClose: 8000,
+          hideProgressBar: false,
+          closeOnClick: false,
+          pauseOnHover: true,
+          draggable: true,
+          progress: undefined,
+          theme: "dark",
+        },
+      );
+      // Try to switch chain automatically
+      try {
+        await switchChain({ chainId: expectedChainId });
+      } catch (e) {
+        console.error("Failed to switch chain:", e);
       }
-      // For Polkadot chains, try to switch silently
-      try { await switchChain({ chainId: expectedChainId }); } catch (e) {}
+      return;
     }
 
     setIsGeneratingSecret(true);
@@ -2315,37 +2079,50 @@ if (selectedNetwork === "paseo_assethub") {
       console.log(`signed tx`);
       //  console.log(`westend pool:`, westend_pool);
       var shieldedContract;
-      if (selectedNetwork == "kusama") {
+      if (selectedNetwork == "moonbase") {
+        console.log(`moonbase`);
         shieldedContract = new ethers.Contract(
-          NETWORKS[selectedNetwork].shield_address,
-          NETWORKS[selectedNetwork].abi,
-          ETHsigner,
-        );
-      } else if (selectedNetwork == "westend_assethub") {
-        console.log(`westend`);
-        sendamount = ethers.parseUnits(amount, 12);
-        shieldedContract = new ethers.Contract(
-          SHIELD_CONTRACT_ADDRESS.SHIELD_CONTRACT_ADDRESS,
+          SHIELD_CONTRACT_ADDRESS.SHIELD_CONTRACT_ADDRESS, // Using the fake ERC-20 address from your constants
           SHIELD_CONTRACT_ADDRESS.shielderAbi,
           ETHsigner,
         );
+      } else if (selectedNetwork == "kusama") {
+        shieldedContract = new ethers.Contract(
+          NETWORKS[selectedNetwork].shield_address,
+          NETWORKS[selectedNetwork].abi, //["function deposit(address,uint256,bytes32) payable"],
+          ETHsigner,
+        );
+      } else if (selectedNetwork == "westend_assethub") {
+        console.log(`westend shielded contract`);
+        shieldedContract = new ethers.Contract(
+          westend_pool, // Using the fake ERC-20 address from your constants
+          ["function deposit(address,uint256,bytes32) payable"],
+          ETHsigner,
+        );
       } else if (selectedNetwork == "paseo_assethub") {
-        console.log(`paseo assethub:`, NETWORKS["paseo_assethub"].shield_address);
+        console.log(
+          `paseo assethub: `,
+          NETWORKS["paseo_assethub"].shield_address,
+        );
+
         shieldedContract = new ethers.Contract(
           NETWORKS["paseo_assethub"].shield_address,
           NETWORKS["paseo_assethub"].abi,
           ETHsigner,
         );
-      } else if (selectedNetwork == "polkadot") {
-        console.log(`polkadot contract initialized`);
+      } else if (
+        selectedNetwork == "paseo_assethub" ||
+        selectedNetwork == "polkadot"
+      ) {
+        console.log(`paseo v3/polkadot contract initialized`);
         shieldedContract = new ethers.Contract(
-          NETWORKS["polkadot"].shield_address,
-          NETWORKS["polkadot"].abi,
+          NETWORKS[selectedNetwork].shield_address,
+          NETWORKS[selectedNetwork].abi,
           ETHsigner,
         );
       } else {
         throw new Error(
-          "Only Paseo, Polkadot, Westend AssetHub, and Kusama AssetHub are currently supported",
+          "Only Moonbase and Westend Assethub is currently supported",
         );
       }
 
@@ -2465,22 +2242,38 @@ if (selectedNetwork === "paseo_assethub") {
         console.log(`paseo v2 commitment:`, x);
         console.log(`paseo v2 nullifierHash:`, nullifierHash);
         console.log(`Save for withdrawal - secret: ${secretVal.toString()}`);
-      } else if (
-        selectedNetwork == "paseo_assethub" ||
-        selectedNetwork == "polkadot"
-      ) {
-        // FixedIlop V5/V7 deposit: uses CommitmentHasher circuit logic
+      } else if (selectedNetwork == "polkadot") {
+        // v7 pool: commitment = Poseidon2(Poseidon2(amountWei, asset), Poseidon2(nullifier, secret))
+        // nullifier = Poseidon2(secret, 1)
+        const assetNumeric = 0n; // native DOT
+        const amountWei = BigInt(ethers.parseEther(amount));
+        const secretVal = BigInt(secret);
+        const nullifierVal = poseidon2([secretVal, 1n]);
+        const precommitment = poseidon2([nullifierVal, secretVal]);
+        const valueAssetHash = poseidon2([amountWei, assetNumeric]);
+        const commitmentBigInt = poseidon2([valueAssetHash, precommitment]);
+        const commitment = ethers.toBeHex(commitmentBigInt, 32);
+        nullifierHash = ethers.toBeHex(nullifierVal, 32);
+        console.log(`=== Polkadot V7 Deposit Debug ===`);
+        console.log(`Secret: ${secret}`);
+        console.log(`Nullifier (poseidon2(secret,1)): ${nullifierVal}`);
+        console.log(`Commitment: ${commitment}`);
+        x = commitment;
+      } else if (selectedNetwork == "paseo_assethub") {
+        // FixedIlop v3 deposit: uses CommitmentHasher circuit logic
         const selectedAsset = userAssets.find(
           (a) => a.symbol === selectedToken,
         );
         const assetNumeric = selectedAsset ? BigInt(selectedAsset.assetId) : 0n;
         const decimals = selectedAsset ? selectedAsset.decimals : 18;
         const depositAmount = BigInt(ethers.parseUnits(amount, decimals));
-        // Derive nullifier and secret matching the v7 circuit:
-        // nullifier = Poseidon2(secret, 1), secret = raw secret (not keccak-derived)
-        const secretBN = BigInt(secret);
-        const nullifierVal = poseidon2([secretBN, 1n]);
-        const secretVal = secretBN;
+        // Derive nullifier and secret from user secret
+        const nullifierVal = BigInt(
+          ethers.keccak256(ethers.toUtf8Bytes(secret + "_nullifier")),
+        );
+        const secretVal = BigInt(
+          ethers.keccak256(ethers.toUtf8Bytes(secret + "_secret")),
+        );
         // Compute commitment: Poseidon( Poseidon(amount, asset), Poseidon(nullifier, secret) )
         const precommitment = poseidon2([nullifierVal, secretVal]);
         const valueAssetHash = poseidon2([depositAmount, assetNumeric]);
@@ -2489,14 +2282,16 @@ if (selectedNetwork === "paseo_assethub") {
         const nullifierHashBN = poseidon1([nullifierVal]);
         const commitment = ethers.toBeHex(commitmentBigInt, 32);
         nullifierHash = ethers.toBeHex(nullifierHashBN, 32);
-        console.log(`=== Paseo V7 Deposit Debug ===`);
+        console.log(`=== Paseo V5 Deposit Debug ===`);
         console.log(`Secret input: "${secret}"`);
-        console.log(`Secret (BigInt):`, secretBN.toString());
         console.log(
-          `Derived nullifierVal (poseidon2(secret, 1)):`,
+          `Derived nullifierVal (keccak256(secret + "_nullifier")):`,
           nullifierVal.toString(),
         );
-        console.log(`secretVal (raw secret):`, secretVal.toString());
+        console.log(
+          `Derived secretVal (keccak256(secret + "_secret")):`,
+          secretVal.toString(),
+        );
         console.log(`Asset numeric:`, assetNumeric.toString());
         console.log(`Deposit amount (wei):`, depositAmount.toString());
         console.log(
@@ -2552,7 +2347,7 @@ if (selectedNetwork === "paseo_assethub") {
         if (selectedNetwork == "westend_assethub") {
           sendamount = ethers.parseUnits(amount, 18);
           console.log(`westend assethub`);
-} else if (selectedNetwork == "paseo_assethub") {
+        } else if (selectedNetwork == "paseo_assethub") {
           console.log(`paseo assethub amount`);
           sendamount = ethers.parseUnits(amount, 18);
         } else {
@@ -2585,13 +2380,36 @@ if (selectedNetwork === "paseo_assethub") {
         console.log(`calling abi66`);
         console.log(`sending paseo deposit`);
         if (selectedNetwork == "polkadot") {
-          // v7: depositNative(bytes32 commitment) — single param
-          const commitmentBytes = ethers.zeroPadValue(ethers.toBeArray(BigInt(x)), 32);
+          // v7 pool: depositNative(bytes32 commitment) single-arg
+          const commitmentBytes = ethers.toBeArray(BigInt(x));
+          const depositAmount = ethers.parseEther(amount);
+          console.log(`Sending v7 depositNative on polkadot with:`, {
+            commitment: x,
+            amount: depositAmount.toString(),
+          });
+          var gasEstimate;
+          try {
+            gasEstimate = await shieldedContract.depositNative.estimateGas(
+              commitmentBytes,
+              { value: depositAmount },
+            );
+            console.log("Gas estimate:", gasEstimate);
+          } catch (e) {
+            console.error("Estimation failed:", e);
+          }
+          txResponse2 = await shieldedContract.depositNative(commitmentBytes, {
+            value: depositAmount,
+            gasLimit: gasEstimate || 5000000,
+          });
+        } else if (selectedNetwork == "paseo_assethub") {
+          const commitmentBytes = ethers.toBeArray(BigInt(x));
+          const nullifierBytes = ethers.toBeArray(BigInt(nullifierHash));
           const depositAmount = ethers.parseEther(amount);
           console.log(
-            `Sending polkadot depositNative with params:`,
+            `Sending v3 depositNative on ${selectedNetwork} with params:`,
             {
               commitment: x,
+              nullifierHash: nullifierHash,
               amount: depositAmount.toString(),
             },
           );
@@ -2599,6 +2417,7 @@ if (selectedNetwork === "paseo_assethub") {
           try {
             gasEstimate = await shieldedContract.depositNative.estimateGas(
               commitmentBytes,
+              nullifierBytes,
               { value: depositAmount },
             );
             console.log("Gas estimate:", gasEstimate);
@@ -2607,33 +2426,7 @@ if (selectedNetwork === "paseo_assethub") {
           }
           txResponse2 = await shieldedContract.depositNative(
             commitmentBytes,
-            {
-              value: depositAmount,
-              gasLimit: gasEstimate || 5000000,
-            },
-          );
-        } else if (selectedNetwork == "paseo_assethub") {
-          // v7: depositNative(bytes32 commitment) — single param
-          const commitmentBytes = ethers.zeroPadValue(ethers.toBeArray(BigInt(x)), 32);
-          const depositAmount = ethers.parseEther(amount);
-          console.log("Sending v7 depositNative with params:", {
-            commitment: x,
-            amount: depositAmount.toString(),
-          });
-
-          var gasEstimate;
-          try {
-            gasEstimate = await shieldedContract.depositNative.estimateGas(
-              commitmentBytes,
-              { value: depositAmount },
-            );
-            console.log("Gas estimate:", gasEstimate);
-          } catch (e) {
-            console.error("Estimation failed:", e);
-          }
-
-          txResponse2 = await shieldedContract.depositNative(
-            commitmentBytes,
+            nullifierBytes,
             {
               value: depositAmount,
               gasLimit: gasEstimate || 5000000,
@@ -2641,8 +2434,8 @@ if (selectedNetwork === "paseo_assethub") {
           );
         } else if (selectedNetwork == "paseo_assethub_v2") {
           // FixedIlopPhase2Paseo_v3: depositNative(bytes32 commitment, bytes32 nullifierHash)
-          const commitmentBytes = ethers.zeroPadValue(ethers.toBeArray(BigInt(x)), 32);
-          const nullifierBytes = ethers.zeroPadValue(ethers.toBeArray(BigInt(nullifierHash)), 32);
+          const commitmentBytes = ethers.toBeArray(BigInt(x));
+          const nullifierBytes = ethers.toBeArray(BigInt(nullifierHash));
           const depositAmount = ethers.parseEther(amount);
           console.log("Sending paseo v2 depositNative with params:", {
             commitment: x,
@@ -2670,7 +2463,7 @@ if (selectedNetwork === "paseo_assethub") {
               gasLimit: gasEstimate,
             },
           );
-} else if (selectedNetwork == "paseo_assethub") {
+        } else if (selectedNetwork == "paseo_assethub") {
           // FixedIlop: deposit(address asset, uint256 amount, uint256 commitment)
           const commitmentUint256 = BigInt(x);
           const depositAmount = ethers.parseEther(amount);
@@ -2793,17 +2586,16 @@ if (selectedNetwork === "paseo_assethub") {
         const assetId = selectedAsset.assetId;
         const decimals = selectedAsset.decimals;
         const depositAmount = ethers.parseUnits(amount, decimals);
-        const commitmentBytes = ethers.zeroPadValue(ethers.toBeArray(BigInt(x)), 32);
-        const nullifierBytes = ethers.zeroPadValue(ethers.toBeArray(BigInt(nullifierHash)), 32);
+        const commitmentBytes = ethers.toBeArray(BigInt(x));
+        const nullifierBytes = ethers.toBeArray(BigInt(nullifierHash));
 
         console.log(
-          `Sending paseo ${selectedNetwork.includes("v3") ? "v3" : "v2"} depositAsset:`,
+          `Sending ${selectedNetwork} depositAsset:`,
           {
             assetId,
             amount: depositAmount.toString(),
             decimals,
             commitment: x,
-            nullifierHash: nullifierHash,
           },
         );
 
@@ -2835,24 +2627,43 @@ if (selectedNetwork === "paseo_assethub") {
         // Deposit
         var gasEstimate;
         try {
-          gasEstimate = await shieldedContract.depositAsset.estimateGas(
-            assetId,
-            depositAmount,
-            commitmentBytes,
-            nullifierBytes,
-          );
+          if (selectedNetwork === "polkadot") {
+            // v7: depositAsset(uint256 assetId, uint256 amount, bytes32 commitment)
+            gasEstimate = await shieldedContract.depositAsset.estimateGas(
+              assetId,
+              depositAmount,
+              commitmentBytes,
+            );
+          } else {
+            // v5/v6: depositAsset(assetId, amount, commitment, nullifierHash)
+            gasEstimate = await shieldedContract.depositAsset.estimateGas(
+              assetId,
+              depositAmount,
+              commitmentBytes,
+              nullifierBytes,
+            );
+          }
           console.log("Gas estimate:", gasEstimate);
         } catch (e) {
           console.error("Estimation failed:", e);
         }
 
-        txResponse2 = await shieldedContract.depositAsset(
-          assetId,
-          depositAmount,
-          commitmentBytes,
-          nullifierBytes,
-          { gasLimit: gasEstimate || 2000000 },
-        );
+        if (selectedNetwork === "polkadot") {
+          txResponse2 = await shieldedContract.depositAsset(
+            assetId,
+            depositAmount,
+            commitmentBytes,
+            { gasLimit: gasEstimate || 2000000 },
+          );
+        } else {
+          txResponse2 = await shieldedContract.depositAsset(
+            assetId,
+            depositAmount,
+            commitmentBytes,
+            nullifierBytes,
+            { gasLimit: gasEstimate || 2000000 },
+          );
+        }
         console.log(`pallet asset deposit ok`);
       } else {
         console.log(`merp merp`);
@@ -3131,15 +2942,29 @@ if (selectedNetwork === "paseo_assethub") {
 
   const handleUnshield = async () => {
     if (!isWalletConnected || !selectedToken || !secret) return;
-    
-    // Nova/Substrate wallet on Polkadot: use ECDSA self-funding flow
-    const isPolkadotNetwork = (NETWORKS[selectedNetwork]?.chain_id || 0) >= 420420417;
+    console.log(`handleUnshield beep boop`);
+
+    // Route polkadot.js extension wallets on Polkadot AH to the revive.call path.
+    if (
+      selectedNetwork === "polkadot" &&
+      selectedWallet &&
+      !selectedWalletEVM &&
+      evmAddress &&
+      !evmAddress.startsWith("0x")
+    ) {
+      await handleUnshieldReviveCall();
+      return;
+    }
+
+    // Nova/WalletConnect with polkadot namespace → Substrate unshield
+    // (ZK proof locally, withdraw submitted via Flask proxy which pays gas).
+    const isPolkadotNetwork =
+      (NETWORKS[selectedNetwork]?.chain_id || 0) >= 420420417;
     if (polkadotAddress && isPolkadotNetwork) {
       await handleUnshieldSubstrate();
       return;
     }
 
-    console.log(`handleUnshield beep boop`);
     setIsLoading(true);
     setError("");
     toast(`Unshielding tokens`, {
@@ -3246,20 +3071,21 @@ if (selectedNetwork === "paseo_assethub") {
               ],
               ETHsigner,
             );
-          } else if (
-            selectedNetwork == "polkadot"  // OLD v3/polkadot path only
-          ) {
-            console.log(
-              `paseo assethub v3/polkadot (Phase 2 ZK - 6 signals): `,
-              NETWORKS[selectedNetwork].shield_address,
-            );
-            shieldedContract = new ethers.Contract(
-              NETWORKS[selectedNetwork].shield_address,
-              NETWORKS[selectedNetwork].abi,
-              ETHsigner,
-            );
-            console.log(`paseo v3/polkadot contract initialized`);
-          } else if (selectedNetwork == "paseo_assethub_v2") {
+      } else if (
+        selectedNetwork == "paseo_assethub" ||
+        selectedNetwork == "polkadot"
+      ) {
+        console.log(
+          `paseo assethub v3/polkadot (Phase 2 ZK - 6 signals): `,
+          NETWORKS[selectedNetwork].shield_address,
+        );
+        shieldedContract = new ethers.Contract(
+          NETWORKS[selectedNetwork].shield_address,
+          NETWORKS[selectedNetwork].abi,
+          ETHsigner,
+        );
+        console.log(`paseo v3/polkadot contract initialized`);
+      } else if (selectedNetwork == "paseo_assethub_v2") {
             console.log(`paseo v2 (Phase 2 ZK) withdraw`);
             shieldedContract = new ethers.Contract(
               NETWORKS["paseo_assethub_v2"].shield_address,
@@ -3267,8 +3093,7 @@ if (selectedNetwork === "paseo_assethub") {
               ETHsigner,
             );
           } else if (selectedNetwork == "paseo_assethub") {
-            // v7 FixedIlop withdraw — uses NETWORKS["paseo_assethub"] ABI (8-signal withdraw)
-            console.log(`paseo_assethub: using NEW v7 FixedIlop withdraw path`);
+            console.log(`set shielded contract to paseo`);
             shieldedContract = new ethers.Contract(
               NETWORKS["paseo_assethub"].shield_address,
               NETWORKS["paseo_assethub"].abi,
@@ -3354,17 +3179,104 @@ if (selectedNetwork === "paseo_assethub") {
                 type: 0,
               },
             );
+          } else if (selectedNetwork === "polkadot") {
+            // v7 pool: remote tree fetch + ZK proof + withdraw(..., uint256[8], address)
+            const recipient = evmAddress;
+            if (!recipient) throw new Error("No wallet address connected");
+
+            const amountWei = BigInt(ethers.parseEther(amount));
+            const { commitment, nullifier, secretBN } = deriveV7Commitment(
+              amountWei,
+              secret,
+            );
+
+            // Pre-checks
+            const checkContract = new ethers.Contract(
+              NETWORKS.polkadot.shield_address,
+              NETWORKS.polkadot.abi,
+              ETHsigner,
+            );
+
+            const nullifierHashBytes32 = ethers.zeroPadValue(
+              ethers.toBeArray(nullifier),
+              32,
+            );
+            const spent = await checkContract.isNullifierSpent(
+              nullifierHashBytes32,
+            );
+            if (spent) {
+              toast(`Already withdrawn! This deposit has been spent.`, {
+                position: "top-right", autoClose: 5000, theme: "dark",
+              });
+              throw new Error("Deposit already spent");
+            }
+            const escrowBalance = await checkContract.getEscrowBalance(
+              ethers.ZeroAddress,
+            );
+            if (escrowBalance < amountWei) {
+              toast(`Insufficient pool balance for withdrawal`, {
+                position: "top-right", autoClose: 5000, theme: "dark",
+              });
+              throw new Error("Insufficient escrow balance");
+            }
+
+            // Remote tree fetch from proxy
+            toast(`Loading Merkle tree from proxy...`, {
+              position: "top-right", autoClose: 4000, theme: "dark",
+            });
+            const { tree } = await fetchProxyTree("polkadot");
+            if (tree.findLeafIndex(commitment) === -1) {
+              tree.insert(commitment);
+            }
+            const chainRoot = await getChainRoot();
+            if (tree.root !== chainRoot) {
+              throw new Error(
+                `Merkle tree out of sync (local ${tree.root} vs chain ${chainRoot}).`,
+              );
+            }
+
+            // ZK proof
+            toast(`Generating ZK proof...`, {
+              position: "top-right", autoClose: false, theme: "dark",
+            });
+            const { proof, publicSignals } = await generateWithdrawProof({
+              h160: recipient,
+              amountWei,
+              tree,
+              commitment,
+              secretBN,
+              nullifier,
+              root: chainRoot,
+            });
+
+            // Format proof and submit via EVM contract
+            const formatted = formatProof(proof);
+            const pub = publicSignals.map((s) => BigInt(s));
+
+            toast(`Unshielding ${amount} DOT...`, {
+              position: "top-right", autoClose: 5000, theme: "dark",
+            });
+
+            txResponse = await shieldedContract.withdraw(
+              formatted[0],
+              formatted[1],
+              formatted[2],
+              pub.slice(0, 8),
+              recipient,
+            );
           } else if (selectedNetwork === "paseo_assethub") {
-            // FixedIlop v7 withdraw: UTXO model with nullifier+secret pairs
-            // Match the SDK's derivation: nullifier = Poseidon2(secret, 1)
+            // FixedIlop withdraw: UTXO model with nullifier+secret pairs
             const recipient = evmAddress;
             if (!recipient) throw new Error("No wallet address connected");
             const withdrawAmount = ethers.parseEther(amount);
 
-            // Derive nullifier and secret from user input (v7 circuit expects Poseidon2)
-            const secretBN = BigInt(secret);
-            const existingNullifier = poseidon2([secretBN, 1n]).toString();
-            const existingSecret = secret; // Pass secret directly to circuit
+            // Derive nullifier and secret from user input (same derivation as deposit)
+            const existingNullifier = BigInt(
+              ethers.keccak256(ethers.toUtf8Bytes(secret + "_nullifier")),
+            ).toString();
+            const existingSecret = BigInt(
+              ethers.keccak256(ethers.toUtf8Bytes(secret + "_secret")),
+            ).toString();
 
             // Connect to contract for pre-checks and tree data
             const checkContract = new ethers.Contract(
@@ -3374,14 +3286,14 @@ if (selectedNetwork === "paseo_assethub") {
             );
 
             // Pre-check: check nullifier hasn't been spent
-            // Circuit uses Poseidon1(nullifier) for nullifierHash
+            // Circuit uses PoseidonBN254(1) — single-input Poseidon, not Poseidon(nullifier, 0)
             const nullifierHash = poseidon1([BigInt(existingNullifier)]);
             const nullifierHashBytes32 = ethers.zeroPadValue(
               ethers.toBeArray(nullifierHash),
               32,
             );
             const nullifierSpent =
-              await checkContract.isNullifierSpent(nullifierHashBytes32);
+              await checkContract.isDepositSpent(nullifierHashBytes32);
             if (nullifierSpent) {
               toast(`Already withdrawn! This nullifier has been spent.`, {
                 position: "top-right",
@@ -3391,8 +3303,8 @@ if (selectedNetwork === "paseo_assethub") {
               throw new Error("Nullifier already spent");
             }
 
-            // Check escrow has funds (v7 uses getEscrowBalance instead of escrow)
-            const escrowBalance = await checkContract.getEscrowBalance(
+            // Check escrow has funds
+            const escrowBalance = await checkContract.escrow(
               ethers.ZeroAddress,
             );
             console.log(`Escrow balance:`, ethers.formatEther(escrowBalance));
@@ -3418,7 +3330,7 @@ if (selectedNetwork === "paseo_assethub") {
               provider,
               NETWORKS["paseo_assethub"].shield_address,
               NETWORKS["paseo_assethub"].abi,
-              true,
+              false,
               NETWORKS["paseo_assethub"].rpcEndpoint,
               NETWORKS["paseo_assethub"].deploymentBlock || 0,
             );
@@ -3528,7 +3440,6 @@ if (selectedNetwork === "paseo_assethub") {
             }
 
             // For V5 Paseo: Use contract root since our tree reconstruction is incomplete
-            // For v7 Paseo: Use contract root (local tree may have more leaves due to better event parsing)
             const rootToUse =
               selectedNetwork === "paseo_assethub"
                 ? currentRoot.toString()
@@ -3538,35 +3449,25 @@ if (selectedNetwork === "paseo_assethub") {
               `Using root: ${rootToUse} (${selectedNetwork === "paseo_assethub" ? "contract root" : "local root"})`,
             );
 
-            // Only validate root match for v5/v6 (not v7 where we use contract root directly)
-            if (selectedNetwork !== "paseo_assethub") {
-              const isValidRoot = rootToUse === currentRoot.toString();
-              if (!isValidRoot) {
-                console.error(
-                  `Root mismatch: using ${rootToUse} but contract has ${currentRoot}.`,
-                );
-                toast(
-                  `Merkle tree reconstruction failed — root does not match contract.`,
-                  { position: "top-right", autoClose: 8000, theme: "dark" },
-                );
-                throw new Error(
-                  "Local Merkle root does not match contract current root",
-                );
-              }
-              console.log(
-                `Root ${rootToUse} matches contract current root. Depth: ${Math.ceil(Math.log2(merkleTree.size))}`,
+            const isValidRoot = rootToUse === currentRoot.toString();
+            if (!isValidRoot) {
+              console.error(
+                `Root mismatch: using ${rootToUse} but contract has ${currentRoot}.`,
               );
-            } else {
-              console.log(
-                `Using contract root ${rootToUse} for ${selectedNetwork}`,
+              toast(
+                `Merkle tree reconstruction failed — root does not match contract.`,
+                { position: "top-right", autoClose: 8000, theme: "dark" },
+              );
+              throw new Error(
+                "Local Merkle root does not match contract current root",
               );
             }
+            console.log(
+              `Local root ${merkleTree.root} matches contract current root. Depth: ${Math.ceil(Math.log2(merkleTree.size))}`,
+            );
 
-            // Store root and depth for proof generation
-            // For v7, use contract root (merkleTree.root may differ due to pruning)
-            const isPaseoV7 = selectedNetwork === "paseo_assethub";
-            const rootToUseForProof = isPaseoV7 ? currentRoot.toString() : merkleTree.root.toString();
-            const localRoot = isPaseoV7 ? BigInt(rootToUseForProof) : merkleTree.root;
+            // Store local root and depth for proof generation
+            const localRoot = merkleTree.root;
             const localDepth = Math.ceil(Math.log2(merkleTree.size));
 
             // Compute context = keccak256(abi.encodePacked(recipient, asset)) % SNARK_SCALAR_FIELD
@@ -3582,11 +3483,13 @@ if (selectedNetwork === "paseo_assethub") {
               BigInt(contextHash) % SNARK_SCALAR_FIELD
             ).toString();
 
-            // Generate fresh nullifier+secret for change UTXO (v7 uses Poseidon2 derivation)
-            // nullifier = Poseidon2(secret, 1), secret = random 32 bytes
-            const newSecretRaw = ethers.randomBytes(32);
-            const newSecret = ethers.hexlify(newSecretRaw);
-            const newNullifier = poseidon2([BigInt(newSecret), 1n]).toString();
+            // Generate fresh nullifier+secret for change UTXO
+            const newNullifier = BigInt(
+              ethers.toBigInt(ethers.randomBytes(16)),
+            ).toString();
+            const newSecret = BigInt(
+              ethers.toBigInt(ethers.randomBytes(16)),
+            ).toString();
 
             const proofToastId = toast.loading(
               `🔐 Generating ZK proof — this may take up to a minute...`,
@@ -3594,7 +3497,6 @@ if (selectedNetwork === "paseo_assethub") {
             );
 
             // Generate the Groth16 proof — use LOCAL root & depth (consistent with local siblings)
-            // For paseo_assethub (v7), use v7 circuit with 8 public signals
             let proofResult;
             try {
               proofResult = await zkWithdraw(
@@ -3613,8 +3515,8 @@ if (selectedNetwork === "paseo_assethub") {
                   leafIndex: leafIdx.toString(),
                 },
                 {
-                  padTo7Signals: false, // v7 has 8 signals, v5/v6 have 7
-                  useV7Circuit: isPaseoV7,
+                  padTo7Signals:
+                    (selectedNetwork as string) === "paseo_assethub",
                 },
               );
               toast.update(proofToastId, {
@@ -3641,33 +3543,20 @@ if (selectedNetwork === "paseo_assethub") {
             // calldata format: [a, b, c, pubSignals]
             const [a, b, c, pubSignals] = proofResult.calldata;
 
-            // staticCall pre-check - v7 has different ABI (no asset/amount params)
+            // staticCall pre-check
             try {
               const staticCallFunction = useProxyWithdraw
                 ? shieldedContract.proxy_withdraw.staticCall
                 : shieldedContract.withdraw.staticCall;
-              
-              if (isPaseoV7) {
-                // v7: 8 public signals, no asset/amount params
-                await staticCallFunction(
-                  a,
-                  b,
-                  c,
-                  pubSignals.slice(0, 8), // ensure 8 signals
-                  recipient,
-                );
-              } else {
-                // v5/v6: 7 public signals with asset/amount params
-                await staticCallFunction(
-                  a,
-                  b,
-                  c,
-                  pubSignals,
-                  ethers.ZeroAddress,
-                  withdrawAmount,
-                  recipient,
-                );
-              }
+              await staticCallFunction(
+                a,
+                b,
+                c,
+                pubSignals,
+                ethers.ZeroAddress,
+                withdrawAmount,
+                recipient,
+              );
               console.log(`staticCall succeeded`);
             } catch (staticError: any) {
               console.error(
@@ -3712,38 +3601,20 @@ if (selectedNetwork === "paseo_assethub") {
             console.log(`  b:`, b);
             console.log(`  c:`, c);
             console.log(`  pubSignals:`, pubSignals);
-            
-            if (isPaseoV7) {
-              // v7: 8 public signals, no asset/amount params
-              console.log(`  pubSignals[3] (withdrawnValue):`, pubSignals[3]);
-              console.log(`  pubSignals[7] (asset):`, pubSignals[7]);
-              console.log(`  recipient:`, recipient);
-              console.log(`=============================`);
-              
-              txResponse = await withdrawFunction(
-                a,
-                b,
-                c,
-                pubSignals.slice(0, 8), // ensure 8 signals
-                recipient,
-              );
-            } else {
-              // v5/v6: 7 public signals with asset/amount params
-              console.log(`  asset:`, ethers.ZeroAddress);
-              console.log(`  amount:`, withdrawAmount.toString());
-              console.log(`  recipient:`, recipient);
-              console.log(`=============================`);
-              
-              txResponse = await withdrawFunction(
-                a,
-                b,
-                c,
-                pubSignals,
-                ethers.ZeroAddress,
-                withdrawAmount,
-                recipient,
-              );
-            }
+            console.log(`  asset:`, ethers.ZeroAddress);
+            console.log(`  amount:`, withdrawAmount.toString());
+            console.log(`  recipient:`, recipient);
+            console.log(`=============================`);
+
+            txResponse = await withdrawFunction(
+              a,
+              b,
+              c,
+              pubSignals,
+              ethers.ZeroAddress,
+              withdrawAmount,
+              recipient,
+            );
           } else if (selectedNetwork === "paseo_assethub_v2") {
             // FixedIlopPhase2Paseo_v3 withdraw: UTXO model with 7 public signals
             const recipient = evmAddress;
@@ -3953,11 +3824,11 @@ if (selectedNetwork === "paseo_assethub") {
               pubSignals,
               withdrawAmount,
             );
-          } else if (
-            selectedNetwork === "paseo_assethub" ||
+          } else if (selectedNetwork === "paseo_assethub" ||
             selectedNetwork === "polkadot"
           ) {
             // FixedIlopPhase2Paseo_v4 withdraw: UTXO model with 6 public signals
+            const netConf = (NETWORKS as any)[selectedNetwork] as typeof NETWORKS.paseo_assethub;
             const recipient = evmAddress;
             if (!recipient) throw new Error("No wallet address connected");
 
@@ -3967,7 +3838,7 @@ if (selectedNetwork === "paseo_assethub") {
             );
             const isNative =
               !selectedAsset ||
-              selectedToken === NETWORKS[selectedNetwork].asset;
+              selectedToken === netConf.asset;
             const assetNumeric = isNative ? 0n : BigInt(selectedAsset.assetId);
             const decimals = isNative ? 18 : selectedAsset.decimals;
             const withdrawAmount = ethers.parseUnits(amount, decimals);
@@ -3982,8 +3853,8 @@ if (selectedNetwork === "paseo_assethub") {
 
             // Connect to contract for pre-checks
             const checkContract = new ethers.Contract(
-              NETWORKS[selectedNetwork].shield_address,
-              NETWORKS[selectedNetwork].abi,
+              netConf.shield_address,
+              netConf.abi,
               ETHsigner,
             );
 
@@ -3997,8 +3868,8 @@ if (selectedNetwork === "paseo_assethub") {
               32,
             );
             const depositInfo =
-              await checkContract.isNullifierSpent(nullifierHashBytes32);
-            if (depositInfo) {
+              await checkContract.deposits(nullifierHashBytes32);
+            if (depositInfo.isSpent) {
               toast(`Already withdrawn! This deposit has been spent.`, {
                 position: "top-right",
                 autoClose: 5000,
@@ -4036,11 +3907,11 @@ if (selectedNetwork === "paseo_assethub") {
 
             const merkleTree = await buildMerkleTreeFromContract(
               provider,
-              NETWORKS[selectedNetwork].shield_address,
-              NETWORKS[selectedNetwork].abi,
+              netConf.shield_address,
+              netConf.abi,
               true, // Force refresh to get latest deposits
-              NETWORKS[selectedNetwork].rpcEndpoint,
-              NETWORKS[selectedNetwork].deploymentBlock || 0,
+              netConf.rpcEndpoint,
+              (netConf as any).deploymentBlock || 0,
             );
 
             // IMPORTANT: If we just made a deposit, our leaf is at index = treeSize - 1
@@ -4535,639 +4406,6 @@ if (selectedNetwork === "paseo_assethub") {
     }
   };
 
-  const handleSendTransaction = async () => {
-    console.log("[SEND] handleSendTransaction triggered");
-    console.log("[SEND] wallet connected:", isWalletConnected, "recipient:", sendRecipient, "amount:", sendAmount);
-    
-    // If Nova/WalletConnect with polkadot namespace, use Substrate signing for same-token transfers
-    const isPolkadotNetwork = (NETWORKS[selectedNetwork]?.chain_id || 0) >= 420420417;
-    const isSameToken = sendFromCurrency === sendToCurrency;
-    if (polkadotAddress && isPolkadotNetwork && isSameToken) {
-      await handleSendSubstrate();
-      return;
-    }
-    
-    if (!isWalletConnected || !sendRecipient || !sendAmount) {
-      console.log("[SEND] Aborted - missing:", { wallet: isWalletConnected, recipient: sendRecipient, amount: sendAmount });
-      return;
-    }
-
-    // Resolve destination: accept EVM (0x..), EVM-derived SS58, and native SS58 addresses
-    let recipientPayload: string;
-    if (!isSameToken) {
-      // Cross-currency: pass address through to swap partner without validation
-      recipientPayload = sendRecipient;
-    } else if (isEvmAddress(sendRecipient)) {
-      recipientPayload = sendRecipient;
-    } else {
-      // Try SS58: check if EVM-derived (H160 + 12×0xEE) or native
-      try {
-        const { decodeAddress, encodeAddress } = await import("@polkadot/util-crypto");
-        const decoded = decodeAddress(sendRecipient);
-        const last12 = Buffer.from(decoded.slice(-12));
-        const isEvmDerived = last12.every(b => b === 0xEE);
-        if (isEvmDerived && decoded.length >= 32) {
-          // EVM-derived SS58 → convert to H160
-          recipientPayload = "0x" + Buffer.from(decoded.slice(0, 20)).toString("hex");
-          if (!isEvmAddress(recipientPayload)) {
-            throw new Error("Invalid H160 derived from SS58");
-          }
-        } else if (ispolkadotaddress(sendRecipient)) {
-          // Native SS58 → pass through (backend handles forwarding via Account 1)
-          recipientPayload = sendRecipient;
-        } else {
-          throw new Error("Not a valid address");
-        }
-      } catch {
-        setError("Invalid address. Enter an Ethereum address (0x...) or a Polkadot native address (e.g. 16Ziip...).");
-        toast.error("Invalid destination address", { position: "top-right", autoClose: 5000, theme: "dark" });
-        return;
-      }
-    }
-
-    try {
-      setIsLoading(true);
-      setError("");
-      setSendGasEstimate(null);
-      
-      const sourceNetwork = selectedNetwork === "kusama" ? "kusama" : "polkadot";
-      console.log("[SEND] sourceNetwork:", sourceNetwork);
-      
-      // For DOT -> DOT: first do deposit, then withdraw via Flask API
-      if (isSameToken) {
-        console.log("[SEND] Same token detected, doing deposit + withdraw");
-        
-        toast(`Step 1/3: Depositing ${sendAmount} DOT to shielded pool...`, {
-          position: "top-right",
-          autoClose: 6000,
-          hideProgressBar: false,
-          closeOnClick: false,
-          pauseOnHover: true,
-          draggable: true,
-          progress: undefined,
-          theme: "dark",
-        });
-
-        const networkConfig = NETWORKS[selectedNetwork];
-        const provider = new ethers.BrowserProvider(
-          (window as any).ethereum || (window as any).talismanEth,
-        );
-        const signer = await provider.getSigner();
-        
-        const poolContract = new ethers.Contract(
-          networkConfig.shield_address,
-          networkConfig.abi,
-          signer
-        );
-
-        // Generate 31-byte secret (must be < BN254_R = 0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001)
-        const secretBytes = ethers.randomBytes(31);
-        const secretHex = "0x" + Array.from(secretBytes).map(b => b.toString(16).padStart(2, '0')).join('');
-        const amountWei = ethers.parseEther(sendAmount);
-        
-        // Compute commitment using poseidon-lite (matches Python SDK's generate_commitment)
-        const secretBN = BigInt(secretHex);
-        const { poseidon1, poseidon2 } = await import("poseidon-lite");
-        
-        const nullifier = poseidon2([secretBN, 1n]);
-        const nullifierHash = poseidon1([nullifier]);
-        const precommitment = poseidon2([nullifier, secretBN]);
-        const valueAssetHash = poseidon2([amountWei.toString(), 0n]);
-        const commitment = poseidon2([valueAssetHash, precommitment]);
-        
-        // Convert commitment to bytes32 hex for the contract
-        const commitmentHex = "0x" + commitment.toString(16).padStart(64, '0');
-        
-        console.log("[SEND] Generated commitment:", commitmentHex);
-        
-        // Estimate gas before sending
-        let gasLimit = 150000n;
-        let gasPrice = 1000000000n;
-        try {
-          const feeData = await provider.getFeeData();
-          gasPrice = feeData.gasPrice || gasPrice;
-          try {
-            gasLimit = await poolContract.depositNative.estimateGas(commitmentHex, { value: amountWei });
-          } catch (e) {
-            console.log("Gas est failed, using fallback:", e);
-          }
-        } catch (e) {}
-        console.log("[SEND] Using gasLimit:", gasLimit.toString(), "gasPrice:", gasPrice.toString());
-        
-        // Send deposit transaction with estimated gas
-        let tx;
-        tx = await poolContract.depositNative(commitmentHex, { value: amountWei, gasLimit, gasPrice });
-
-        toast(`Deposit sent! Tx: ${tx.hash.slice(0, 10)}... Waiting for confirmation...`, {
-          position: "top-right",
-          autoClose: 10000,
-          hideProgressBar: false,
-          closeOnClick: false,
-          pauseOnHover: true,
-          draggable: true,
-          progress: undefined,
-          theme: "dark",
-        });
-
-const receipt = await tx.wait();
-        console.log("Deposit confirmed:", receipt.hash);
-
-        // Single persistent loading toast for the entire withdrawal process
-        const loadingToastId = toast.loading(`Deposit confirmed. Processing shielded transfer...`, {
-          position: "top-right",
-          hideProgressBar: false,
-          closeOnClick: false,
-          pauseOnHover: true,
-          draggable: true,
-          theme: "dark",
-        });
-
-        // Wait for deposit finality
-        await new Promise(r => setTimeout(r, 5000));
-        
-// Rebuild Merkle tree
-        toast.update(loadingToastId, { render: "Doing cryptography stuff, hold.." });
-        
-        console.log("[SEND] Tree rebuild URL:", `${SWAP_API_BASE}/tree-rebuild/${sourceNetwork}`);
-        const treeResult = await fetch(`${SWAP_API_BASE}/tree-rebuild/${sourceNetwork}`, {
-          method: "POST",
-        });
-        const treeData = await treeResult.json();
-        console.log("[SEND] Tree rebuild response:", JSON.stringify(treeData));
-
-        // Call Flask /pool-withdraw
-        toast.update(loadingToastId, { render: `Submitting withdrawal to ${recipientPayload.slice(0, 6)}...` });
-
-        const withdrawPayload = {
-          secret: secretHex,
-          network: sourceNetwork,
-          amount_wei: amountWei.toString(),
-          asset_id: 0,
-          recipient: recipientPayload,
-        };
-
-        console.log("[SEND] Pool-withdraw URL:", `${SWAP_API_BASE}/pool-withdraw`);
-        console.log("[SEND] Pool-withdraw payload:", JSON.stringify(withdrawPayload));
-        
-        const response = await fetch(`${SWAP_API_BASE}/pool-withdraw`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(withdrawPayload),
-        });
-
-        console.log("[SEND] Pool-withdraw status:", response.status);
-        const result = await response.json();
-        console.log("[SEND] Pool-withdraw result:", JSON.stringify(result));
-
-        if (result.error) {
-          toast.dismiss(loadingToastId);
-          throw new Error(result.error);
-        }
-
-        if (result.withdraw_id) {
-          console.log("[SEND] Starting status poll for withdraw_id:", result.withdraw_id);
-          let withdrawStatus = "pending";
-          let pollCount = 0;
-          const maxPolls = 120;
-          
-          while ((withdrawStatus === "pending" || withdrawStatus === "building_proof" || 
-                  withdrawStatus === "building_tree" || withdrawStatus === "generating_proof" ||
-                  withdrawStatus === "sending_tx" || withdrawStatus === "retrying" ||
-                  withdrawStatus === "forwarding") && pollCount < maxPolls) {
-            await new Promise(r => setTimeout(r, 3000));
-            const statusUrl = `${SWAP_API_BASE}/pool-withdraw-status/${result.withdraw_id}`;
-            console.log(`[SEND] Poll #${pollCount+1}:`, statusUrl);
-            const statusRes = await fetch(statusUrl);
-            console.log(`[SEND] Poll #${pollCount+1} status:`, statusRes.status);
-            const statusData = await statusRes.json();
-            console.log(`[SEND] Poll #${pollCount+1} data:`, JSON.stringify(statusData));
-            console.log(`[SEND] Poll #${pollCount+1} withdrawStatus from API:`, statusData.status);
-            
-            withdrawStatus = statusData.status;
-            pollCount++;
-            
-            toast.update(loadingToastId, { 
-              render: `${statusData.message || "Processing..."} (${pollCount * 3}s)` 
-            });
-            
-            if (withdrawStatus === "completed") {
-              toast.dismiss(loadingToastId);
-              const shortTx = (statusData.forward_tx_hash || statusData.tx_hash || "").slice(0, 10);
-              toast.success(`Shielded transfer complete! Sent ${sendAmount} DOT to ${recipientPayload.slice(0, 6)}...${shortTx ? ` (tx: ${shortTx}...)` : ""}`, {
-                position: "top-right",
-                autoClose: 10000,
-                hideProgressBar: false,
-                closeOnClick: false,
-                pauseOnHover: true,
-                draggable: true,
-                progress: undefined,
-                theme: "dark",
-              });
-            } else if (withdrawStatus === "failed") {
-              toast.dismiss(loadingToastId);
-              throw new Error(statusData.message || "Withdrawal failed");
-            }
-          }
-          
-          if (withdrawStatus !== "completed" && pollCount >= maxPolls) {
-            toast.dismiss(loadingToastId);
-            toast.info(`Withdrawal ${result.withdraw_id} still processing. Check status later.`, {
-              position: "top-right",
-              autoClose: 10000,
-              hideProgressBar: false,
-              closeOnClick: false,
-              pauseOnHover: true,
-              draggable: true,
-              progress: undefined,
-              theme: "dark",
-            });
-          }
-        }
-
-        setSendRecipient("");
-        setSendAmount("");
-        setIsLoading(false);
-        return;
-      }
-
-      // For cross-token: create swap order, user deposits, proxy withdraws to swap address
-      toast(`Step 1/4: Creating ${sendFromCurrency} → ${sendToCurrency} swap order...`, {
-        position: "top-right",
-        autoClose: 6000,
-        hideProgressBar: false,
-        closeOnClick: false,
-        pauseOnHover: true,
-        draggable: true,
-        progress: undefined,
-        theme: "dark",
-      });
-
-      const toFixedFloat = (ccy: string) => ccy === "DOT" ? "DOTAH" : ccy;
-      const ffOrderResult = await fetch(`${SWAP_API_BASE}/ff-create-order`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          from_ccy: toFixedFloat(sendFromCurrency),
-          to_ccy: toFixedFloat(sendToCurrency),
-          amount: parseFloat(sendAmount),
-          destination_address: sendRecipient,
-        }),
-      });
-
-      const ffOrder = await ffOrderResult.json();
-      if (ffOrder.error) {
-        throw new Error(ffOrder.error);
-      }
-
-      console.log("[SEND] Swap order created:", ffOrder);
-      const ffDepositAddress = ffOrder.deposit_address;
-      const ffOrderId = ffOrder.order_id;
-
-      toast(`Step 2/4: Depositing ${sendAmount} DOT to shielded pool...`, {
-        position: "top-right",
-        autoClose: 6000,
-        hideProgressBar: false,
-        closeOnClick: false,
-        pauseOnHover: true,
-        draggable: true,
-        progress: undefined,
-        theme: "dark",
-      });
-
-      const networkConfig = NETWORKS[selectedNetwork];
-      const provider = new ethers.BrowserProvider(
-        (window as any).ethereum || (window as any).talismanEth,
-      );
-      const signer = await provider.getSigner();
-
-      const poolContract = new ethers.Contract(
-        networkConfig.shield_address,
-        networkConfig.abi,
-        signer
-      );
-
-      const secretBytes = ethers.randomBytes(31);
-      const secretHex = "0x" + Array.from(secretBytes).map(b => b.toString(16).padStart(2, '0')).join('');
-      const amountWei = ethers.parseEther(sendAmount);
-
-      const secretBN = BigInt(secretHex);
-      const { poseidon1, poseidon2 } = await import("poseidon-lite");
-
-      const nullifier = poseidon2([secretBN, 1n]);
-      const nullifierHash = poseidon1([nullifier]);
-      const precommitment = poseidon2([nullifier, secretBN]);
-      const valueAssetHash = poseidon2([amountWei.toString(), 0n]);
-      const commitment = poseidon2([valueAssetHash, precommitment]);
-
-      const commitmentHex = "0x" + commitment.toString(16).padStart(64, '0');
-      console.log("[SEND] Generated commitment:", commitmentHex);
-
-      let gasLimit = 150000n;
-      let gasPrice = 1000000000n;
-      try {
-        const feeData = await provider.getFeeData();
-        gasPrice = feeData.gasPrice || gasPrice;
-        try {
-          gasLimit = await poolContract.depositNative.estimateGas(commitmentHex, { value: amountWei });
-        } catch (e) {
-          console.log("Gas est failed, using fallback:", e);
-        }
-      } catch (e) {}
-
-      const tx = await poolContract.depositNative(commitmentHex, { value: amountWei, gasLimit, gasPrice });
-      toast(`Deposit sent! Tx: ${tx.hash.slice(0, 10)}... Waiting for confirmation...`, {
-        position: "top-right",
-        autoClose: 10000,
-        hideProgressBar: false,
-        closeOnClick: false,
-        pauseOnHover: true,
-        draggable: true,
-        progress: undefined,
-        theme: "dark",
-      });
-
-      const receipt = await tx.wait();
-      console.log("Deposit confirmed:", receipt.hash);
-
-      const loadingToastId = toast.loading(`Deposit confirmed. Processing shielded swap to ${ffDepositAddress.slice(0, 6)}...`, {
-        position: "top-right",
-        hideProgressBar: false,
-        closeOnClick: false,
-        pauseOnHover: true,
-        draggable: true,
-        theme: "dark",
-      });
-
-      await new Promise(r => setTimeout(r, 5000));
-
-      toast.update(loadingToastId, { render: "Doing cryptography stuff, hold.." });
-      console.log("[SEND] Tree rebuild URL:", `${SWAP_API_BASE}/tree-rebuild/${sourceNetwork}`);
-      const treeResult = await fetch(`${SWAP_API_BASE}/tree-rebuild/${sourceNetwork}`, {
-        method: "POST",
-      });
-      const treeData = await treeResult.json();
-      console.log("[SEND] Tree rebuild response:", JSON.stringify(treeData));
-
-      toast.update(loadingToastId, { render: `Withdrawing to swap address...` });
-      const withdrawPayload = {
-        secret: secretHex,
-        network: sourceNetwork,
-        amount_wei: amountWei.toString(),
-        asset_id: 0,
-        recipient: ffDepositAddress,
-      };
-      console.log("[SEND] Pool-withdraw payload:", JSON.stringify(withdrawPayload));
-      const response = await fetch(`${SWAP_API_BASE}/pool-withdraw`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(withdrawPayload),
-      });
-      const result = await response.json();
-      console.log("[SEND] Pool-withdraw result:", JSON.stringify(result));
-
-      if (result.error) {
-        toast.dismiss(loadingToastId);
-        throw new Error(result.error);
-      }
-
-      if (result.withdraw_id) {
-        let withdrawStatus = "pending";
-        let pollCount = 0;
-        const maxPolls = 120;
-
-        while ((withdrawStatus === "pending" || withdrawStatus === "building_proof" ||
-                withdrawStatus === "building_tree" || withdrawStatus === "generating_proof" ||
-                withdrawStatus === "sending_tx" || withdrawStatus === "retrying" ||
-                withdrawStatus === "forwarding") && pollCount < maxPolls) {
-          await new Promise(r => setTimeout(r, 3000));
-          const statusUrl = `${SWAP_API_BASE}/pool-withdraw-status/${result.withdraw_id}`;
-          const statusRes = await fetch(statusUrl);
-          const statusData = await statusRes.json();
-
-          withdrawStatus = statusData.status;
-          pollCount++;
-
-          toast.update(loadingToastId, {
-            render: `${statusData.message || "Processing..."} (${pollCount * 3}s)`
-          });
-
-          if (withdrawStatus === "completed") {
-            toast.dismiss(loadingToastId);
-            toast.success(`Shielded swap initiated! ${sendAmount} DOT → ${sendToCurrency} to ${sendRecipient.slice(0, 6)}... (swap order: ${ffOrderId})`, {
-              position: "top-right",
-              autoClose: 10000,
-              hideProgressBar: false,
-              closeOnClick: false,
-              pauseOnHover: true,
-              draggable: true,
-              progress: undefined,
-              theme: "dark",
-            });
-          } else if (withdrawStatus === "failed") {
-            toast.dismiss(loadingToastId);
-            throw new Error(statusData.message || "Withdrawal failed");
-          }
-        }
-
-        if (withdrawStatus !== "completed" && pollCount >= maxPolls) {
-          toast.dismiss(loadingToastId);
-          toast.info(`Withdrawal ${result.withdraw_id} still processing. Swap order ${ffOrderId}. Check status later.`, {
-            position: "top-right",
-            autoClose: 10000,
-            hideProgressBar: false,
-            closeOnClick: false,
-            pauseOnHover: true,
-            draggable: true,
-            progress: undefined,
-            theme: "dark",
-          });
-        }
-      }
-
-      setSendRecipient("");
-      setSendAmount("");
-      setSendGasEstimate(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Send failed");
-      toast(`Send failed: ${err instanceof Error ? err.message : "Unknown error"}`, {
-        position: "top-right",
-        autoClose: 7000,
-        hideProgressBar: false,
-        closeOnClick: false,
-        pauseOnHover: true,
-        draggable: true,
-        progress: undefined,
-        theme: "dark",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const estimateSendGas = useCallback(async () => {
-    if (!sendAmount || parseFloat(sendAmount) <= 0 || isTestnet(selectedNetwork)) {
-      setSendGasEstimate(null);
-      return;
-    }
-
-    setSendGasLoading(true);
-    try {
-      const sourceNetwork = selectedNetwork === "kusama" ? "kusama" : "polkadot";
-      const networkConfig = NETWORKS[selectedNetwork];
-      if (!networkConfig?.shield_address) {
-        setSendGasEstimate(null);
-        return;
-      }
-
-      const provider = new ethers.BrowserProvider(
-        (window as any).ethereum || (window as any).talismanEth,
-      );
-      
-      const poolContract = new ethers.Contract(
-        networkConfig.shield_address,
-        networkConfig.abi,
-        provider
-      );
-
-      // Use static gas estimates - deposit ~50k, withdraw ~150k
-      const depositGas = 50000n;
-      const withdrawGas = 150000n;
-      
-      const totalGas = depositGas + withdrawGas;
-      const gasEstimateEth = Number(totalGas) / 1e18;
-      
-      if (gasEstimateEth > 0) {
-        setSendGasEstimate(`~${gasEstimateEth.toFixed(4)} ${networkConfig.asset || "DOT"}`);
-      } else {
-        setSendGasEstimate(null);
-      }
-    } catch (err) {
-      console.error("Gas estimation error:", err);
-      setSendGasEstimate(null);
-    } finally {
-      setSendGasLoading(false);
-    }
-  }, [sendAmount, sendFromCurrency, sendToCurrency, sendRecipient, selectedNetwork]);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      estimateSendGas();
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [estimateSendGas]);
-
-  // Fetch exchange rate for estimated receive amount
-  useEffect(() => {
-    if (!sendAmount || parseFloat(sendAmount) <= 0) {
-      setEstimatedReceive(null);
-      setSwapRate(null);
-      return;
-    }
-
-    const fetchRate = async () => {
-      const estimateGasFee = async () => {
-        try {
-          const networkConfig = NETWORKS[selectedNetwork];
-          if (!networkConfig?.shield_address) return "0.01";
-          const provider = new ethers.BrowserProvider(
-            (window as any).ethereum || (window as any).talismanEth,
-          );
-          const poolContract = new ethers.Contract(networkConfig.shield_address, networkConfig.abi, provider);
-          const amountWei = ethers.parseEther(sendAmount || "1");
-          let gasPrice = 2000000000n;
-          try {
-            const feeData = await provider.getFeeData();
-            gasPrice = feeData.maxFeePerGas || feeData.gasPrice || gasPrice;
-          } catch (e) {}
-          let depositGas = 50000n;
-          try {
-            const secretBytes = ethers.randomBytes(31);
-            const secretHex = "0x" + Array.from(secretBytes).map(b => b.toString(16).padStart(2, '0')).join('');
-            const secretBN = BigInt(secretHex);
-            const { poseidon1, poseidon2 } = await import("poseidon-lite");
-            const nullifier = poseidon2([secretBN, 1n]);
-            const precommitment = poseidon2([nullifier, secretBN]);
-            const valueAssetHash = poseidon2([amountWei.toString(), 0n]);
-            const commitment = poseidon2([valueAssetHash, precommitment]);
-            const commitmentHex = "0x" + commitment.toString(16).padStart(64, '0');
-            depositGas = await poolContract.depositNative.estimateGas(commitmentHex, { value: amountWei });
-          } catch (e) {
-            console.log("Gas estimation failed, using default:", e);
-          }
-          const feeEth = Number(depositGas * gasPrice) / 1e18;
-          return feeEth > 0 ? feeEth.toFixed(6) : "0.01";
-        } catch (e) {
-          return "0.01";
-        }
-      };
-
-      // Always estimate gas fee
-      const gasFee = await estimateGasFee();
-      setSendGasFee(gasFee);
-      
-      if (sendFromCurrency === sendToCurrency) {
-        setEstimatedReceive(gasFee);
-        setEstimatedReceiveLoading(false);
-        return;
-      }
-
-      // Different currencies - fetch exchange rate too
-      const toFixedFloat = (ccy: string) => ccy === "DOT" ? "DOTAH" : ccy;
-      
-      setEstimatedReceiveLoading(true);
-      try {
-        const response = await fetch(`${SWAP_API_BASE}/exchange_rate`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            fromCcy: toFixedFloat(sendFromCurrency),
-            toCcy: toFixedFloat(sendToCurrency),
-            amount: parseFloat(sendAmount) || 0,
-          }),
-        });
-        const data = await response.json();
-        console.log("[DEBUG fetchRate] Response data:", data);
-        
-        if (data.error) {
-          if (data.errors && data.errors.length > 0) {
-            const errorMsg = data.errors[0];
-            if (errorMsg === 'OFFLINE_FROM' || errorMsg === 'OFFLINE_TO')
-              setSwapRate('Currency temporarily unavailable, try later');
-            else if (errorMsg === 'MAINTENANCE_FROM' || errorMsg === 'MAINTENANCE_TO')
-              setSwapRate('Currency under maintenance, try later');
-            else
-              setSwapRate('Pair temporarily unavailable');
-          } else {
-            setSwapRate(data.error);
-          }
-          setEstimatedReceive(null);
-        } else if (data.response?.data?.to?.amount) {
-          const receivedAmount = parseFloat(data.response.data.to.amount);
-          setEstimatedReceive(receivedAmount.toFixed(4));
-          if (data.response.data.from?.rate && data.response.data.to?.rate) {
-            const rate = data.response.data.to.rate / data.response.data.from.rate;
-            setSwapRate(`1 ${sendFromCurrency} ≈ ${rate.toFixed(6)} ${sendToCurrency}`);
-          } else if (receivedAmount > 0) {
-            setSwapRate(`1 ${sendFromCurrency} ≈ ${(receivedAmount / parseFloat(sendAmount)).toFixed(6)} ${sendToCurrency}`);
-          }
-        } else {
-          setEstimatedReceive(null);
-          setSwapRate(null);
-        }
-      } catch (err) {
-        console.error("[DEBUG fetchRate] Error:", err);
-        setEstimatedReceive(null);
-        setSwapRate(null);
-      }
-      setEstimatedReceiveLoading(false);
-    };
-
-    const timer = setTimeout(() => {
-      fetchRate();
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [sendAmount, sendFromCurrency, sendToCurrency]);
-
   const handleBridge = async () => {
     if (evmAddress && isEvmAddress(evmAddress)) {
       toast(`ERROR: select a polkadot address not ethereum address`, {
@@ -5498,16 +4736,15 @@ const receipt = await tx.wait();
       return;
     }
 
-    // Validate DOT destination address format (accepts both Polkadot and EVM)
+    // Validate DOT destination address format
     if (
       toCurrency === "DOT" &&
       destinationAddress.trim() &&
-      !ispolkadotaddress(destinationAddress.trim()) &&
-      !isEvmAddress(destinationAddress.trim())
+      !ispolkadotaddress(destinationAddress.trim())
     ) {
-      toast.error("Invalid address format for DOT destination");
-      toast.error("Enter a Polkadot address or Ethereum address (0x...)");
-      console.error("Invalid address format provided for DOT swap");
+      toast.error("Invalid Polkadot address format for DOT destination");
+      toast.error("Select another Polkadot address");
+      console.error("Invalid Polkadot address format provided for DOT swap");
       return;
     }
     console.log(
@@ -5524,22 +4761,33 @@ const receipt = await tx.wait();
       return;
     }
 
-    // Support both EVM and Polkadot addresses for DOT destinations
-    let finalDestination = requiresDestinationAddress(
+    // Check if DOT destination address is EVM format (invalid)
+    const finalDestination = requiresDestinationAddress(
       fromCurrency,
       toCurrency,
     )
       ? destinationAddress.trim()
       : evmAddress;
 
-    // EVM address for DOT destination: convert to AccountId32 (append 24×0xEE)
     if (
-      toCurrency === "DOT" &&
+      toCurrency == "DOT" &&
       finalDestination &&
       isEvmAddress(finalDestination)
     ) {
-      const { eth2account32 } = await import("./transactions/adresses");
-      finalDestination = eth2account32(finalDestination);
+      toast.error(
+        `Invalid address format: DOT requires a Polkadot address, not EVM address`,
+        {
+          position: "top-right",
+          autoClose: 5000,
+          hideProgressBar: false,
+          closeOnClick: false,
+          pauseOnHover: true,
+          draggable: true,
+          progress: undefined,
+          theme: "dark",
+        },
+      );
+      return;
     }
 
     // Handle DOT→KSM cross-chain swap with local price checker
@@ -5750,7 +4998,7 @@ const receipt = await tx.wait();
         console.log(`returning trueee`);
         //  return true;
         const newapi = await ApiPromise.create({
-          provider: new WsProvider("wss://asset-hub-polkadot-rpc.n.dwellir.com"),
+          provider: new WsProvider("wss://sys.ibp.network/asset-hub-polkadot"),
           noInitWarn: true,
         });
         const tx2 = await KSM2ah(
@@ -6158,11 +5406,10 @@ const receipt = await tx.wait();
     }
   }, [evmAddress, fromCurrency, toCurrency, destinationAddress]);
 
-  // Validate destination address for DOT swaps (accepts both Polkadot and EVM addresses)
+  // Validate destination address for DOT swaps
   useEffect(() => {
     if (toCurrency === "DOT" && destinationAddress.trim()) {
-      const isValid = ispolkadotaddress(destinationAddress.trim()) || isEvmAddress(destinationAddress.trim());
-      if (!isValid) {
+      if (!ispolkadotaddress(destinationAddress.trim())) {
         toast.error("Invalid Polkadot address format for DOT destination", {
           position: "top-right",
           autoClose: 5000,
@@ -6204,19 +5451,12 @@ const receipt = await tx.wait();
   const fetchPoolComposition = async () => {
     setIsLoadingPoolData(true);
     setLoadingProgress({ processed: 0, total: 0, found: 0, currentAsset: "" });
-    console.log("[Privacy Dashboard] Starting pool scan for network:", selectedNetwork);
     try {
       const networkConfig = NETWORKS[selectedNetwork] as any;
-      console.log("[Privacy Dashboard] Network config:", networkConfig?.name);
       const rpcEndpoints = networkConfig?.rpcEndpoints || [networkConfig?.rpcEndpoint];
       const shieldAddr = networkConfig?.shield_address;
-      const wsEndpoints = networkConfig?.wsEndpoints || [networkConfig?.wsEndpoint];
-      console.log("[Privacy Dashboard] Using shield addr:", shieldAddr);
-      console.log("[Privacy Dashboard] Using RPCs:", rpcEndpoints);
-      console.log("[Privacy Dashboard] Using WS endpoints:", wsEndpoints);
-      const wsEndpoint = wsEndpoints?.[0];
+      const wsEndpoint = networkConfig?.wsEndpoint;
       if (!shieldAddr || !rpcEndpoints?.length) {
-        console.error("[Privacy Dashboard] Missing config - shieldAddr:", shieldAddr, "rpcEndpoints:", rpcEndpoints?.length);
         setPoolComposition([]);
         return [];
       }
@@ -6254,55 +5494,32 @@ const receipt = await tx.wait();
       // Native token
       setLoadingProgress((p) => ({ ...p, currentAsset: networkConfig.asset }));
       try {
-        console.log("[Privacy Dashboard] Querying native balance with ZeroAddress:", ethers.ZeroAddress);
-        const nativeBalance = await contract.getEscrowBalance(ethers.ZeroAddress);
-        console.log("[Privacy Dashboard] Native balance raw:", nativeBalance?.toString());
-        if (nativeBalance && nativeBalance > 0n) {
-          const amount = Number(ethers.formatUnits(nativeBalance, 18));
-          console.log("[Privacy Dashboard] Native balance:", amount, networkConfig.asset);
+        const nativeBalance = await contract.escrow(ethers.ZeroAddress);
+        if (nativeBalance > 0) {
           assets.push({
             symbol: networkConfig.asset,
-            amount,
+            amount: Number(ethers.formatUnits(nativeBalance, 18)),
             decimals: 18,
             assetId: 0,
           });
-        } else {
-          console.log("[Privacy Dashboard] No native balance or balance is 0");
         }
-      } catch (e: any) {
-        console.error("[Privacy Dashboard] Native balance query failed:", e?.message || e);
-      }
-
-      console.log("[Privacy Dashboard] Assets after native query:", assets.length);
+      } catch (_) {}
 
       // Dynamic Substrate asset discovery
       if (wsEndpoint) {
-        console.log("[Privacy Dashboard] Connecting to WebSocket:", wsEndpoint);
         try {
           const { ApiPromise, WsProvider } = await import("@polkadot/api");
           const wsProvider = new WsProvider(wsEndpoint);
-          console.log("[Privacy Dashboard] Creating API...");
           const api = await ApiPromise.create({
             provider: wsProvider,
             noInitWarn: true,
           });
-          console.log("[Privacy Dashboard] API ready, checking assets pallet...");
-          
-          // Derive Substrate address from shield address (H160 + 0xEE * 12)
-          const shieldBytes = ethers.getBytes(shieldAddr);
-          const substrateAddr = "0x" + Buffer.from(shieldBytes).toString("hex") + "ee".repeat(12);
-          const { encodeAddress } = await import("@polkadot/keyring");
-          const substrateSS58 = encodeAddress("0x" + Buffer.from(shieldBytes).toString("hex") + "ee".repeat(12), 42);
-          console.log("[Privacy Dashboard] Substrate pool address:", substrateSS58);
-          
           if (!api.query.assets || !api.query.assets.metadata) {
-            console.warn("[Privacy Dashboard] Assets metadata pallet not available");
+            console.warn("Assets metadata pallet not available");
             await api.disconnect();
             throw new Error("No assets metadata pallet");
           }
-          console.log("[Privacy Dashboard] Fetching assets metadata...");
           const assetsMetadata = await api.query.assets.metadata.entries();
-          console.log("[Privacy Dashboard] Found", assetsMetadata.length, "assets");
           const assetIds: number[] = [];
           const assetSymbols: Record<number, string> = {};
           const assetDecimals: Record<number, number> = {};
@@ -6352,39 +5569,20 @@ const receipt = await tx.wait();
           for (let i = 0; i < assetIds.length; i += batchSize) {
             const batch = assetIds.slice(i, i + batchSize);
             const batchPromises = batch.map(async (assetId) => {
-              let amount = 0;
-              let decimals = assetDecimals[assetId];
-              
-              // Try EVM contract
               try {
-                const bal = await contract.getEscrowBalance(precompileAddrs[assetId]);
-                if (bal > 0n) {
-                  amount = Number(ethers.formatUnits(bal, decimals));
+                const bal = await contract.escrow(precompileAddrs[assetId]);
+                if (bal > 0) {
+                  const amount = Number(
+                    ethers.formatUnits(bal, assetDecimals[assetId]),
+                  );
+                  return {
+                    symbol: assetSymbols[assetId],
+                    amount,
+                    decimals: assetDecimals[assetId],
+                    assetId,
+                  };
                 }
               } catch (_) {}
-              
-              // Try Substrate pallet-assets if no EVM balance
-              if (amount === 0) {
-                try {
-                  const accountData = await api.query.assets.account(assetId, substrateSS58);
-                  const account = accountData.toJSON() as any;
-                  if (account && account.balance) {
-                    const bal = BigInt(account.balance.toString());
-                    if (bal > 0n) {
-                      amount = Number(ethers.formatUnits(bal, decimals));
-                    }
-                  }
-                } catch (_) {}
-              }
-              
-              if (amount > 0) {
-                return {
-                  symbol: assetSymbols[assetId],
-                  amount,
-                  decimals,
-                  assetId,
-                };
-              }
               return null;
             });
             const batchResults = await Promise.all(batchPromises);
@@ -6414,7 +5612,6 @@ const receipt = await tx.wait();
       }
 
       assets.sort((a, b) => b.amount - a.amount);
-      console.log("[Privacy Dashboard] Scan complete. Found", assets.length, "assets:", assets.map(a => `${a.symbol}:${a.amount.toFixed(2)}`).join(", "));
       setPoolComposition(assets);
       return assets;
     } catch (error) {
@@ -6651,7 +5848,7 @@ const receipt = await tx.wait();
           gasPriceWei = BigInt(json.result);
         }
       } catch {
-        gasPriceWei = ethers.parseUnits("50", "gwei");
+        gasPriceWei = ethers.parseUnits("1", "gwei");
       }
 
       let gasUnits: bigint;
@@ -6659,32 +5856,33 @@ const receipt = await tx.wait();
       // Try to get a real gas estimate from the contract's deposit method
       try {
         const networkConfig = NETWORKS[selectedNetwork] as any;
-        
         if (
           networkConfig?.shield_address &&
           networkConfig?.abi &&
           amount &&
           Number(amount) > 0
         ) {
-          let provider: ethers.Provider;
-          if (selectedWalletEVM && isWalletConnected) {
-            provider = selectedWalletEVM;
-          } else if (networkConfig.rpcEndpoint) {
-            const rpcs = networkConfig.rpcEndpoints || [networkConfig.rpcEndpoint];
-            let rpcProvider: ethers.JsonRpcProvider | null = null;
+          // Always use a standalone RPC provider for gas estimation — wallet
+          // providers (WalletConnect, WagmiEthersProvider) don't support
+          // eth_estimateGas. The wallet signer is only needed for actual sends.
+          let provider: ethers.Provider | null = null;
+          const rpcs = (networkConfig as any).rpcEndpoints || [networkConfig.rpcEndpoint];
+          if (rpcs.length > 0) {
             for (const rpc of rpcs) {
               try {
-                rpcProvider = new ethers.JsonRpcProvider(rpc);
-                await rpcProvider.getBlockNumber();
+                const rpcProvider = new ethers.JsonRpcProvider(rpc);
+                if (!rpc.includes("eth-rpc.polkadot.io")) {
+                  await rpcProvider.getBlockNumber();
+                }
                 provider = rpcProvider;
                 break;
               } catch {
-                rpcProvider = null;
+                /* try next */
               }
             }
-            if (!provider) throw new Error("All RPC endpoints failed");
-          } else {
-            throw new Error("no provider for estimate");
+          }
+          if (!provider) {
+            throw new Error("All RPC endpoints failed for gas estimate");
           }
 
           const contract = new ethers.Contract(
@@ -6703,29 +5901,27 @@ const receipt = await tx.wait();
                 ethers.ZeroHash,
                 { value: depositAmount },
               );
+            } else if (selectedNetwork === "polkadot") {
+              // v7 pool: depositNative(bytes32 commitment) single-arg.
+              const v7Contract = new ethers.Contract(
+                "0x0D694Da746e73D1e255c1894F90e38170db45809",
+                ["function depositNative(bytes32) external payable"],
+                provider,
+              );
+              gasUnits = await v7Contract.depositNative.estimateGas(
+                ethers.toBeHex(1n, 32),
+                { value: depositAmount },
+              );
             } else {
-              // paseo_assethub, paseo_assethub_v2, polkadot all use depositNative
-              // Generate a valid commitment for gas estimation
-              const secretBytes = ethers.randomBytes(31);
-              const secretHex = "0x" + Array.from(secretBytes).map(b => b.toString(16).padStart(2, '0')).join('');
-              const secretBN = BigInt(secretHex);
-              const { poseidon2 } = await import("poseidon-lite");
-              const nullifier = poseidon2([secretBN, 1n]);
-              const precommitment = poseidon2([nullifier, secretBN]);
-              const valueAssetHash = poseidon2([depositAmount.toString(), 0n]);
-              const commitment = poseidon2([valueAssetHash, precommitment]);
-              const commitmentHex = "0x" + commitment.toString(16).padStart(64, '0');
-
+              // paseo v5/v6: depositNative(bytes32 commitment, bytes32 nullifierHash)
               gasUnits = await contract.depositNative.estimateGas(
-                commitmentHex,
+                ethers.toBeHex(1n, 32),
+                ethers.toBeHex(1n, 32),
                 { value: depositAmount },
               );
             }
           } else if (activeTab === "unshield") {
             throw new Error("unshield estimate not implemented via contract");
-          } else if (activeTab === "send") {
-            // Simple transfer — use fixed estimate
-            gasUnits = 21000n; // standard ETH transfer
           } else {
             throw new Error("unknown tab");
           }
@@ -6776,10 +5972,11 @@ const receipt = await tx.wait();
       }
 
       const totalCost = gasUnits * gasPriceWei;
-      const costNum = Number(ethers.formatEther(totalCost));
-      // Format similar to send tab - show 2 decimal places
-      if (costNum === 0) return "0";
-      return costNum.toFixed(2);
+      const costStr = ethers.formatEther(totalCost);
+      // Trim trailing zeros and trailing dot (avoid scientific notation like 3e-7)
+      return costStr.includes(".")
+        ? costStr.replace(/0+$/, "").replace(/\.$/, "")
+        : costStr;
     };
 
     let cancelled = false;
@@ -6826,27 +6023,32 @@ const receipt = await tx.wait();
             evmAddress={evmAddress}
             selectedNetwork={selectedNetwork}
             onAccountSelected={(account) => {
-              console.log("Selected account:", account.address);
+              console.log("Selected account:", account.address, "type:", account.type);
               setEvmAddress(account.address);
-              const talismanEth = (window as any).talismanEth;
-              if (talismanEth) {
-                const provider = new ethers.BrowserProvider(talismanEth);
-                setSelectedWalletEVM(provider);
+              // Distinguish EVM (0x) vs Substrate (SS58) accounts.
+              // Substrate wallets should NOT create a Talisman EVM provider.
+              if (account.address?.startsWith("0x")) {
+                const talismanEth = (window as any).talismanEth;
+                if (talismanEth) {
+                  setSelectedWalletEVM(new ethers.BrowserProvider(talismanEth));
+                }
+              } else {
+                setSelectedWalletEVM(null);
               }
               setIsWalletConnected(true);
             }}
             onWalletSelected={handleWalletSelected}
             setEvmAddress={setEvmAddress}
             setSelectedWalletEVM={setSelectedWalletEVM}
-            setPolkadotAddress={setPolkadotAddress}
             setIsWalletConnected={setIsWalletConnected}
+            setPolkadotAddress={setPolkadotAddress}
           />
         </div>
       </div>
 
       <div className="swap-container">
         <div
-          className={`swap-box ${activeTab === "bridge" || activeTab === "offramp" || activeTab === "send" || (activeTab === "shield" && generatedSecret) ? "no-shield-shape" : ""}`}
+          className={`swap-box ${activeTab === "bridge" || activeTab === "offramp" ? "no-shield-shape" : ""}`}
         >
           <div className="tabs">
             {selectedNetwork !== "base" && (
@@ -6862,23 +6064,6 @@ const receipt = await tx.wait();
                   onClick={() => setActiveTab("unshield")}
                 >
                   Unshield
-                </button>
-                <button
-                  className={`tab ${activeTab === "send" ? "active" : ""}`}
-                  onClick={() => setActiveTab("send")}
-                  disabled={isTestnet(selectedNetwork)}
-                  title={
-                    isTestnet(selectedNetwork)
-                      ? "Send not available on testnet"
-                      : undefined
-                  }
-                  style={
-                    isTestnet(selectedNetwork)
-                      ? { opacity: 0.6, cursor: "not-allowed" }
-                      : undefined
-                  }
-                >
-                  Send
                 </button>
                 <button
                   className={`tab ${activeTab === "bridge" ? "active" : ""}`}
@@ -7407,218 +6592,7 @@ const receipt = await tx.wait();
                   </div>
                 )}
 
-                {activeTab === "send" && (
-                  <div className="input-group">
-                    <div
-                      style={{
-                        textAlign: "center",
-                        padding: "1rem 0 0.5rem 0",
-                        fontSize: "1.1rem",
-                        fontWeight: 500,
-                        color: "#a78bfa",
-                      }}
-                    >
-                      Pay any invoice privatly
-                    </div>
-
-                    <div
-                      className="send-info-box"
-                      style={{
-                        margin: "0.5rem 1rem 1rem 1rem",
-                        padding: "0.75rem 1rem",
-                        background: "rgba(124, 58, 237, 0.08)",
-                        border: "1px solid rgba(124, 58, 237, 0.2)",
-                        borderRadius: "10px",
-                        fontSize: "0.8rem",
-                        color: "#b0a0d0",
-                        lineHeight: "1.5",
-                        textAlign: "left",
-                      }}
-                    >
-                      <strong style={{ color: "#a78bfa" }}>How it works</strong><br />
-                      Your coins are sent into the shielded<br />
-                      pool on Polkadot, withdrawn<br />
-                      anonymously, and swapped into {sendToCurrency} —<br />
-                      with no on-chain link between sender<br />
-                      and receiver.
-                    </div>
-
-                    <div className="swap-interface">
-                      <div className="currency-selection">
-                        <div className="currency-input">
-                          <label>Send Coin:</label>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, overflow: "hidden" }}>
-                            {getAvailableCurrencies(selectedNetwork).find(c => c.symbol === sendFromCurrency)?.logo && (
-                              <img 
-                                src={getAvailableCurrencies(selectedNetwork).find(c => c.symbol === sendFromCurrency)?.logo} 
-                                alt={sendFromCurrency}
-                                style={{ width: 24, height: 24, flexShrink: 0 }} 
-                              />
-                            )}
-                            <select
-                              value={sendFromCurrency}
-                              onChange={(e) => setSendFromCurrency(e.target.value)}
-                              className="currency-select"
-                              style={{ flex: 1, minWidth: 0 }}
-                            >
-                              {getAvailableCurrencies(selectedNetwork).map((c) => (
-                                <option key={c.symbol} value={c.symbol}>
-                                  {c.symbol} - {c.name}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        </div>
-
-                        <div
-                          className="swap-arrow"
-                          onClick={() => {
-                            const temp = sendFromCurrency;
-                            setSendFromCurrency(sendToCurrency);
-                            setSendToCurrency(temp);
-                          }}
-                        >
-                          ⇄
-                        </div>
-
-                        <div className="currency-input">
-                          <label>Receiver Coin:</label>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, overflow: "hidden" }}>
-                            {getAvailableCurrencies(selectedNetwork).find(c => c.symbol === sendToCurrency)?.logo && (
-                              <img 
-                                src={getAvailableCurrencies(selectedNetwork).find(c => c.symbol === sendToCurrency)?.logo} 
-                                alt={sendToCurrency}
-                                style={{ width: 24, height: 24, flexShrink: 0 }} 
-                              />
-                            )}
-                            <select
-                              value={sendToCurrency}
-                              onChange={(e) => setSendToCurrency(e.target.value)}
-                              className="currency-select"
-                              style={{ flex: 1, minWidth: 0 }}
-                            >
-                              {getAvailableCurrencies(selectedNetwork)
-                                .map((c) => (
-                                  <option key={c.symbol} value={c.symbol}>
-                                    {c.symbol} - {c.name}
-                                  </option>
-                                ))}
-                            </select>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="token-input">
-                        <label>Recipient Address:</label>
-                        <input
-                          type="text"
-                          placeholder={sendFromCurrency === sendToCurrency 
-                            ? "Enter recipient address (0x... or SS58 address)"
-                            : `Enter your ${sendToCurrency} wallet address`}
-                          value={sendRecipient}
-                          onChange={(e) => setSendRecipient(e.target.value)}
-                          className="amount-input"
-                          style={{
-                            boxSizing: "border-box",
-                          }}
-                        />
-                      </div>
-
-                      <div className="token-input">
-                        <label>
-                          Amount: {sendAmount || "0"} {sendFromCurrency}
-                        </label>
-                        <input
-                          type="number"
-                          placeholder="0.0"
-                          value={sendAmount}
-                          onChange={(e) => setSendAmount(e.target.value)}
-                          min="1"
-                          step="0.1"
-                          className="amount-input"
-                          style={{
-                            boxSizing: "border-box",
-                          }}
-                        />
-                      </div>
-
-                      {estimatedReceiveLoading && (
-                        <div style={{ textAlign: "center", marginTop: "0.5rem", color: "#a855f7" }}>
-                          Getting rate...
-                        </div>
-                      )}
-
-                      {estimatedReceive && !estimatedReceiveLoading && (
-                        <div style={{ textAlign: "center", marginTop: "0.5rem", color: "#10b981" }}>
-                          {sendFromCurrency === sendToCurrency 
-                            ? `Estimated tx fee: ~${estimatedReceive} ${sendToCurrency}`
-                            : `Estimated Receiver amount: ${estimatedReceive} ${sendToCurrency}`}
-                        </div>
-                      )}
-                      
-                      {swapRate && sendFromCurrency !== sendToCurrency && (
-                        <div style={{ textAlign: "center", marginTop: "0.25rem", color: "#a78bfa", fontSize: "0.85rem" }}>
-                          {swapRate}
-                        </div>
-                      )}
-                      
-                      {sendGasFee && !estimatedReceiveLoading && (
-                        <div style={{ textAlign: "center", marginTop: "0.25rem", color: "#f59e0b", fontSize: "0.8rem" }}>
-                          Est. network fee: ~{sendGasFee} {sendFromCurrency}
-                        </div>
-                      )}
-
-                      {sendGasLoading && (
-                        <div style={{ textAlign: "center", marginTop: "0.5rem", color: "#a855f7" }}>
-                          Estimating gas...
-                        </div>
-                      )}
-
-                      <button
-                        className={`action-button swap-button ${isLoading ? "loading" : ""}`}
-                        onClick={handleSendTransaction}
-                        disabled={!sendRecipient || !sendAmount || isTestnet(selectedNetwork) || isLoading}
-                        style={{
-                          width: "100%",
-                          marginTop: "1rem",
-                          padding: "1rem",
-                          background:
-                            !sendRecipient || !sendAmount || isTestnet(selectedNetwork) || isLoading
-                              ? "#333"
-                              : "linear-gradient(135deg, #7c3aed, #a78bfa)",
-                          border: "none",
-                          borderRadius: "12px",
-                          color: "#fff",
-                          fontSize: "1rem",
-                          fontWeight: 600,
-                          cursor:
-                            !sendRecipient || !sendAmount || isTestnet(selectedNetwork) || isLoading
-                              ? "not-allowed"
-                              : "pointer",
-                        }}
-                      >
-                        {isLoading
-                          ? <><span className="loading-spinner" style={{marginRight: 8}}></span>Processing shielded transfer...</>
-                          : isTestnet(selectedNetwork)
-                            ? "Send disabled for testnet"
-                            : `Send ${sendFromCurrency} → ${sendToCurrency}`}
-                      </button>
-
-                      <div
-                        style={{
-                          textAlign: "center",
-                          marginTop: "0.75rem",
-                          fontSize: "0.8rem",
-                          color: "#666",
-                        }}
-                      >
-                        Shielded swap & send — receiver gets {sendToCurrency}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {activeTab !== "bridge" && activeTab !== "send" && (
+                {activeTab !== "bridge" && (
                   <div className="token-input">
                     <div className="amount-slider-container">
                       <label>
@@ -7854,7 +6828,7 @@ const receipt = await tx.wait();
                           opacity: 0.75,
                         }}
                       >
-                        Gas Est:{" "}
+                        Gas Price:{" "}
                         {isGasPriceLoading ? (
                           <span style={{ opacity: 0.7 }}>Calculating...</span>
                         ) : estimatedGasCost ? (
@@ -7908,23 +6882,6 @@ const receipt = await tx.wait();
                     ) : generatedSecret ? (
                       <div className="generated-secret">
                         <span>Generated Secret: {generatedSecret}</span>
-                        <button
-                          className="copy-secret-btn"
-                          onClick={() => navigator.clipboard.writeText(generatedSecret)}
-                          title="Copy to clipboard"
-                          style={{
-                            marginLeft: "8px",
-                            padding: "4px 8px",
-                            background: "#2d3748",
-                            border: "1px solid #4a5568",
-                            borderRadius: "4px",
-                            color: "#e2e8f0",
-                            cursor: "pointer",
-                            fontSize: "12px",
-                          }}
-                        >
-                          Copy
-                        </button>
                       </div>
                     ) : null}
                   </div>
@@ -7942,7 +6899,7 @@ const receipt = await tx.wait();
                 )}
               </div>
               {error && <div className="error-message">{error}</div>}
-              {(activeTab !== "bridge" || swapStage === "input") && activeTab !== "send" && (
+              {(activeTab !== "bridge" || swapStage === "input") && (
                 <button
                   className={`swap-button ${isLoading ? "loading" : ""}`}
                   onClick={
@@ -8269,7 +7226,8 @@ const receipt = await tx.wait();
               <div className="help-section">
                 <h3>Shielded Pool Composition</h3>
                 <p>
-                  Using Zero Knowledge, your assets become indistinguishable from other assets in the pool.
+                  Click "Scan Pool" to query assets currently in the privacy
+                  pool.
                 </p>
                 {!isLoadingPoolData && poolComposition.length > 0 && (
                   <div
@@ -8670,6 +7628,52 @@ const receipt = await tx.wait();
                         fontWeight: "bold",
                       }}
                     >
+                      Primary Color
+                    </label>
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: "10px",
+                        alignItems: "center",
+                      }}
+                    >
+                      <input
+                        type="color"
+                        value={backgroundColor}
+                        onChange={(e) => setBackgroundColor(e.target.value)}
+                        style={{
+                          width: "60px",
+                          height: "60px",
+                          borderRadius: "8px",
+                          border: "2px solid #333",
+                          cursor: "pointer",
+                        }}
+                      />
+                      <div style={{ flex: 1 }}>
+                        <div
+                          style={{
+                            background: backgroundColor,
+                            height: "30px",
+                            borderRadius: "6px",
+                            border: "1px solid #444",
+                            marginBottom: "0.25rem",
+                          }}
+                        />
+                        <code style={{ color: "#888", fontSize: "0.8rem" }}>
+                          {backgroundColor}
+                        </code>
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ marginBottom: "1rem" }}>
+                    <label
+                      style={{
+                        display: "block",
+                        marginBottom: "0.5rem",
+                        color: "#ccc",
+                        fontWeight: "bold",
+                      }}
+                    >
                       Gradient Color (Edges)
                     </label>
                     <div
@@ -8679,7 +7683,7 @@ const receipt = await tx.wait();
                         alignItems: "center",
                       }}
                     >
-<input
+                      <input
                         type="color"
                         value={gradientColor}
                         onChange={(e) => setGradientColor(e.target.value)}
@@ -8703,98 +7707,6 @@ const receipt = await tx.wait();
                         />
                         <code style={{ color: "#888", fontSize: "0.8rem" }}>
                           {gradientColor}
-                        </code>
-                      </div>
-                    </div>
-                  </div>
-                  <div style={{ marginBottom: "1rem" }}>
-                    <label
-                      style={{
-                        display: "block",
-                        marginBottom: "0.5rem",
-                        color: "#ccc",
-                        fontWeight: "bold",
-                      }}
-                    >
-                      Background color
-                    </label>
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: "10px",
-                        alignItems: "center",
-                      }}
-                    >
-                      <input
-                        type="color"
-                        value={modalBackgroundColor}
-                        onChange={(e) => setModalBackgroundColor(e.target.value)}
-                        style={{
-                          width: "60px",
-                          height: "60px",
-                          borderRadius: "8px",
-                          border: "2px solid #333",
-                          cursor: "pointer",
-                        }}
-                      />
-                      <div style={{ flex: 1 }}>
-                        <div
-                          style={{
-                            background: modalBackgroundColor,
-                            height: "30px",
-                            borderRadius: "6px",
-                            border: "1px solid #444",
-                            marginBottom: "0.25rem",
-                          }}
-                        />
-                        <code style={{ color: "#888", fontSize: "0.8rem" }}>
-                          {modalBackgroundColor}
-                        </code>
-                      </div>
-                    </div>
-                  </div>
-                  <div style={{ marginBottom: "1rem" }}>
-                    <label
-                      style={{
-                        display: "block",
-                        marginBottom: "0.5rem",
-                        color: "#ccc",
-                        fontWeight: "bold",
-                      }}
-                    >
-                      Label Color
-                    </label>
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: "10px",
-                        alignItems: "center",
-                      }}
-                    >
-                      <input
-                        type="color"
-                        value={accentColor}
-                        onChange={(e) => setAccentColor(e.target.value)}
-                        style={{
-                          width: "60px",
-                          height: "60px",
-                          borderRadius: "8px",
-                          border: "2px solid #333",
-                          cursor: "pointer",
-                        }}
-                      />
-                      <div style={{ flex: 1 }}>
-                        <div
-                          style={{
-                            background: accentColor,
-                            height: "30px",
-                            borderRadius: "6px",
-                            border: "1px solid #444",
-                            marginBottom: "0.25rem",
-                          }}
-                        />
-                        <code style={{ color: "#888", fontSize: "0.8rem" }}>
-                          {accentColor}
                         </code>
                       </div>
                     </div>
@@ -8828,21 +7740,54 @@ const receipt = await tx.wait();
                     onClick={() => {
                       setBackgroundColor("#09002b");
                       setGradientColor("#000000");
-                      setModalBackgroundColor("#1a1a2e");
-                      setAccentColor("#9333ea");
-                      setActiveTheme("default");
                     }}
                     style={{
-                      background: "transparent",
-                      color: accentColor,
-                      border: `2px solid ${accentColor}`,
+                      background: "linear-gradient(135deg, #9333ea, #e91e63)",
+                      color: "white",
+                      border: "none",
+                      borderRadius: "8px",
+                      padding: "10px 20px",
+                      cursor: "pointer",
+                      fontWeight: "bold",
+                      marginRight: "10px",
+                    }}
+                  >
+                    Reset to Default
+                  </button>
+                  <button
+                    onClick={() => {
+                      setBackgroundColor("#1a1a2e");
+                      setGradientColor("#16213e");
+                    }}
+                    style={{
+                      background: "linear-gradient(135deg, #1a1a2e, #16213e)",
+                      color: "white",
+                      border: "none",
+                      borderRadius: "8px",
+                      padding: "10px 20px",
+                      cursor: "pointer",
+                      fontWeight: "bold",
+                      marginRight: "10px",
+                    }}
+                  >
+                    Dark Blue Theme
+                  </button>
+                  <button
+                    onClick={() => {
+                      setBackgroundColor("#0f172a");
+                      setGradientColor("#1e293b");
+                    }}
+                    style={{
+                      background: "linear-gradient(135deg, #0f172a, #1e293b)",
+                      color: "white",
+                      border: "none",
                       borderRadius: "8px",
                       padding: "10px 20px",
                       cursor: "pointer",
                       fontWeight: "bold",
                     }}
                   >
-                    Reset to Default
+                    Slate Theme
                   </button>
                 </div>
               </div>
@@ -8989,71 +7934,6 @@ const receipt = await tx.wait();
                         }}
                       >
                         {ponyMode ? "Enabled" : "Click to enable"}
-                      </div>
-                    </div>
-                  </div>
-                  <div style={{ marginTop: "1.5rem" }}>
-                    <div style={{ color: "#ccc", fontWeight: "bold", marginBottom: "0.75rem" }}>
-                      Preset Themes
-                    </div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "1rem" }}>
-                      <div
-                        onClick={() => {
-                          setBackgroundColor("#1a1a2e");
-                          setGradientColor("#16213e");
-                          setModalBackgroundColor("#1a1a2e");
-                          setActiveTheme("darkblue");
-                        }}
-                        style={{
-                          background: "rgba(0,0,0,0.2)",
-                          borderRadius: "8px",
-                          padding: "1rem",
-                          border: `2px solid ${activeTheme === "darkblue" ? "#9333ea" : "rgb(51, 51, 51)"}`,
-                          textAlign: "center",
-                          cursor: "pointer",
-                          transition: "0.2s",
-                        }}
-                      >
-                        <div style={{ color: "#ccc", fontWeight: "bold" }}>Dark Blue</div>
-                      </div>
-                      <div
-                        onClick={() => {
-                          setBackgroundColor("#0f172a");
-                          setGradientColor("#1e293b");
-                          setModalBackgroundColor("#0f172a");
-                          setActiveTheme("slate");
-                        }}
-                        style={{
-                          background: "rgba(0,0,0,0.2)",
-                          borderRadius: "8px",
-                          padding: "1rem",
-                          border: `2px solid ${activeTheme === "slate" ? "#9333ea" : "rgb(51, 51, 51)"}`,
-                          textAlign: "center",
-                          cursor: "pointer",
-                          transition: "0.2s",
-                        }}
-                      >
-                        <div style={{ color: "#ccc", fontWeight: "bold" }}>Slate</div>
-                      </div>
-                      <div
-                        onClick={() => {
-                          setActiveTheme("ghost");
-                          setModalBackgroundColor("#793475");
-                          setAccentColor("#f9fc9f");
-                          setBackgroundColor("#793475");
-                        }}
-                        style={{
-                          background: "rgba(0,0,0,0.2)",
-                          borderRadius: "8px",
-                          padding: "1rem",
-                          border: `2px solid ${activeTheme === "ghost" ? "#9333ea" : "rgb(51, 51, 51)"}`,
-                          textAlign: "center",
-                          cursor: "pointer",
-                          transition: "0.2s",
-                        }}
-                      >
-                        <img src="/ghost-backgrounds/eyes.png" alt="" style={{ width: "90%", height: "70%", marginBottom: "0.5rem" }} />
-                        <div style={{ color: "#ccc", fontWeight: "bold" }}>Ghost</div>
                       </div>
                     </div>
                   </div>
