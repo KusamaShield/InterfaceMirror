@@ -11,7 +11,6 @@ import {
   TalismanWallet,
   NovaWallet,
   SubWallet,
-  MantaWallet,
   PolkaGate,
   FearlessWallet,
   EnkryptWallet,
@@ -75,15 +74,21 @@ export const UnifiedWalletSelector: React.FC<UnifiedWalletSelectorProps> = ({
 }) => {
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const walletModalOpenRef = useRef(false); // track talisman modal open state
   const { open: openAppKit } = useAppKit();
   const { address: appKitAddress, isConnected: appKitConnected } = useAppKitAccount();
   const { disconnect: disconnectAppKit } = useDisconnect();
   const { data: walletClient } = useWalletClient();
 
-  // Close dropdown when clicking outside
+  // Close dropdown when clicking outside — BUT NOT when wallet modal is open
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
+      if (walletModalOpenRef.current) {
+        console.log("[WALLET-SELECT] clickOutside IGNORED — wallet modal is open");
+        return;
+      }
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        console.log("[WALLET-SELECT] clickOutside — closing dropdown");
         setShowDropdown(false);
       }
     };
@@ -122,7 +127,55 @@ export const UnifiedWalletSelector: React.FC<UnifiedWalletSelectorProps> = ({
     }
   }, [appKitConnected, appKitAddress, walletClient]);
 
+  console.log("[WALLET-SELECT] UnifiedWalletSelector mounted, network:", selectedNetwork, "connected:", isWalletConnected);
+
+  // Debug: dump all injected wallet objects on the page
+  useEffect(() => {
+    console.log("%c[WALLET-DEBUG] Injected wallet objects:", "color:#eab308;font-weight:bold");
+    const w = window as any;
+    console.log("  injectedWeb3:", !!w?.injectedWeb3, w?.injectedWeb3 ? Object.keys(w.injectedWeb3) : null);
+    if (w?.injectedWeb3) {
+      for (const [key, val] of Object.entries(w.injectedWeb3)) {
+        console.log(`    [${key}]: version=${(val as any)?.version}, hasEnable=${!!((val as any)?.enable)}, hasConnect=${!!((val as any)?.connect)}`);
+      }
+    }
+    console.log("  talismanEth:", !!w?.talismanEth, w?.talismanEth?.selectedAddress);
+    console.log("  ethereum:", !!w?.ethereum);
+    if (w?.ethereum) {
+      console.log("  ethereum.isMetaMask:", w.ethereum.isMetaMask);
+      console.log("  ethereum.isTalisman:", w.ethereum.isTalisman);
+      console.log("  ethereum.isPolkadot:", w.ethereum.isPolkadot);
+    }
+    console.log("  walletExtension:", !!w?.walletExtension, w?.walletExtension ? Object.keys(w.walletExtension) : null);
+    console.log("  polkadotJs:", !!w?.polkadotJs);
+    console.log("  __appKit:", !!w?.__appKit);
+
+    // Per-wallet installed check
+    console.log("%c[WALLET-DEBUG] Per-wallet .installed check:", "color:#eab308");
+    const walletsToCheck = [
+      new TalismanWallet(),
+      new SubWallet(),
+      new PolkaGate(),
+      new FearlessWallet(),
+      new EnkryptWallet(),
+      new PolkadotjsWallet(),
+      new AlephZeroWallet(),
+    ];
+    for (const wal of walletsToCheck) {
+      console.log(`  ${wal.title} (${wal.extensionName}): installed=${wal.installed}`);
+    }
+  }, []);
+
+  // Cleanup: ensure walletModalOpenRef is reset on unmount
+  useEffect(() => {
+    return () => {
+      walletModalOpenRef.current = false;
+      console.log("[WALLET-SELECT] UnifiedWalletSelector unmounting, resetting walletModalOpenRef");
+    };
+  }, []);
+
   const handleEvmWalletsClick = () => {
+    console.log("[WALLET-SELECT] handleEvmWalletsClick — opening AppKit modal");
     setShowDropdown(false);
     openAppKit();
   };
@@ -212,7 +265,6 @@ export const UnifiedWalletSelector: React.FC<UnifiedWalletSelectorProps> = ({
               new TalismanWallet(),
               ...(selectedNetwork === "polkadot" ? [] : [new NovaWallet()]),
               new SubWallet(),
-              new MantaWallet(),
               new PolkaGate(),
               new FearlessWallet(),
               new EnkryptWallet(),
@@ -229,11 +281,63 @@ export const UnifiedWalletSelector: React.FC<UnifiedWalletSelectorProps> = ({
                 <span className="wallet-arrow">→</span>
               </div>
             }
+            onWalletConnectOpen={(wallets) => {
+              walletModalOpenRef.current = true;
+              console.log("%c[WALLET-SELECT] modal OPENED", "color:#f59e0b;font-weight:bold");
+              console.log("[WALLET-SELECT] wallets:", wallets?.map((w: any) => ({
+                title: w.title,
+                extensionName: w.extensionName,
+                installed: w.installed,
+              })));
+              const w = window as any;
+              if (w?.injectedWeb3) {
+                console.log("[WALLET-SELECT] injectedWeb3 keys:", Object.keys(w.injectedWeb3));
+                for (const [key, val] of Object.entries(w.injectedWeb3)) {
+                  console.log(`  [${key}]:`, { version: (val as any)?.version, hasEnable: !!((val as any)?.enable) });
+                }
+              } else {
+                console.warn("[WALLET-SELECT] NO window.injectedWeb3 found!");
+              }
+            }}
+            onWalletConnectClose={() => {
+              walletModalOpenRef.current = false;
+              console.log("%c[WALLET-SELECT] modal CLOSED", "color:#f59e0b;font-weight:bold");
+            }}
+            onError={(error?: unknown) => {
+              if (error) {
+                console.error("%c[WALLET-SELECT] WalletSelect reported ERROR:", "color:#ef4444;font-weight:bold", error);
+              } else {
+                console.log("[WALLET-SELECT] WalletSelect error cleared");
+              }
+            }}
             onAccountSelected={(account) => {
-              onAccountSelected(account);
+              console.log("%c[WALLET-SELECT] onAccountSelected fired", "color:#3b82f6;font-weight:bold", {
+                address: account?.address,
+                type: account?.type,
+                name: account?.name,
+                source: account?.source,
+                wallet: account?.wallet?.title,
+              });
+              try {
+                onAccountSelected(account);
+              } catch (err: any) {
+                console.error("[WALLET-SELECT] onAccountSelected wrapper ERROR:", err);
+              }
               setShowDropdown(false);
             }}
-            onWalletSelected={onWalletSelected}
+            onWalletSelected={(wallet) => {
+              console.log("%c[WALLET-SELECT] onWalletSelected fired", "color:#3b82f6;font-weight:bold", {
+                title: wallet?.title,
+                extensionName: wallet?.extensionName,
+                installed: wallet?.installed,
+                type: wallet?.type,
+              });
+              try {
+                onWalletSelected(wallet);
+              } catch (err: any) {
+                console.error("[WALLET-SELECT] onWalletSelected wrapper ERROR:", err);
+              }
+            }}
           />
 
           <div className="wallet-section-header" style={{ marginTop: "12px" }}>

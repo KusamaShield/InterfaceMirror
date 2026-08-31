@@ -176,6 +176,10 @@ export class LeanIMT {
     }
     return -1;
   }
+
+  getLeaves(): bigint[] {
+    return [...this.leaves];
+  }
 }
 
 // ---------------------------------------------------------------------------

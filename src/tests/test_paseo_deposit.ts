@@ -111,9 +111,10 @@ async function main() {
 
     // Build deposit for 1 PAS
     const amount = "1";
-    const amountWei = ethers.parseEther(amount);
+    const amountWei = ethers.parseEther(amount);           // 10^18 wei (EVM msg.value)
+    const amountPlanck = BigInt(Math.round(Number(amount) * 1e12)); // 10^12 planck (native, 12 dp)
     console.log("\n=== Building Deposit ===");
-    console.log("Amount:", amount, "PAS =", amountWei.toString(), "wei");
+    console.log("Amount:", amount, "PAS =", amountWei.toString(), "wei =", amountPlanck.toString(), "planck");
 
     const { commitment, nullifierHash, secretHex } = await generateCommitment(amountWei);
     console.log("Commitment:", commitment);
@@ -123,11 +124,12 @@ async function main() {
     const depositIface = new ethers.Interface(["function depositNative(bytes32 commitment) external payable"]);
     const evmCallData = depositIface.encodeFunctionData("depositNative", [commitment]);
 
-    // revive.call extrinsic
+    // revive.call extrinsic — `value` is in NATIVE units (plancks), not wei.
+    // 1 PAS = 10^12 plancks; the pallet converts native → EVM via NativeToEthRatio.
     if (!api.tx.revive?.call) throw new Error("revive.call not available");
     const tx = api.tx.revive.call(
       CONTRACT,
-      amountWei.toString(),
+      amountPlanck.toString(),
       { refTime: 200000n, proofSize: 0n },
       null,
       evmCallData,

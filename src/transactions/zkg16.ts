@@ -6,7 +6,6 @@
  */
 
 import { ethers } from "ethers";
-import * as snarkjs from "snarkjs";
 import { poseidon1, poseidon2, poseidon3 } from "poseidon-lite";
 import worker from "../workers/snarkjs-client";
 
@@ -70,17 +69,17 @@ function maskToField(val: bigint): bigint {
 
 export async function preloadZkey(zkeyPath: string): Promise<void> {
   console.log("Preloading zkey:", zkeyPath);
-  return Promise.resolve();
+  return worker.preloadZkey(zkeyPath);
 }
 
 export async function preloadWasm(wasmPath: string): Promise<void> {
   console.log("Preloading wasm:", wasmPath);
-  return Promise.resolve();
+  return worker.preloadWasm(wasmPath);
 }
 
 export async function preloadWasmsnark(): Promise<void> {
   console.log("Preloading wasmsnark");
-  return Promise.resolve();
+  return worker.preloadWasmsnark();
 }
 
 export function generateCommitment(
@@ -261,9 +260,11 @@ export async function zkWithdraw(
       formattedPublicSignals,
     ];
 
-    const calldata = await snarkjs.groth16.exportSolidityCallData(
+    // Use the worker for exportSolidityCallData (avoids pulling the
+    // full snarkjs bundle into the main thread).
+    const calldata = await worker.groth16ExportSolidityCallData(
       proof,
-      publicSignals,
+      publicSignals.map((s: string) => s.toString()),
     );
     const parsedCalldata = JSON.parse("[" + calldata + "]");
 
