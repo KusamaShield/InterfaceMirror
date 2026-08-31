@@ -1,11 +1,12 @@
 {
   "name": "kusama-shield",
   "private": true,
-  "version": "0.0.57",
+  "version": "0.0.58",
   "type": "module",
   "scripts": {
     "dev": "vite --host",
     "local": "vite",
+    "localvite": "vite --host --debug plugin-transform",
     "txgen": "node src/tests/txtest.js",
     "check_balance": "npx tsx src/tests/balance.ts",
     "gasestimate": "npx tsx src/tests/gas_estimate.ts",
