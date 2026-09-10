@@ -34,12 +34,14 @@ import {
   getChainRoot,
   submitReviveDeposit,
   submitReviveWithdraw,
+  submitWithdrawViaProxy,
   generateWithdrawProof,
   formatProof,
   parseDotAmount,
   deriveV7Commitment,
   ss58ToEth,
 } from "./transactions/revivePolkadot";
+import { generateEcdsaWallet, computeFallbackSS58, submitDeposit, sweepBalance } from "./transactions/forwarder";
 import { poseidon1, poseidon2, poseidon3 } from "poseidon-lite";
 import {
   westend_pool,
@@ -209,34 +211,45 @@ const NETWORKS = {
 kusama: {
     name: "Kusama Assethub",
     type: "mainnet",
-    wsEndpoint: "wss://kusama-asset-hub-rpc.polkadot.io",
+    asset: "KSM",
+    logo: "/favicon-dark.svg",
+    chain_id: 420420418,
     rpcEndpoint: "https://kusama-rpc.laissez-faire.trade",
     rpcEndpoints: [
       "https://kusama-rpc.laissez-faire.trade",
     ],
-    asset: "KSM",
-    chain_id: 420420418,
-    shield_address: "0x625159459EB6C50C4F4b126A955B18d5c4DCA573",
-    verifier_address: "0x66988131CFfd10d2804ffaC93Ac302D0886D7829",
-    leanIMT_address: "0xc16F8f88c1C2Aa4dddF765Fa5D9739E5bDC7d373",
+    wsEndpoint: "wss://asset-hub-kusama-rpc.n.dwellir.com",
+    wsEndpoints: [
+      "wss://asset-hub-kusama-rpc.n.dwellir.com",
+      "wss://api-asset-hub-kusama.n.dwellir.com/64987a87-5544-491a-8ded-b9a015b82f03",
+      "wss://kusama-asset-hub-rpc.polkadot.io",
+    ],
+    faucet: "",
+    block_explorer: "https://blockscout-kusama.polkadot.io/",
+    shield_address: "0xC86A3B1A2EbBEc8d32949A1E75e3BafE50b5f1D4",
+    verifier_address: "0xCD8b8543E5F730F2A2bB4aC528aC2053e73c5D94",
+    leanIMT_address: "0xC86A3B1A2EbBEc8d32949A1E75e3BafE50b5f1D4",
+    poseidonT3_address: "0x386C1de5bDc04d945b9e9f5b9eD234B2b9C64B79",
     abi: [
-      "function depositNative(bytes32 commitment, bytes32 nullifierHash) external payable",
-      "function depositAsset(uint256 assetId, uint256 amount, bytes32 commitment, bytes32 nullifierHash) external",
-      "function depositAssetDirect(uint256 assetId, uint256 amount, bytes32 commitment, bytes32 nullifierHash) external",
-      "function withdraw(uint256[2] calldata pA, uint256[2][2] calldata pB, uint256[2] calldata pC, uint[7] calldata pubSignals, address asset, uint256 amount, address recipient) external",
-      "function withdrawNative(uint256[2] calldata pA, uint256[2][2] calldata pB, uint256[2] calldata pC, uint[7] calldata pubSignals, uint256 amount) external",
-      "function withdrawAsset(uint256[2] calldata pA, uint256[2][2] calldata pB, uint256[2] calldata pC, uint[7] calldata pubSignals, uint256 assetId, uint256 amount) external",
-      "function proxy_withdraw(uint256[2] calldata pA, uint256[2][2] calldata pB, uint256[2] calldata pC, uint[7] calldata pubSignals, address asset, uint256 amount, address recipient) external",
+      "event Deposit(address indexed asset, bytes32 commitment)",
+      "event Withdrawal(address indexed asset, uint256 amount, address indexed recipient, uint256 newCommitment)",
+      "event NewCommitment(bytes32 newCommitmentHash)",
+      "function depositNative(bytes32 commitment) external payable",
+      "function depositAsset(uint256 assetId, uint256 amount, bytes32 commitment) external",
+      "function depositAssetDirect(uint256 assetId, uint256 amount, bytes32 commitment) external",
+      "function withdraw(uint256[2] calldata pA, uint256[2][2] calldata pB, uint256[2] calldata pC, uint256[8] calldata pubSignals, address recipient) external",
+      "function proxy_withdraw(uint256[2] calldata pA, uint256[2][2] calldata pB, uint256[2] calldata pC, uint256[8] calldata pubSignals, address recipient) external",
       "function currentRoot() external view returns (uint256)",
       "function treeSize() external view returns (uint256)",
       "function escrow(address) external view returns (uint256)",
-      "function deposits(bytes32 nullifierHash) external view returns (address asset, uint256 assetId, uint256 amount, bool isSpent)",
       "function usedCommitments(bytes32 commitment) external view returns (bool)",
-      "function isDepositSpent(bytes32 nullifierHash) external view returns (bool)",
+      "function spentNullifiers(bytes32 nullifierHash) external view returns (bool)",
+      "function isNullifierSpent(bytes32 nullifierHash) external view returns (bool)",
+      "function isCommitmentUsed(bytes32 commitment) external view returns (bool)",
+      "function getEscrowBalance(address asset) external view returns (uint256)",
       "function getPrecompileAddress(uint256 assetId) external pure returns (address)",
     ],
-    deploymentBlock: 0,
-    block_explorer: "https://blockscout-kusama.polkadot.io/",
+    deploymentBlock: 20931300,
     docs: "https://kusamashield.codeberg.page/networks/kusama.html",
   },
   base: {
@@ -466,7 +479,9 @@ export function App() {
       // returns 0 for sr25519 accounts, so never use it here.
       if (
         polkadotAddress &&
-        (selectedNetwork.includes("paseo") || selectedNetwork === "polkadot")
+        (selectedNetwork.includes("paseo") ||
+          selectedNetwork === "polkadot" ||
+          selectedNetwork === "kusama")
       ) {
         const nativeSymbol = NETWORKS[selectedNetwork].asset;
         const nativeAsset = userAssets.find((a) => a.symbol === nativeSymbol);
@@ -481,9 +496,11 @@ export function App() {
         return;
       }
 
-      // For networks that support asset hub (paseo, polkadot), use userAssets balance as primary source
+      // For networks that support asset hub (paseo, polkadot, kusama), use userAssets balance as primary source
       if (
-        (selectedNetwork.includes("paseo") || selectedNetwork === "polkadot") &&
+        (selectedNetwork.includes("paseo") ||
+          selectedNetwork === "polkadot" ||
+          selectedNetwork === "kusama") &&
         userAssets.length > 0
       ) {
         const nativeSymbol = NETWORKS[selectedNetwork].asset;
@@ -494,11 +511,12 @@ export function App() {
         }
       }
 
-      // For polkadot & paseo, queryUserAssets already provides the native
+      // For polkadot/paseo/kusama, queryUserAssets already provides the native
       // balance (via EVM RPC). Skip the redundant eth_getBalance to avoid
       // hitting the localhost proxy which doesn't support it.
       if (
         selectedNetwork === "polkadot" ||
+        selectedNetwork === "kusama" ||
         selectedNetwork.includes("paseo")
       ) {
         return;
@@ -535,7 +553,8 @@ export function App() {
         // Fallback: use userAssets balance if available
         if (
           (selectedNetwork.includes("paseo") ||
-            selectedNetwork === "polkadot") &&
+            selectedNetwork === "polkadot" ||
+            selectedNetwork === "kusama") &&
           userAssets.length > 0
         ) {
           const nativeSymbol = NETWORKS[selectedNetwork].asset;
@@ -968,8 +987,12 @@ export function App() {
     const requestId = ++queryRequestIdRef.current;
     console.log(`queryUserAssets: request ${requestId} for network ${networkKey}`);
 
-    // Only query for networks that support Asset Hub EVM (paseo, polkadot)
-    if (!networkKey.includes("paseo") && networkKey !== "polkadot") {
+    // Only query for networks that support Asset Hub EVM (paseo, polkadot, kusama)
+    if (
+      !networkKey.includes("paseo") &&
+      networkKey !== "polkadot" &&
+      networkKey !== "kusama"
+    ) {
       setUserAssets([]);
       return;
     }
@@ -1443,6 +1466,7 @@ export function App() {
     try {
       console.log(`handle wallet selected called`);
       console.log(`gotten wal: `, wallet);
+      console.log(`wallet extensionName: "${wallet?.extensionName}", title: "${wallet?.title}"`);
       //await wallet.enable("KUSAMA SHIELD");
       setSelectedWallet(wallet);
       await wallet.enable(DAPP_NAME);
@@ -1509,8 +1533,10 @@ export function App() {
   }
 
   const getExtensionWalletAccount = async (): Promise<string> => {
-    // Use the account the user selected (stored in evmAddress) rather than
-    // accounts[0] — the user may have picked a different account from the list.
+    // Use the account the user selected (stored in polkadotAddress for SS58
+    // accounts, evmAddress for 0x accounts) rather than accounts[0] — the user
+    // may have picked a different account from the list.
+    if (polkadotAddress) return polkadotAddress;
     if (evmAddress) return evmAddress;
     if (!selectedWallet) throw new Error("No polkadot.js wallet connected");
     const accounts = await selectedWallet.getAccounts();
@@ -1523,7 +1549,8 @@ export function App() {
     setError("");
     setIsGeneratingSecret(true);
     let api: any = null;
-    const loadingToast = toast.loading(`Shielding ${amount} DOT...`, {
+    const assetLabel = selectedNetwork === "kusama" ? "KSM" : "DOT";
+    const loadingToast = toast.loading(`Shielding ${amount} ${assetLabel}...`, {
       position: "top-right",
       theme: "dark",
     });
@@ -1533,20 +1560,68 @@ export function App() {
       const h160 = ss58ToEth(ss58);
       const signer = selectedWallet?.signer;
       if (!signer) throw new Error("Wallet signer not available");
+      const walletSource = selectedWallet?.extensionName;
+      console.log(`[shield] network=${selectedNetwork}, walletSource=${walletSource}, ws=${(NETWORKS[selectedNetwork] as any)?.wsEndpoints?.[0]}`);
 
-      const { amountPlanck, amountWei } = parseDotAmount(amount);
+      const { amountPlanck, amountWei } = parseDotAmount(amount, selectedNetwork);
       const secretVal = generateRandomSecret();
       const { commitmentHex } = deriveV7Commitment(amountWei, secretVal);
 
-      api = await connectSubstrate();
+      let alreadyMappedKusama = false;
+
+      // On Kusama, check if account is mapped. If not, map it first, then use revive.call.
+      if (selectedNetwork === "kusama") {
+        api = await connectSubstrate((NETWORKS[selectedNetwork] as any)?.wsEndpoints);
+        const alreadyMapped: any = await api.query.revive.accountInfoOf(h160);
+        if (alreadyMapped.isEmpty) {
+          console.log("[shield] Kusama account unmapped — mapping account first...");
+          toast.update(loadingToast, {
+            render: `1/2: Mapping account for revive...`,
+          });
+          let extSigner = signer;
+          try {
+            const { web3Enable, web3FromSource } = await import("@polkadot/extension-dapp");
+            await web3Enable("Kusama Shield");
+            const injected = await web3FromSource(walletSource);
+            if (injected?.signer) extSigner = injected.signer;
+          } catch (_: any) {}
+
+          await new Promise<void>((resolve, reject) => {
+            api.tx.revive
+              .mapAccount()
+              .signAndSend(ss58, { signer: extSigner }, ({ status, dispatchError }: any) => {
+                if (dispatchError) {
+                  if (dispatchError.isModule) {
+                    const { index, error } = api.registry.findMetaError(dispatchError.asModule);
+                    if (error === "AccountAlreadyMapped") resolve();
+                    else reject(new Error(`mapAccount: ${index}.${error}`));
+                  } else reject(new Error(dispatchError.toString()));
+                }
+                if (status.isInBlock || status.isFinalized) resolve();
+              })
+              .catch(reject);
+          });
+          console.log("[shield] Kusama account mapped!");
+          alreadyMappedKusama = true;
+        } else {
+          alreadyMappedKusama = true;
+        }
+        // Continue to normal revive.call deposit below
+      }
+
+      // Normal revive.call path (polkadot or mapped Kusama).
+      if (!api) api = await connectSubstrate((NETWORKS[selectedNetwork] as any)?.wsEndpoints);
+
+      // Skip ensureAccountMapped for Kusama if we already handled it above
+      if (!alreadyMappedKusama) {
+        toast.update(loadingToast, {
+          render: `1/2: Mapping account for revive...`,
+        });
+        await ensureAccountMapped(api, ss58, h160, signer, walletSource);
+      }
 
       toast.update(loadingToast, {
-        render: `1/2: Mapping account for revive...`,
-      });
-      await ensureAccountMapped(api, ss58, h160, signer);
-
-      toast.update(loadingToast, {
-        render: `2/2: Sending deposit of ${amount} DOT...`,
+        render: `2/2: Sending deposit of ${amount} ${assetLabel}...`,
       });
       const { txHash, block } = await submitReviveDeposit(
         api,
@@ -1554,6 +1629,8 @@ export function App() {
         signer,
         amountPlanck,
         commitmentHex,
+        (NETWORKS[selectedNetwork] as any)?.shield_address,
+        walletSource,
       );
 
       try {
@@ -1605,6 +1682,128 @@ export function App() {
       }
       setIsLoading(false);
       setIsGeneratingSecret(false);
+    }
+  };
+
+  // Shield via Polkadot.js on Kusama — transfer KSM to ECDSA temp wallet, then deposit.
+  const handleShieldKusamaPolkadotJs = async () => {
+    if (!polkadotAddress || !selectedWallet) return;
+    isSubstrateTxRef.current = true;
+    setIsGeneratingSecret(true);
+    const generatedSecret = generateRandomSecret();
+    setIsLoading(true);
+    setError("");
+
+    const shieldToastId = toast.loading(`Shielding ${amount} KSM...`, {
+      position: "top-right",
+      theme: "dark",
+    });
+
+    let api: any = null;
+    try {
+      console.log("=== Kusama Shield: Polkadot.js + ECDSA temp wallet ===");
+      const networkConfig = NETWORKS.kusama as any;
+      const contractAddress = networkConfig.shield_address;
+      const evmRpc = networkConfig.rpcEndpoint;
+
+      const { amountPlanck, amountWei } = parseDotAmount(amount, "kusama");
+      const { commitmentHex } = deriveV7Commitment(amountWei, generatedSecret);
+
+      // Generate temp ECDSA wallet
+      const { generateEcdsaWallet, computeFallbackSS58 } = await import("./transactions/forwarder");
+      const { wallet, ethAddress, fallbackSS58 } = generateEcdsaWallet();
+      console.log("Temp ETH wallet:", ethAddress, "Fallback SS58:", fallbackSS58);
+
+      // Get the API and signer
+      api = await connectSubstrate(networkConfig.wsEndpoints);
+      let extSigner = selectedWallet?.signer;
+      try {
+        const { web3Enable, web3FromSource } = await import("@polkadot/extension-dapp");
+        await web3Enable("Kusama Shield");
+        const injected = await web3FromSource(selectedWallet?.extensionName);
+        if (injected?.signer) extSigner = injected.signer;
+      } catch (_: any) {}
+
+      // Transfer KSM (deposit + gas buffer) to the temp wallet's fallback SS58.
+      // Without the gas buffer the temp wallet can't pay for the EVM deposit tx.
+      const gasBufferKsm = 0.05;
+      const fundPlanck = amountPlanck + BigInt(Math.floor(gasBufferKsm * 1e12));
+      toast.update(shieldToastId, { render: "Confirm KSM transfer to temp wallet..." });
+
+      const transferTx = await new Promise<string>((resolve, reject) => {
+        api.tx.balances
+          .transferKeepAlive(fallbackSS58, fundPlanck)
+          .signAndSend(polkadotAddress, { signer: extSigner }, ({ status, txHash, dispatchError }: any) => {
+            if (dispatchError) {
+              if (dispatchError.isModule) {
+                const { index, error } = api.registry.findMetaError(dispatchError.asModule);
+                reject(new Error(`transfer: ${index}.${error}`));
+              } else reject(new Error(dispatchError.toString()));
+            }
+            if (status.isInBlock || status.isFinalized) resolve(txHash.toHex());
+          })
+          .catch(reject);
+      });
+      console.log("KSM transfer tx:", transferTx);
+
+      // Wait for EVM balance to be available (polls eth_getBalance)
+      toast.update(shieldToastId, { render: "Waiting for balance..." });
+      const { waitForEthBalance, submitDeposit, sweepBalance, ss58ToEth } =
+        await import("./transactions/forwarder");
+      await waitForEthBalance([evmRpc], ethAddress);
+
+      // Submit deposit from temp wallet
+      toast.update(shieldToastId, { render: "Submitting deposit..." });
+      const provider = new ethers.JsonRpcProvider(evmRpc);
+      const walletWithProvider = wallet.connect(provider);
+
+      const depositAmount = ethers.parseEther(amount);
+      const { receipt, gasPrice: usedGasPrice } = await submitDeposit(
+        walletWithProvider,
+        [evmRpc],
+        networkConfig.chain_id,
+        contractAddress,
+        commitmentHex,
+        depositAmount
+      );
+      console.log("Deposit tx:", receipt.hash);
+
+      // Sweep leftover gas back to the user's H160
+      const userH160 = ss58ToEth(polkadotAddress);
+      await sweepBalance(wallet, [evmRpc], networkConfig.chain_id, userH160, usedGasPrice)
+        .catch((e: any) => console.warn("Sweep failed:", e));
+
+      toast.update(shieldToastId, {
+        render: `Shielded ${amount} KSM! Tx: ${receipt.hash.slice(0, 10)}...`,
+        type: "success",
+        isLoading: false,
+        autoClose: 10000,
+      });
+
+      toast.info(`🔑 Save your secret for later withdrawal: ${generatedSecret}`, {
+        position: "top-right",
+        autoClose: 10000,
+        theme: "dark",
+      });
+
+      setSecret(generatedSecret);
+      setAmount("");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "An error occurred";
+      setError(msg);
+      toast.update(shieldToastId, {
+        render: `❌ Shield failed: ${msg}`,
+        type: "error",
+        isLoading: false,
+        autoClose: 10000,
+      });
+    } finally {
+      setIsLoading(false);
+      setIsGeneratingSecret(false);
+      isSubstrateTxRef.current = false;
+      if (api) {
+        try { await api.disconnect(); } catch (_) {}
+      }
     }
   };
 
@@ -1747,7 +1946,10 @@ export function App() {
       // revive.call deposits that eth_getLogs misses). Building from contract
       // events via eth_getLogs produces a desynced tree whose root doesn't
       // match on-chain → circuit assertion fails.
-      const { tree: merkleTree } = await fetchProxyTree("polkadot");
+      const { tree: merkleTree } = await fetchProxyTree(selectedNetwork, {
+        poolAddress: (NETWORKS[selectedNetwork] as any)?.shield_address,
+        evmRpc: (NETWORKS[selectedNetwork] as any)?.rpcEndpoint,
+      });
 
       const withdrawAmount = ethers.parseEther(amount || "0.1");
       const precommitment = poseidon2([nullifier, secretBN]);
@@ -1856,7 +2058,7 @@ export function App() {
   const handleUnshieldReviveCall = async () => {    setIsLoading(true);
     setError("");
     let api: any = null;
-    const loadingToast = toast.loading(`Unshielding ${amount} DOT...`, {
+    const loadingToast = toast.loading(`Unshielding ${amount} ${NETWORKS[selectedNetwork]?.asset || "DOT"}...`, {
       position: "top-right",
       theme: "dark",
     });
@@ -1867,8 +2069,10 @@ export function App() {
       const h160 = ss58ToEth(ss58);
       const signer = selectedWallet?.signer;
       if (!signer) throw new Error("Wallet signer not available");
+      const walletSource = selectedWallet?.extensionName;
 
-      const { amountWei } = parseDotAmount(amount);
+      const { amountWei } = parseDotAmount(amount, selectedNetwork);
+      console.log(`[unshield] secret: ${secret}, amountWei: ${amountWei}`);
       const { commitment, nullifier, secretBN } = deriveV7Commitment(
         amountWei,
         secret,
@@ -1900,20 +2104,29 @@ export function App() {
         console.warn("isNullifierSpent pre-check failed, continuing:", (e as any)?.message || e);
       }
 
-      api = await connectSubstrate();
+      // Connect to Substrate WS only for non-kusama (kusama unshields via proxy,
+      // no mapAccount or revive.call needed — avoids flaky Dwellir WS timeouts).
+      if (selectedNetwork !== "kusama") {
+        api = await connectSubstrate((NETWORKS[selectedNetwork] as any)?.wsEndpoints);
+        toast.update(loadingToast, {
+          render: `1/2: Mapping account for revive...`,
+        });
+        await ensureAccountMapped(api, ss58, h160, signer, walletSource);
+      }
 
-      toast.update(loadingToast, {
-        render: `1/2: Mapping account for revive...`,
+      const { tree } = await fetchProxyTree(selectedNetwork, {
+        poolAddress: (NETWORKS[selectedNetwork] as any)?.shield_address,
+        evmRpc: (NETWORKS[selectedNetwork] as any)?.rpcEndpoint,
       });
-      await ensureAccountMapped(api, ss58, h160, signer);
-
-      const { tree } = await fetchProxyTree("polkadot");
 
       // Ensure our deposit is in the tree (monitor may not have caught it yet).
       if (tree.findLeafIndex(commitment) === -1) {
         tree.insert(commitment);
       }
-      const chainRoot = await getChainRoot();
+      const chainRoot = await getChainRoot(
+        (NETWORKS[selectedNetwork] as any)?.shield_address,
+        (NETWORKS[selectedNetwork] as any)?.rpcEndpoint,
+      );
       if (tree.root !== chainRoot) {
         throw new Error(
           `Merkle tree out of sync (local ${tree.root} vs chain ${chainRoot}). Try again shortly.`,
@@ -1933,17 +2146,34 @@ export function App() {
         root: chainRoot,
       });
 
-      toast.update(loadingToast, {
-        render: `2/2: Sending withdraw of ${amount} DOT...`,
-      });
-      const txHash = await submitReviveWithdraw(
-        api,
-        ss58,
-        signer,
-        h160,
-        proof,
-        publicSignals,
-      );
+      let txHash: string;
+      
+      // For Kusama, use the proxy forwarder (same as Polkadot works)
+      if (selectedNetwork === "kusama") {
+        toast.update(loadingToast, {
+          render: `2/2: Submitting withdraw via proxy...`,
+        });
+        txHash = await submitWithdrawViaProxy(
+          secret,
+          selectedNetwork,
+          amountWei.toString(),
+          ss58,  // SS58 recipient - proxy will forward via Account 1
+        );
+      } else {
+        toast.update(loadingToast, {
+          render: `2/2: Sending withdraw of ${amount} DOT...`,
+        });
+        txHash = await submitReviveWithdraw(
+          api,
+          ss58,
+          signer,
+          h160,
+          proof,
+          publicSignals,
+          (NETWORKS[selectedNetwork] as any)?.shield_address,
+          walletSource,
+        );
+      }
 
       toast.update(loadingToast, {
         render: `Withdraw confirmed: ${txHash}`,
@@ -1990,14 +2220,20 @@ export function App() {
     }
 
     // Route polkadot.js extension wallets on Polkadot AH to the revive.call path.
+    // Kusama uses the forwarder approach (like it works in browser).
     if (
       selectedNetwork === "polkadot" &&
       selectedWallet &&
       !selectedWalletEVM &&
-      evmAddress &&
-      !evmAddress.startsWith("0x")
+      polkadotAddress
     ) {
       await handleShieldReviveCall();
+      return;
+    }
+
+    // For Kusama with polkadot.js, use direct transfer to ECDSA wallet (no Nova/WalletConnect needed)
+    if (selectedNetwork === "kusama" && selectedWallet && polkadotAddress) {
+      await handleShieldKusamaPolkadotJs();
       return;
     }
 
@@ -2944,13 +3180,12 @@ export function App() {
     if (!isWalletConnected || !selectedToken || !secret) return;
     console.log(`handleUnshield beep boop`);
 
-    // Route polkadot.js extension wallets on Polkadot AH to the revive.call path.
+    // Route polkadot.js extension wallets on Polkadot/Kusama AH to the revive.call path.
     if (
-      selectedNetwork === "polkadot" &&
+      (selectedNetwork === "polkadot" || selectedNetwork === "kusama") &&
       selectedWallet &&
       !selectedWalletEVM &&
-      evmAddress &&
-      !evmAddress.startsWith("0x")
+      polkadotAddress
     ) {
       await handleUnshieldReviveCall();
       return;
@@ -3253,7 +3488,7 @@ export function App() {
             const formatted = formatProof(proof);
             const pub = publicSignals.map((s) => BigInt(s));
 
-            toast(`Unshielding ${amount} DOT...`, {
+            toast(`Unshielding ${amount} ${NETWORKS[selectedNetwork]?.asset || "DOT"}...`, {
               position: "top-right", autoClose: 5000, theme: "dark",
             });
 
@@ -5349,7 +5584,9 @@ export function App() {
   useEffect(() => {
     if (
       (evmAddress || polkadotAddress) &&
-      (selectedNetwork.includes("paseo") || selectedNetwork === "polkadot")
+      (selectedNetwork.includes("paseo") ||
+        selectedNetwork === "polkadot" ||
+        selectedNetwork === "kusama")
     ) {
       // Nova/WalletConnect: query the Substrate (SS58) balance directly.
       // EVM wallets: query the EVM H160 balance.
@@ -6008,6 +6245,17 @@ export function App() {
   return (
     <div className="App">
       <ToastContainer />
+      <a
+        className="referendum-marquee"
+        href="https://kusama.subsquare.io/referenda/658"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        <div className="marquee-track">
+          <span>⚠️ Kusama Shield needs your support — Vote AYE in favour of our audit on Referendum 658&nbsp;&nbsp;•&nbsp;&nbsp;Vote here: https://kusama.subsquare.io/referenda/658&nbsp;&nbsp;•&nbsp;&nbsp;</span>
+          <span>⚠️ Kusama Shield needs your support — Vote AYE in favour of our audit on Referendum 658&nbsp;&nbsp;•&nbsp;&nbsp;Vote here: https://kusama.subsquare.io/referenda/658&nbsp;&nbsp;•&nbsp;&nbsp;</span>
+        </div>
+      </a>
       <div className="header">
         <script src="/snarkjs.min.js"></script>
         <div className="header-controls">
@@ -6021,18 +6269,24 @@ export function App() {
           <UnifiedWalletSelector
             isWalletConnected={isWalletConnected}
             evmAddress={evmAddress}
+            polkadotAddress={polkadotAddress}
             selectedNetwork={selectedNetwork}
             onAccountSelected={(account) => {
               console.log("Selected account:", account.address, "type:", account.type);
-              setEvmAddress(account.address);
               // Distinguish EVM (0x) vs Substrate (SS58) accounts.
-              // Substrate wallets should NOT create a Talisman EVM provider.
+              // Substrate wallets should NOT create a Talisman EVM provider,
+              // and their balance must come from the SS58 Substrate balance.
               if (account.address?.startsWith("0x")) {
+                setEvmAddress(account.address);
+                setPolkadotAddress(null);
                 const talismanEth = (window as any).talismanEth;
                 if (talismanEth) {
                   setSelectedWalletEVM(new ethers.BrowserProvider(talismanEth));
                 }
               } else {
+                // SS58 (polkadot.js / Talisman substrate) account
+                setPolkadotAddress(account.address);
+                setEvmAddress(null);
                 setSelectedWalletEVM(null);
               }
               setIsWalletConnected(true);
@@ -6793,7 +7047,8 @@ export function App() {
                       style={{ marginLeft: "auto", textAlign: "right" }}
                     >
                       {(selectedNetwork.includes("paseo") ||
-                        selectedNetwork === "polkadot") &&
+                        selectedNetwork === "polkadot" ||
+                        selectedNetwork === "kusama") &&
                       userAssets.length > 0 ? (
                         selectedToken &&
                         userAssets.find((a) => a.symbol === selectedToken) ? (

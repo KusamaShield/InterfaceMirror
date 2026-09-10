@@ -320,9 +320,10 @@ export async function submitDeposit(
   const maxCost = amountWei + gasLimit * gasPrice;
   const balance = await provider.getBalance(wallet.address);
   if (balance < maxCost) {
+    const sym = chainId === 420420418 ? "KSM" : "DOT";
     throw new Error(
-      `Insufficient funds. Have ${ethers.formatEther(balance)} DOT, need ${ethers.formatEther(maxCost)} DOT. ` +
-      `Send at least ${ethers.formatEther(maxCost)} DOT to ${computeFallbackSS58(wallet.address)}`
+      `Insufficient funds. Have ${ethers.formatEther(balance)} ${sym}, need ${ethers.formatEther(maxCost)} ${sym}. ` +
+      `Send at least ${ethers.formatEther(maxCost)} ${sym} to ${computeFallbackSS58(wallet.address)}`
     );
   }
 
@@ -403,9 +404,10 @@ export async function submitWithdraw(
   const maxCost = gasLimit * gasPrice;
   const balance = await provider.getBalance(wallet.address);
   if (balance < maxCost) {
+    const sym = chainId === 420420418 ? "KSM" : "DOT";
     throw new Error(
-      `Insufficient gas. Have ${ethers.formatEther(balance)} DOT, need ${ethers.formatEther(maxCost)} DOT. ` +
-      `Send ~0.2 DOT to ${computeFallbackSS58(wallet.address)}`
+      `Insufficient gas. Have ${ethers.formatEther(balance)} ${sym}, need ${ethers.formatEther(maxCost)} ${sym}. ` +
+      `Send ~0.2 ${sym} to ${computeFallbackSS58(wallet.address)}`
     );
   }
 
