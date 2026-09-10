@@ -22,6 +22,34 @@ body.send-active {
 }
 
 
+.referendum-marquee {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  background: transparent;
+  color: #fff;
+  text-decoration: none;
+  padding: 6px 0;
+  font-weight: 800;
+  letter-spacing: .02em;
+  white-space: nowrap;
+  position: relative;
+  z-index: 50;
+}
+.referendum-marquee .marquee-track {
+  display: inline-flex;
+  white-space: nowrap;
+  animation: marquee-scroll 22s linear infinite;
+  will-change: transform;
+}
+.referendum-marquee .marquee-track span {
+  padding-right: 2ch;
+}
+@keyframes marquee-scroll {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
 .secret-input input {
   text-align: center;
 }

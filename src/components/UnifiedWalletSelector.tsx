@@ -52,6 +52,7 @@ class WagmiEthersProvider {
 interface UnifiedWalletSelectorProps {
   isWalletConnected: boolean;
   evmAddress: string | null;
+  polkadotAddress?: string | null;
   selectedNetwork: string;
   onAccountSelected: (account: any) => void;
   onWalletSelected: (wallet: any) => void;
@@ -64,6 +65,7 @@ interface UnifiedWalletSelectorProps {
 export const UnifiedWalletSelector: React.FC<UnifiedWalletSelectorProps> = ({
   isWalletConnected,
   evmAddress,
+  polkadotAddress,
   selectedNetwork,
   onAccountSelected,
   onWalletSelected,
@@ -201,14 +203,15 @@ export const UnifiedWalletSelector: React.FC<UnifiedWalletSelectorProps> = ({
   const formatAddress = (addr: string) => `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 
   // Connected state - show address with disconnect option
-  if (isWalletConnected && evmAddress) {
+  const displayAddress = evmAddress || polkadotAddress || "";
+  if (isWalletConnected && displayAddress) {
     return (
       <div className="wallet-selector-container" ref={dropdownRef}>
         <button
           className="connect-button connected"
           onClick={() => setShowDropdown(!showDropdown)}
         >
-          Connected: {formatAddress(evmAddress)}
+          Connected: {formatAddress(displayAddress)}
         </button>
         {showDropdown && (
           <div className="wallet-dropdown">
