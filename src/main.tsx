@@ -2,6 +2,10 @@
  * Copyright 2025 Kusama Shield Developers on behalf of the Kusama DAO, see LICENSE in main folder.
  */
 
+// Install the WebSocket shim before anything imports @polkadot/api, so that
+// @polkadot/x-ws captures it and Polkadot WSS can be tunnelled through Nym.
+import "./services/wsShim";
+
 import { Buffer } from "buffer";
 
 // Polyfill for the global Buffer object

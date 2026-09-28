@@ -14,12 +14,6 @@ body {
     animation: fadeIn .5s var(--acc) 1;
 }
 
-body.send-active {
-    background-image: url('/images/kusamashieldmountainbackground.jpeg'), radial-gradient(ellipse at center, #09002b 0%, #000000 100%);
-    background-size: 100vw 100vh;
-    background-position: center;
-    background-attachment: fixed;
-}
 
 
 .referendum-marquee {
@@ -1021,6 +1015,9 @@ body.send-active {
     align-items: center;
     z-index: 1000;
     backdrop-filter: blur(5px);
+    padding: 20px;
+    box-sizing: border-box;
+    overflow-y: auto;
 }
 
 .help-modal-content {
@@ -1028,6 +1025,8 @@ body.send-active {
     padding: 35px;
     border-radius: 16px;
     width: 90%;
+    max-height: 100%;
+    box-sizing: border-box;
     overflow-y: auto;
     color: white;
     position: relative;
@@ -2743,4 +2742,1697 @@ body.send-active {
 @keyframes flap {
   from { background-position: 0px; }
   to { background-position: -256px; }
+}
+
+/* ------------------------------------------------------------------ */
+/* Privacy proxy buttons (Tor / Nym)                                   */
+/* ------------------------------------------------------------------ */
+.privacy-proxy-row {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  gap: 14px;
+}
+
+.privacy-proxy-button {
+  background: none;
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  border-radius: 50%;
+  padding: 0;
+  cursor: pointer;
+  width: 84px;
+  height: 84px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease, transform 0.2s ease;
+  overflow: hidden;
+  opacity: 0.8;
+}
+
+.privacy-proxy-button:hover {
+  opacity: 1;
+  border-color: rgba(124, 58, 237, 0.6);
+  box-shadow: 0 0 16px rgba(124, 58, 237, 0.3);
+  transform: scale(1.08);
+}
+
+.privacy-proxy-button:disabled {
+  cursor: wait;
+  opacity: 1;
+}
+
+.privacy-proxy-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.privacy-pulsating {
+  opacity: 1;
+  animation: privacyPulse 1.5s ease-in-out infinite;
+  border-color: rgba(124, 58, 237, 0.6);
+}
+
+@keyframes privacyPulse {
+  0%, 100% {
+    box-shadow: 0 0 8px rgba(124, 58, 237, 0.3);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 24px rgba(124, 58, 237, 0.7), 0 0 48px rgba(124, 58, 237, 0.2);
+    transform: scale(1.1);
+  }
+}
+
+.privacy-connected {
+  opacity: 1;
+  border-color: rgba(34, 197, 94, 0.6);
+  box-shadow: 0 0 12px rgba(34, 197, 94, 0.3);
+}
+
+.privacy-connected:hover {
+  border-color: rgba(34, 197, 94, 0.8);
+  box-shadow: 0 0 20px rgba(34, 197, 94, 0.5);
+}
+
+/* ================================================================== */
+/* "Fresh" theme — clean light preset (inspired by modern DEX UIs)     */
+/* ================================================================== */
+body.theme-fresh {
+  background: radial-gradient(ellipse at 50% 0%, #ffffff 0%, #f5f6fc 55%, #eef1f8 100%);
+  color: #131313;
+}
+
+/* Token flow -------------------------------------------------------- */
+.token-flow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 8px 0 20px;
+  padding: 12px 16px;
+  background: #f9f9f9;
+  border: 1px solid rgba(19, 19, 19, 0.06);
+  border-radius: 16px;
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: #131313;
+}
+.token-flow-text {
+  white-space: nowrap;
+}
+.token-flow-window {
+  display: block;
+  height: 34px;
+  overflow: hidden;
+}
+.token-flow-reel {
+  display: flex;
+  flex-direction: column;
+}
+.token-flow-token {
+  display: block;
+  white-space: nowrap;
+  color: #ff37c7;
+}
+
+/* Fresh theme toggle card ------------------------------------------ */
+.fresh-theme-option {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  margin: 1rem 0;
+  border-radius: 14px;
+  border: 2px solid #333;
+  background: rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.fresh-theme-option:hover {
+  border-color: #ff37c7;
+}
+.fresh-theme-option.active {
+  border-color: #ff37c7;
+  background: rgba(255, 55, 199, 0.12);
+}
+.fresh-theme-swatch {
+  display: flex;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+.fresh-theme-swatch span {
+  width: 22px;
+  height: 44px;
+  display: block;
+}
+.fresh-theme-title {
+  font-weight: 800;
+  color: #fff;
+}
+.fresh-theme-option.active .fresh-theme-title {
+  color: #ff37c7;
+}
+.fresh-theme-sub {
+  font-size: 0.8rem;
+  color: #999;
+}
+
+/* Surfaces ---------------------------------------------------------- */
+body.theme-fresh .swap-box {
+  background: #ffffff;
+  border: 1px solid rgba(19, 19, 19, 0.08);
+  box-shadow: 0 12px 40px rgba(19, 19, 19, 0.08);
+  clip-path: none;
+  border-radius: 24px;
+  animation: none;
+}
+body.theme-fresh .swap-box.no-shield-shape {
+  border-radius: 24px;
+}
+body.theme-fresh .swap-box h2 {
+  color: #131313;
+}
+
+/* Tabs -------------------------------------------------------------- */
+body.theme-fresh .tabs {
+  background: #f9f9f9;
+  border-radius: 14px;
+  padding: 4px;
+}
+body.theme-fresh .tab {
+  color: rgba(19, 19, 19, 0.55);
+  border-radius: 10px;
+  font-weight: 700;
+}
+body.theme-fresh .tab:hover {
+  color: #131313;
+  background: rgba(19, 19, 19, 0.04);
+}
+body.theme-fresh .tab.active {
+  color: #ffffff;
+  background: #ff37c7;
+}
+body.theme-fresh .tab.active::after {
+  display: none;
+}
+
+/* Inputs / token select -------------------------------------------- */
+body.theme-fresh .token-input,
+body.theme-fresh .deposit-amount {
+  background: #f9f9f9;
+  border: 1px solid rgba(19, 19, 19, 0.06);
+}
+body.theme-fresh .token-input input,
+body.theme-fresh .token-input select,
+body.theme-fresh .secret-input input,
+body.theme-fresh .destination-address-input,
+body.theme-fresh .amount-input input {
+  color: #131313;
+}
+body.theme-fresh .token-input select,
+body.theme-fresh .currency-select {
+  background-color: #ffffff;
+  border: 1px solid rgba(19, 19, 19, 0.1);
+  color: #131313;
+  box-shadow: none;
+}
+body.theme-fresh .token-input select:hover,
+body.theme-fresh .currency-select:hover {
+  background-color: #f2f2f2;
+  border-color: rgba(19, 19, 19, 0.18);
+}
+body.theme-fresh .token-input select option,
+body.theme-fresh .currency-select option {
+  background: #ffffff;
+  color: #131313;
+}
+body.theme-fresh .secret-input input {
+  background: #f9f9f9;
+  border: 1px solid rgba(19, 19, 19, 0.08);
+}
+body.theme-fresh .secret-input input::placeholder {
+  color: rgba(19, 19, 19, 0.35);
+}
+body.theme-fresh .balance,
+body.theme-fresh .balance-display {
+  color: rgba(19, 19, 19, 0.6);
+}
+
+/* Amount slider ----------------------------------------------------- */
+body.theme-fresh .amount-slider-container label,
+body.theme-fresh .amount-labels .amount-label {
+  color: rgba(19, 19, 19, 0.55);
+}
+body.theme-fresh .amount-labels .amount-label.active {
+  color: #ff37c7;
+}
+
+/* Network select ---------------------------------------------------- */
+body.theme-fresh .selected-network {
+  background: #ffffff;
+  border: 1px solid rgba(19, 19, 19, 0.1);
+  color: #131313;
+}
+body.theme-fresh .selected-network:hover,
+body.theme-fresh .selected-network.open {
+  border-color: rgba(19, 19, 19, 0.2);
+}
+body.theme-fresh .network-select-dropdown {
+  background: #ffffff;
+  border: 1px solid rgba(19, 19, 19, 0.08);
+  box-shadow: 0 12px 32px rgba(19, 19, 19, 0.12);
+}
+body.theme-fresh .network-option {
+  color: #131313;
+}
+body.theme-fresh .network-option:hover {
+  background: #f2f2f2;
+}
+body.theme-fresh .network-option.selected {
+  background: rgba(255, 55, 199, 0.1);
+  color: #c41969;
+}
+body.theme-fresh .group-header {
+  color: rgba(19, 19, 19, 0.45);
+}
+
+/* Header / nav buttons --------------------------------------------- */
+body.theme-fresh .header h1 {
+  color: #131313;
+}
+body.theme-fresh .help-button,
+body.theme-fresh .terms-button,
+body.theme-fresh .settings-button,
+body.theme-fresh .privacy-button {
+  background: #ffffff;
+  border: 1px solid rgba(19, 19, 19, 0.1);
+  color: #131313;
+  box-shadow: 0 2px 8px rgba(19, 19, 19, 0.05);
+}
+body.theme-fresh .help-button:hover,
+body.theme-fresh .terms-button:hover,
+body.theme-fresh .settings-button:hover,
+body.theme-fresh .privacy-button:hover {
+  border-color: rgba(255, 55, 199, 0.5);
+  color: #c41969;
+}
+body.theme-fresh .privacy-proxy-button {
+  border-color: rgba(19, 19, 19, 0.12);
+}
+body.theme-fresh .privacy-proxy-button:hover {
+  border-color: rgba(255, 55, 199, 0.6);
+}
+
+/* Modals / panels --------------------------------------------------- */
+body.theme-fresh .help-modal {
+  background: rgba(19, 19, 19, 0.35);
+}
+body.theme-fresh .help-modal-content {
+  background: #ffffff;
+  color: #131313;
+  border: 1px solid rgba(19, 19, 19, 0.08);
+  box-shadow: 0 20px 60px rgba(19, 19, 19, 0.18);
+}
+body.theme-fresh .help-modal-content h2,
+body.theme-fresh .help-section h3 {
+  color: #131313;
+}
+body.theme-fresh .help-section p,
+body.theme-fresh .help-section label,
+body.theme-fresh .help-section code {
+  color: rgba(19, 19, 19, 0.65);
+}
+body.theme-fresh .close-help-button {
+  background: #f9f9f9;
+  color: #131313;
+  border: 1px solid rgba(19, 19, 19, 0.1);
+}
+body.theme-fresh .fresh-theme-option {
+  background: #f9f9f9;
+  border-color: rgba(19, 19, 19, 0.12);
+}
+body.theme-fresh .fresh-theme-title {
+  color: #131313;
+}
+body.theme-fresh .fresh-theme-sub {
+  color: rgba(19, 19, 19, 0.5);
+}
+
+/* Info blocks ------------------------------------------------------- */
+body.theme-fresh .exchange-rate-display,
+body.theme-fresh .rate-info,
+body.theme-fresh .fee-info,
+body.theme-fresh .info-box,
+body.theme-fresh .bridge-info,
+body.theme-fresh .network-info,
+body.theme-fresh .deposit-info,
+body.theme-fresh .address-help {
+  color: rgba(19, 19, 19, 0.7);
+}
+body.theme-fresh .error-message {
+  color: #e10f0f;
+}
+body.theme-fresh .note {
+  color: rgba(19, 19, 19, 0.5);
+}
+
+/* Primary action buttons (override inline gradients) ---------------- */
+/* Fresh accent gradient replaces the old purple one everywhere. */
+body.theme-fresh .connect-button,
+body.theme-fresh .connect-button.connected,
+body.theme-fresh .connect-button.connected:hover,
+body.theme-fresh .swap-button,
+body.theme-fresh .confirm-deposit-button,
+body.theme-fresh .account-selection-content h2,
+body.theme-fresh .deposit-stage h3,
+body.theme-fresh ._modal-content-body_pf7vp_50 button,
+body.theme-fresh .token-input select:focus option:checked,
+body.theme-fresh .chain-input select:focus option:checked,
+body.theme-fresh .tab.active::after {
+  background: linear-gradient(90deg, #ff97ed, #7e22ce);
+}
+body.theme-fresh .connect-button,
+body.theme-fresh .swap-button,
+body.theme-fresh .confirm-deposit-button {
+  color: #ffffff;
+}
+body.theme-fresh .connect-button:hover,
+body.theme-fresh .swap-button:hover {
+  background: linear-gradient(90deg, #7e22ce, #ff97ed);
+}
+body.theme-fresh .swap-button {
+  border-radius: 14px;
+  box-shadow: 0 8px 24px rgba(126, 34, 206, 0.28);
+}
+body.theme-fresh .swap-button:hover {
+  box-shadow: 0 10px 28px rgba(126, 34, 206, 0.38);
+}
+
+/* Connect Wallet + Send buttons: rose -> deep plum gradient */
+body.theme-fresh .connect-button,
+body.theme-fresh .connect-button.connected,
+body.theme-fresh .swap-button {
+  background: linear-gradient(90deg, #f9accb, #5d2c4f);
+}
+body.theme-fresh .connect-button:hover,
+body.theme-fresh .connect-button.connected:hover,
+body.theme-fresh .swap-button:hover {
+  background: linear-gradient(90deg, #5d2c4f, #f9accb);
+}
+
+/* Connect Wallet box: lighter tones in fresh/light mode */
+body.theme-fresh .connect-button,
+body.theme-fresh .connect-button.connected {
+  background: linear-gradient(90deg, #ffd9ec, #d8b4fe);
+  color: #5d2c4f;
+  box-shadow: 0 6px 18px rgba(216, 180, 254, 0.4);
+}
+body.theme-fresh .connect-button:hover,
+body.theme-fresh .connect-button.connected:hover {
+  background: linear-gradient(90deg, #d8b4fe, #ffd9ec);
+  color: #5d2c4f;
+  box-shadow: 0 8px 22px rgba(216, 180, 254, 0.5);
+}
+body.theme-fresh .swap-button.disabled,
+body.theme-fresh .swap-button:disabled {
+  background: #eceef5;
+  color: rgba(19, 19, 19, 0.4);
+  box-shadow: none;
+}
+body.theme-fresh .new-swap-button {
+  background: #ff37c7 !important;
+  color: #ffffff !important;
+  box-shadow: 0 6px 20px rgba(255, 55, 199, 0.3) !important;
+}
+body.theme-fresh .cancel-swap-button {
+  background: #f9f9f9 !important;
+  color: #131313 !important;
+  border: 1px solid rgba(19, 19, 19, 0.1) !important;
+  box-shadow: none !important;
+}
+
+/* Scrollbars -------------------------------------------------------- */
+body.theme-fresh .help-modal-content::-webkit-scrollbar-track,
+body.theme-fresh .network-select-dropdown::-webkit-scrollbar-track {
+  background: rgba(19, 19, 19, 0.05);
+}
+body.theme-fresh .help-modal-content::-webkit-scrollbar-thumb,
+body.theme-fresh .network-select-dropdown::-webkit-scrollbar-thumb {
+  background: rgba(19, 19, 19, 0.2);
+}
+
+/* Help modal as a terminal man page (Fresh theme) -------------------- */
+body.theme-fresh .help-modal-terminal {
+  background: #0b0f14;
+  backdrop-filter: none;
+  align-items: stretch;
+  justify-content: stretch;
+  z-index: 2000;
+  padding: 0;
+}
+body.theme-fresh .help-terminal {
+  background: #0b0f14;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  width: 100vw;
+  height: 100vh;
+  max-width: none;
+  max-height: 100vh;
+  overflow-y: auto;
+  color: #c9d1d9;
+  box-shadow: none;
+}
+body.theme-fresh .help-terminal .terminal-window {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 100%;
+}
+body.theme-fresh .help-terminal .terminal-body {
+  flex: 1 1 auto;
+}
+body.theme-fresh .terminal-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: linear-gradient(180deg, #1b2430, #141b24);
+  border-bottom: 1px solid #243040;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+body.theme-fresh .terminal-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: inline-block;
+  cursor: pointer;
+}
+body.theme-fresh .terminal-dot:hover {
+  filter: brightness(1.15);
+}
+body.theme-fresh .terminal-red {
+  background: #ff5f56;
+}
+body.theme-fresh .terminal-yellow {
+  background: #ffbd2e;
+}
+body.theme-fresh .terminal-green {
+  background: #27c93f;
+}
+body.theme-fresh .terminal-title {
+  margin-right: auto;
+  color: #8b98a5;
+  font-family: "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+}
+body.theme-fresh .terminal-body {
+  padding: 18px 10px 22px;
+  flex: 1 1 auto;
+  font-family: "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: #c9d1d9;
+  background:
+    radial-gradient(1200px 400px at 50% -10%, rgba(255, 55, 199, 0.07), transparent 70%),
+    #0b0f14;
+  overflow-x: auto;
+}
+body.theme-fresh .terminal-body .manpage {
+  margin: 0;
+  white-space: pre;
+  color: #c9d1d9;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  background: transparent;
+}
+body.theme-fresh .terminal-links {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+body.theme-fresh .terminal-links a {
+  color: #4c82fb;
+  text-decoration: none;
+  font-family: inherit;
+  font-size: 12.5px;
+}
+body.theme-fresh .terminal-links a:hover {
+  text-decoration: underline;
+}
+body.theme-fresh .terminal-prompt {
+  margin-top: 14px;
+  color: #7ee787;
+  font-family: inherit;
+  font-size: 13px;
+}
+body.theme-fresh .terminal-cursor {
+  animation: terminal-blink 1.1s steps(1) infinite;
+}
+@keyframes terminal-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+body.theme-fresh .help-terminal .close-help-button {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  background: transparent;
+  border: 1px solid #2a3644;
+  color: #8b98a5;
+  font-family: "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 13px;
+  padding: 5px 12px;
+  border-radius: 6px;
+}
+body.theme-fresh .help-terminal .close-help-button:hover {
+  color: #ffffff;
+  border-color: #4c82fb;
+  background: rgba(76, 130, 251, 0.12);
+}
+
+/* ================================================================== */
+/* Fresh theme — floating coins + animated background                  */
+/* ================================================================== */
+body.theme-fresh {
+  position: relative;
+}
+body.theme-fresh::before {
+  content: "";
+  position: fixed;
+  inset: -20%;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(38% 45% at 20% 30%, rgba(255, 55, 199, 0.14), transparent 70%),
+    radial-gradient(40% 40% at 80% 25%, rgba(76, 130, 251, 0.14), transparent 70%),
+    radial-gradient(45% 50% at 60% 85%, rgba(132, 64, 242, 0.12), transparent 70%);
+  animation: freshBgDrift 24s ease-in-out infinite alternate;
+}
+@keyframes freshBgDrift {
+  0% {
+    transform: translate3d(-2%, -1%, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(3%, 2%, 0) scale(1.08);
+  }
+  100% {
+    transform: translate3d(-1%, 3%, 0) scale(1.03);
+  }
+}
+
+body.theme-fresh .App {
+  position: relative;
+  z-index: 1;
+}
+
+.fresh-coins {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.fresh-coin {
+  position: absolute;
+  left: -120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: #ffffff;
+  font-weight: 800;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  border: 2px solid rgba(255, 255, 255, 0.55);
+  box-shadow: 0 10px 28px rgba(19, 19, 19, 0.16);
+  animation-name: freshCoinFloat;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  will-change: transform, opacity;
+}
+@keyframes freshCoinFloat {
+  0% {
+    transform: translateX(0) rotate(0deg) scale(0.85);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.95;
+  }
+  46% {
+    transform: translateX(calc(50vw + 10px)) rotate(300deg) scale(1);
+    opacity: 0.95;
+  }
+  50% {
+    transform: translateX(calc(50vw + 24px)) rotate(330deg) scale(0.5);
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(calc(50vw + 24px)) rotate(360deg) scale(0.5);
+    opacity: 0;
+  }
+}
+
+/* centre encryption line + shield */
+.fresh-encryption-line {
+  position: fixed;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  transform: translateX(-50%);
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 55, 199, 0) 0%,
+    rgba(255, 55, 199, 0.5) 20%,
+    rgba(255, 55, 199, 0.75) 50%,
+    rgba(255, 55, 199, 0.5) 80%,
+    rgba(255, 55, 199, 0) 100%
+  );
+  box-shadow: 0 0 18px rgba(255, 55, 199, 0.35);
+  animation: freshLinePulse 2.4s ease-in-out infinite alternate;
+}
+@keyframes freshLinePulse {
+  from {
+    box-shadow: 0 0 14px rgba(255, 55, 199, 0.25);
+  }
+  to {
+    box-shadow: 0 0 26px rgba(255, 55, 199, 0.5);
+  }
+}
+
+.fresh-shield {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 26px;
+  opacity: 0.55;
+  filter: drop-shadow(0 0 10px rgba(255, 55, 199, 0.5));
+  animation: freshShieldGlow 1.8s ease-in-out infinite alternate;
+}
+@keyframes freshShieldGlow {
+  from {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 0.45;
+  }
+  to {
+    transform: translate(-50%, -50%) scale(1.08);
+    opacity: 0.7;
+  }
+}
+
+/* ciphertext emerging from the centre */
+.fresh-cipher {
+  position: absolute;
+  left: 50vw;
+  font-family: "Courier New", monospace;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: #0c8911;
+  background: rgba(12, 137, 17, 0.08);
+  border: 1px solid rgba(12, 137, 17, 0.25);
+  border-radius: 6px;
+  padding: 2px 6px;
+  white-space: nowrap;
+  opacity: 0;
+  animation-name: freshCipherFloat;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  will-change: transform, opacity;
+}
+@keyframes freshCipherFloat {
+  0% {
+    transform: translateX(-10px) scale(0.2);
+    opacity: 0;
+  }
+  12% {
+    opacity: 0.9;
+  }
+  50% {
+    transform: translateX(22vw) scale(1);
+    opacity: 0.9;
+  }
+  92% {
+    transform: translateX(48vw) scale(1);
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateX(52vw) scale(0.8);
+    opacity: 0;
+  }
+}
+
+.fresh-particle {
+  position: absolute;
+  left: -12px;
+  border-radius: 50%;
+  background: rgba(255, 55, 199, 0.35);
+  animation-name: freshParticleFloat;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  will-change: transform, opacity;
+}
+@keyframes freshParticleFloat {
+  0% {
+    transform: translateX(0);
+    opacity: 0;
+  }
+  12% {
+    opacity: 0.9;
+  }
+  88% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateX(calc(100vw + 40px));
+    opacity: 0;
+  }
+}
+
+/* Fresh theme — light toast notifications (overrides forced dark toasts) */
+body.theme-fresh .Toastify__toast,
+body.theme-fresh .Toastify__toast-theme--dark,
+body.theme-fresh .Toastify__toast-theme--light {
+  background: #ffffff;
+  color: #131313;
+  border: 1px solid rgba(19, 19, 19, 0.08);
+  box-shadow: 0 12px 32px rgba(19, 19, 19, 0.14);
+}
+body.theme-fresh .Toastify__toast-body {
+  color: #131313;
+}
+body.theme-fresh .Toastify__toast-theme--dark .Toastify__close-button,
+body.theme-fresh .Toastify__close-button {
+  color: rgba(19, 19, 19, 0.55);
+  opacity: 0.8;
+}
+body.theme-fresh .Toastify__toast--success {
+  border-color: rgba(12, 137, 17, 0.35);
+}
+body.theme-fresh .Toastify__toast--error {
+  border-color: rgba(225, 15, 15, 0.35);
+}
+body.theme-fresh .Toastify__toast--warning {
+  border-color: rgba(153, 111, 1, 0.35);
+}
+body.theme-fresh .Toastify__progress-bar,
+body.theme-fresh .Toastify__progress-bar-theme--dark,
+body.theme-fresh .Toastify__progress-bar-theme--light {
+  background: #ff37c7;
+}
+body.theme-fresh .Toastify__toast--success .Toastify__progress-bar {
+  background: #0c8911;
+}
+body.theme-fresh .Toastify__toast--error .Toastify__progress-bar {
+  background: #e10f0f;
+}
+body.theme-fresh .Toastify__toast--warning .Toastify__progress-bar {
+  background: #996f01;
+}
+
+/* Fresh theme — make the background cover the full page (no white gap) */
+html:has(body.theme-fresh) {
+  background: #eef1f8;
+  min-height: 100%;
+}
+body.theme-fresh {
+  min-height: 100vh;
+  background-attachment: fixed;
+  background-size: cover;
+}
+
+/* ------------------------------------------------------------------ */
+/* Send tab                                                            */
+/* ------------------------------------------------------------------ */
+.send-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+.send-intro {
+  margin: 0 0 0.25rem;
+  color: rgba(19, 19, 19, 0.6);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+.send-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.send-row > label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: rgba(19, 19, 19, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.send-inline {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.send-inline input,
+.send-recipient {
+  flex: 1;
+  background: #f9f9f9;
+  border: 1px solid rgba(19, 19, 19, 0.08);
+  border-radius: 12px;
+  padding: 0.85rem 1rem;
+  font-size: 1rem;
+  color: #131313;
+  outline: none;
+}
+.send-inline input:focus,
+.send-recipient:focus {
+  border-color: rgba(255, 55, 199, 0.5);
+}
+.send-my-address {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  background: #ffffff;
+  border: 1px solid rgba(19, 19, 19, 0.12);
+  border-radius: 12px;
+  padding: 0.85rem 0.9rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #131313;
+  cursor: pointer;
+}
+.send-my-address:hover {
+  border-color: rgba(255, 55, 199, 0.5);
+  color: #ff37c7;
+}
+.send-inline select {
+  background: #ffffff;
+  border: 1px solid rgba(19, 19, 19, 0.1);
+  border-radius: 12px;
+  padding: 0.85rem 2.2rem 0.85rem 1rem;
+  font-size: 1rem;
+  color: #131313;
+  cursor: pointer;
+  appearance: none;
+}
+.send-estimate {
+  min-width: 120px;
+  text-align: right;
+  font-weight: 700;
+  color: #131313;
+}
+.send-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  font-size: 0.8rem;
+  color: rgba(19, 19, 19, 0.55);
+}
+.send-note {
+  margin: 0.25rem 0 0;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: rgba(19, 19, 19, 0.5);
+}
+.send-stages {
+  background: #f9f9f9;
+  border: 1px solid rgba(19, 19, 19, 0.06);
+  border-radius: 12px;
+  padding: 0.75rem 1rem;
+}
+.send-stages h4 {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+  color: #131313;
+}
+.send-stages pre {
+  margin: 0;
+  font-size: 0.72rem;
+  color: rgba(19, 19, 19, 0.7);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 220px;
+  overflow: auto;
+}
+
+/* Send tab — token dropdown with logos */
+.token-select {
+  position: relative;
+  min-width: 150px;
+}
+.token-select-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: #ffffff;
+  border: 1px solid rgba(19, 19, 19, 0.1);
+  border-radius: 12px;
+  padding: 0.7rem 0.9rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #131313;
+  cursor: pointer;
+  transition: border-color 0.2s ease;
+}
+.token-select-trigger:hover,
+.token-select-trigger.open {
+  border-color: rgba(255, 55, 199, 0.5);
+}
+.token-select-logo {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+.token-select-sym {
+  flex: 1;
+  text-align: left;
+}
+.token-select-arrow {
+  font-size: 0.7rem;
+  color: rgba(19, 19, 19, 0.5);
+}
+.token-select-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  background: #ffffff;
+  border: 1px solid rgba(19, 19, 19, 0.08);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(19, 19, 19, 0.14);
+  z-index: 30;
+  padding: 4px;
+}
+.token-select-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.6rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.token-select-option:hover {
+  background: #f2f2f2;
+}
+.token-select-option.selected {
+  background: rgba(255, 55, 199, 0.1);
+}
+.token-select-option .token-select-sym {
+  flex: 0 0 auto;
+  font-weight: 700;
+  color: #131313;
+}
+.token-select-name {
+  flex: 1;
+  text-align: right;
+  font-size: 0.78rem;
+  color: rgba(19, 19, 19, 0.5);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.send-batch-status {
+  margin-top: 0.5rem;
+  padding: 0.6rem 0.9rem;
+  background: rgba(255, 55, 199, 0.08);
+  border: 1px solid rgba(255, 55, 199, 0.25);
+  border-radius: 10px;
+  font-size: 0.82rem;
+  color: #131313;
+}
+.send-batch-status strong {
+  color: #c41969;
+  text-transform: capitalize;
+}
+
+/* Send tab on the default (Kusama) dark theme — the base send styles above
+   are light-on-light for Fresh, so re-skin them for the dark background. */
+body.theme-kusama .send-intro,
+body.theme-kusama .send-note,
+body.theme-kusama .send-meta {
+  color: rgba(255, 255, 255, 0.62);
+}
+body.theme-kusama .send-row > label {
+  color: rgba(255, 255, 255, 0.5);
+}
+body.theme-kusama .send-inline input,
+body.theme-kusama .send-recipient {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(147, 51, 234, 0.35);
+  color: #fff;
+}
+body.theme-kusama .send-inline input::placeholder,
+body.theme-kusama .send-recipient::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+body.theme-kusama .send-inline input:focus,
+body.theme-kusama .send-recipient:focus {
+  border-color: #e6007a;
+}
+body.theme-kusama .send-my-address {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(147, 51, 234, 0.35);
+  color: #fff;
+}
+body.theme-kusama .send-my-address:hover {
+  border-color: #e6007a;
+  color: #ff4fae;
+}
+body.theme-kusama .send-inline select {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(147, 51, 234, 0.35);
+  color: #fff;
+}
+body.theme-kusama .send-inline select option {
+  background: #1a0b2e;
+  color: #fff;
+}
+body.theme-kusama .send-estimate {
+  color: #fff;
+}
+body.theme-kusama .send-stages {
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(147, 51, 234, 0.25);
+}
+body.theme-kusama .send-stages h4 {
+  color: #fff;
+}
+body.theme-kusama .send-stages pre {
+  color: rgba(255, 255, 255, 0.7);
+}
+body.theme-kusama .token-select-trigger {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(147, 51, 234, 0.35);
+  color: #fff;
+}
+body.theme-kusama .token-select-trigger:hover,
+body.theme-kusama .token-select-trigger.open {
+  border-color: #e6007a;
+}
+body.theme-kusama .token-select-arrow {
+  color: rgba(255, 255, 255, 0.5);
+}
+body.theme-kusama .token-select-menu {
+  background: #1a0b2e;
+  border: 1px solid rgba(147, 51, 234, 0.35);
+}
+body.theme-kusama .token-select-option:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+body.theme-kusama .token-select-option.selected {
+  background: rgba(230, 0, 122, 0.18);
+}
+body.theme-kusama .token-select-option .token-select-sym {
+  color: #fff;
+}
+body.theme-kusama .token-select-name {
+  color: rgba(255, 255, 255, 0.6);
+}
+body.theme-kusama .send-batch-status {
+  background: rgba(230, 0, 122, 0.12);
+  border: 1px solid rgba(230, 0, 122, 0.35);
+  color: #fff;
+}
+body.theme-kusama .send-batch-status strong {
+  color: #ff4fae;
+}
+
+/* ================================================================== */
+/* Theme skins — token-driven presets                                  */
+/* Ghost / Radiant / Strawberry / Paul.                                */
+/* The base (Kusama) theme uses the unclassed defaults; Fresh has its  */
+/* own bespoke block above; these four share one variable-driven skin. */
+/* ================================================================== */
+
+/* --- Token palettes ------------------------------------------------ */
+body.theme-ghost {
+  --tf-bg: #060a14;
+  --tf-bg2: #0a1226;
+  --tf-surface: #0c1a33;
+  --tf-surface-2: #0a1226;
+  --tf-border: rgba(46, 211, 215, 0.28);
+  --tf-border-strong: #2ed3d7;
+  --tf-text: #c8f4ff;
+  --tf-muted: #9fc5d6;
+  --tf-accent: #2ed3d7;
+  --tf-accent-hover: #5ef1f5;
+  --tf-accent-2: #e5432b;
+  --tf-on-accent: #060a14;
+  --tf-success: #34d399;
+  --tf-danger: #e5432b;
+  --tf-grad: linear-gradient(90deg, #2ed3d7, #398ff0);
+  --tf-radius: 6px;
+  --tf-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+}
+body.theme-radiant {
+  --tf-bg: #050d17;
+  --tf-bg2: #0b1022;
+  --tf-surface: #161e32;
+  --tf-surface-2: #1c243e;
+  --tf-border: rgba(171, 196, 255, 0.14);
+  --tf-border-strong: rgba(34, 209, 248, 0.6);
+  --tf-text: #ecf5ff;
+  --tf-muted: #abc4ff;
+  --tf-accent: #22d1f8;
+  --tf-accent-hover: #39d0d8;
+  --tf-accent-2: #8c6eef;
+  --tf-on-accent: #0b1022;
+  --tf-success: #4cdcc1;
+  --tf-danger: #ff4ea3;
+  --tf-grad: linear-gradient(90deg, #7748fc, #39d0d8);
+  --tf-radius: 16px;
+  --tf-shadow: 0 8px 24px rgba(79, 83, 243, 0.16);
+}
+body.theme-strawberry {
+  --tf-bg: #fff0f4;
+  --tf-bg2: #ffdbe4;
+  --tf-surface: #fffafa;
+  --tf-surface-2: #ffeff3;
+  --tf-border: rgba(233, 61, 101, 0.18);
+  --tf-border-strong: #e93d65;
+  --tf-text: #2a1620;
+  --tf-muted: #8a5a68;
+  --tf-accent: #e93d65;
+  --tf-accent-hover: #f26666;
+  --tf-accent-2: #47add6;
+  --tf-on-accent: #fffafa;
+  --tf-success: #1f9d55;
+  --tf-danger: #e93d65;
+  --tf-grad: linear-gradient(90deg, #e93d65, #47add6);
+  --tf-radius: 16px;
+  --tf-shadow: 0 12px 40px rgba(233, 61, 101, 0.12);
+}
+body.theme-paul {
+  --tf-bg: #08060b;
+  --tf-bg2: #100c18;
+  --tf-surface: #27262c;
+  --tf-surface-2: #18171a;
+  --tf-border: #383241;
+  --tf-border-strong: #1fc7d4;
+  --tf-text: #f4eeff;
+  --tf-muted: #b8add2;
+  --tf-accent: #1fc7d4;
+  --tf-accent-hover: #53dee9;
+  --tf-accent-2: #a881fc;
+  --tf-on-accent: #08060b;
+  --tf-success: #31d0aa;
+  --tf-danger: #ed4b9e;
+  --tf-grad: linear-gradient(90deg, #1fc7d4, #9a6aff);
+  --tf-radius: 20px;
+  --tf-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+}
+body.theme-cyber {
+  --tf-bg: #0a0620;
+  --tf-bg2: #05010f;
+  --tf-surface: #14102e;
+  --tf-surface-2: #1c1640;
+  --tf-border: rgba(236, 72, 153, 0.28);
+  --tf-border-strong: #ec4899;
+  --tf-text: #e9e6ff;
+  --tf-muted: #a89fd0;
+  --tf-accent: #ec4899;
+  --tf-accent-hover: #ff6ec7;
+  --tf-accent-2: #22d3ee;
+  --tf-on-accent: #0a0620;
+  --tf-success: #34d399;
+  --tf-danger: #ff4d6d;
+  --tf-grad: linear-gradient(90deg, #ec4899, #22d3ee);
+  --tf-radius: 14px;
+  --tf-shadow: 0 12px 40px rgba(236, 72, 153, 0.18);
+}
+/* Cyber Mountain — the Kusama ridgeline is this theme's background.
+   Extra `.theme-skin` in the selector outranks body.theme-skin. */
+body.theme-cyber.theme-skin {
+  background:
+    linear-gradient(rgba(10, 6, 32, 0.62), rgba(5, 1, 15, 0.88)),
+    url('/images/kusamashieldmountainbackground.jpeg');
+  background-size: cover, cover;
+  background-position: center, center;
+  background-repeat: no-repeat, no-repeat;
+  background-attachment: fixed, fixed;
+}
+
+/* Ghost — one of the Ghost in the Shell wallpapers behind the CRT palette.
+   `--tf-bg-image` is set to a random pick when the theme is applied. */
+body.theme-ghost.theme-skin {
+  background:
+    linear-gradient(rgba(6, 10, 20, 0.72), rgba(6, 10, 20, 0.9)),
+    var(--tf-bg-image);
+  background-size: cover, cover;
+  background-position: center, center;
+  background-repeat: no-repeat, no-repeat;
+  background-attachment: fixed, fixed;
+}
+
+/* --- Page background ----------------------------------------------- */
+body.theme-skin {
+  background: radial-gradient(
+    ellipse at 50% 0%,
+    var(--tf-bg) 0%,
+    var(--tf-bg2) 100%
+  );
+  color: var(--tf-text);
+  min-height: 100vh;
+  background-attachment: fixed;
+  background-size: cover;
+}
+html:has(body.theme-skin) {
+  background: var(--tf-bg2);
+  min-height: 100%;
+}
+
+/* --- Surfaces ------------------------------------------------------ */
+body.theme-skin .swap-box {
+  background: var(--tf-surface);
+  border: 1px solid var(--tf-border);
+  box-shadow: var(--tf-shadow);
+  border-radius: var(--tf-radius);
+  clip-path: none;
+  animation: none;
+}
+body.theme-skin .swap-box.no-shield-shape {
+  border-radius: var(--tf-radius);
+}
+body.theme-skin .swap-box h2 {
+  color: var(--tf-text);
+}
+
+/* --- Tabs ---------------------------------------------------------- */
+body.theme-skin .tabs {
+  background: var(--tf-surface-2);
+  border-radius: 14px;
+  padding: 4px;
+}
+body.theme-skin .tab {
+  color: var(--tf-muted);
+  border-radius: 10px;
+  font-weight: 700;
+}
+body.theme-skin .tab:hover {
+  color: var(--tf-text);
+  background: rgba(255, 255, 255, 0.06);
+}
+body.theme-skin .tab.active {
+  color: var(--tf-on-accent);
+  background: var(--tf-accent);
+}
+body.theme-skin .tab.active::after {
+  display: none;
+}
+
+/* --- Inputs / token select ----------------------------------------- */
+body.theme-skin .token-input,
+body.theme-skin .deposit-amount,
+body.theme-skin .secret-input input {
+  background: var(--tf-surface-2);
+  border: 1px solid var(--tf-border);
+}
+body.theme-skin .token-input input,
+body.theme-skin .token-input select,
+body.theme-skin .secret-input input,
+body.theme-skin .destination-address-input,
+body.theme-skin .amount-input input {
+  color: var(--tf-text);
+}
+body.theme-skin .token-input select,
+body.theme-skin .currency-select {
+  background-color: var(--tf-surface);
+  border: 1px solid var(--tf-border);
+  color: var(--tf-text);
+  box-shadow: none;
+}
+body.theme-skin .token-input select:hover,
+body.theme-skin .currency-select:hover {
+  border-color: var(--tf-border-strong);
+}
+body.theme-skin .token-input select option,
+body.theme-skin .currency-select option {
+  background: var(--tf-surface);
+  color: var(--tf-text);
+}
+body.theme-skin .secret-input input::placeholder {
+  color: var(--tf-muted);
+  opacity: 0.7;
+}
+body.theme-skin .balance,
+body.theme-skin .balance-display {
+  color: var(--tf-muted);
+}
+
+/* --- Amount slider -------------------------------------------------- */
+body.theme-skin .amount-slider-container label,
+body.theme-skin .amount-labels .amount-label {
+  color: var(--tf-muted);
+}
+body.theme-skin .amount-labels .amount-label.active {
+  color: var(--tf-accent);
+}
+
+/* --- Network select ------------------------------------------------- */
+body.theme-skin .selected-network {
+  background: var(--tf-surface);
+  border: 1px solid var(--tf-border);
+  color: var(--tf-text);
+}
+body.theme-skin .selected-network:hover,
+body.theme-skin .selected-network.open {
+  border-color: var(--tf-border-strong);
+}
+body.theme-skin .network-select-dropdown {
+  background: var(--tf-surface);
+  border: 1px solid var(--tf-border);
+  box-shadow: var(--tf-shadow);
+}
+body.theme-skin .network-option {
+  color: var(--tf-text);
+}
+body.theme-skin .network-option:hover {
+  background: var(--tf-surface-2);
+}
+body.theme-skin .network-option.selected {
+  background: color-mix(in srgb, var(--tf-accent) 14%, transparent);
+  color: var(--tf-accent);
+}
+body.theme-skin .group-header {
+  color: var(--tf-muted);
+}
+
+/* --- Header / nav buttons ------------------------------------------ */
+body.theme-skin .header h1 {
+  color: var(--tf-text);
+}
+body.theme-skin .help-button,
+body.theme-skin .terms-button,
+body.theme-skin .settings-button,
+body.theme-skin .privacy-button {
+  background: var(--tf-surface);
+  border: 1px solid var(--tf-border);
+  color: var(--tf-text);
+  box-shadow: none;
+}
+body.theme-skin .help-button:hover,
+body.theme-skin .terms-button:hover,
+body.theme-skin .settings-button:hover,
+body.theme-skin .privacy-button:hover {
+  border-color: var(--tf-border-strong);
+  color: var(--tf-accent);
+}
+body.theme-skin .privacy-proxy-button {
+  border-color: var(--tf-border);
+}
+body.theme-skin .privacy-proxy-button:hover {
+  border-color: var(--tf-border-strong);
+}
+
+/* --- Modals / panels ----------------------------------------------- */
+body.theme-skin .help-modal {
+  background: rgba(0, 0, 0, 0.5);
+}
+body.theme-skin .help-modal-content {
+  background: var(--tf-surface);
+  color: var(--tf-text);
+  border: 1px solid var(--tf-border);
+  box-shadow: var(--tf-shadow);
+}
+body.theme-skin .help-modal-content h2,
+body.theme-skin .help-section h3 {
+  color: var(--tf-text);
+}
+body.theme-skin .help-section p,
+body.theme-skin .help-section label,
+body.theme-skin .help-section code {
+  color: var(--tf-muted);
+}
+body.theme-skin .close-help-button {
+  background: var(--tf-surface-2);
+  color: var(--tf-text);
+  border: 1px solid var(--tf-border);
+}
+body.theme-skin .fresh-theme-option {
+  background: var(--tf-surface-2);
+  border-color: var(--tf-border);
+}
+body.theme-skin .fresh-theme-option:hover {
+  border-color: var(--tf-accent);
+}
+body.theme-skin .fresh-theme-option.active {
+  border-color: var(--tf-accent);
+  background: color-mix(in srgb, var(--tf-accent) 12%, transparent);
+}
+body.theme-skin .fresh-theme-title {
+  color: var(--tf-text);
+}
+body.theme-skin .fresh-theme-option.active .fresh-theme-title {
+  color: var(--tf-accent);
+}
+body.theme-skin .fresh-theme-sub {
+  color: var(--tf-muted);
+}
+
+/* --- Info blocks --------------------------------------------------- */
+body.theme-skin .exchange-rate-display,
+body.theme-skin .rate-info,
+body.theme-skin .fee-info,
+body.theme-skin .info-box,
+body.theme-skin .bridge-info,
+body.theme-skin .network-info,
+body.theme-skin .deposit-info,
+body.theme-skin .address-help {
+  color: var(--tf-muted);
+}
+body.theme-skin .error-message {
+  color: var(--tf-danger);
+}
+body.theme-skin .note {
+  color: var(--tf-muted);
+}
+
+/* --- Primary action buttons ---------------------------------------- */
+body.theme-skin .connect-button,
+body.theme-skin .connect-button.connected,
+body.theme-skin .swap-button,
+body.theme-skin .confirm-deposit-button {
+  background: var(--tf-grad);
+  color: var(--tf-on-accent);
+  border-radius: var(--tf-radius);
+}
+body.theme-skin .connect-button:hover,
+body.theme-skin .connect-button.connected:hover,
+body.theme-skin .swap-button:hover,
+body.theme-skin .confirm-deposit-button:hover {
+  background: linear-gradient(
+    90deg,
+    var(--tf-accent-hover),
+    var(--tf-accent-2)
+  );
+  color: var(--tf-on-accent);
+}
+body.theme-skin .swap-button.disabled,
+body.theme-skin .swap-button:disabled {
+  background: var(--tf-surface-2);
+  color: var(--tf-muted);
+  box-shadow: none;
+}
+body.theme-skin .new-swap-button {
+  background: var(--tf-accent) !important;
+  color: var(--tf-on-accent) !important;
+  box-shadow: none !important;
+}
+body.theme-skin .cancel-swap-button {
+  background: var(--tf-surface-2) !important;
+  color: var(--tf-text) !important;
+  border: 1px solid var(--tf-border) !important;
+  box-shadow: none !important;
+}
+
+/* --- Scrollbars ---------------------------------------------------- */
+body.theme-skin .help-modal-content::-webkit-scrollbar-track,
+body.theme-skin .network-select-dropdown::-webkit-scrollbar-track {
+  background: var(--tf-surface-2);
+}
+body.theme-skin .help-modal-content::-webkit-scrollbar-thumb,
+body.theme-skin .network-select-dropdown::-webkit-scrollbar-thumb {
+  background: var(--tf-border-strong);
+}
+
+/* --- Toasts -------------------------------------------------------- */
+body.theme-skin .Toastify__toast,
+body.theme-skin .Toastify__toast-theme--dark,
+body.theme-skin .Toastify__toast-theme--light {
+  background: var(--tf-surface);
+  color: var(--tf-text);
+  border: 1px solid var(--tf-border);
+  box-shadow: var(--tf-shadow);
+}
+body.theme-skin .Toastify__toast-body {
+  color: var(--tf-text);
+}
+body.theme-skin .Toastify__close-button {
+  color: var(--tf-muted);
+  opacity: 0.8;
+}
+body.theme-skin .Toastify__toast--success {
+  border-color: var(--tf-success);
+}
+body.theme-skin .Toastify__toast--error {
+  border-color: var(--tf-danger);
+}
+body.theme-skin .Toastify__progress-bar,
+body.theme-skin .Toastify__progress-bar-theme--dark,
+body.theme-skin .Toastify__progress-bar-theme--light {
+  background: var(--tf-accent);
+}
+body.theme-skin .Toastify__toast--success .Toastify__progress-bar {
+  background: var(--tf-success);
+}
+body.theme-skin .Toastify__toast--error .Toastify__progress-bar {
+  background: var(--tf-danger);
+}
+
+/* --- Send tab (was hardcoded light) -------------------------------- */
+body.theme-skin .send-intro,
+body.theme-skin .send-note,
+body.theme-skin .send-meta {
+  color: var(--tf-muted);
+}
+body.theme-skin .send-row > label {
+  color: var(--tf-muted);
+}
+body.theme-skin .send-inline input,
+body.theme-skin .send-recipient {
+  background: var(--tf-surface-2);
+  border: 1px solid var(--tf-border);
+  color: var(--tf-text);
+}
+body.theme-skin .send-inline input:focus,
+body.theme-skin .send-recipient:focus {
+  border-color: var(--tf-border-strong);
+}
+body.theme-skin .send-my-address {
+  background: var(--tf-surface);
+  border: 1px solid var(--tf-border);
+  color: var(--tf-text);
+}
+body.theme-skin .send-my-address:hover {
+  border-color: var(--tf-border-strong);
+  color: var(--tf-accent);
+}
+body.theme-skin .send-inline select {
+  background: var(--tf-surface);
+  border: 1px solid var(--tf-border);
+  color: var(--tf-text);
+}
+body.theme-skin .send-estimate {
+  color: var(--tf-text);
+}
+body.theme-skin .send-stages {
+  background: var(--tf-surface-2);
+  border: 1px solid var(--tf-border);
+}
+body.theme-skin .send-stages h4 {
+  color: var(--tf-text);
+}
+body.theme-skin .send-stages pre {
+  color: var(--tf-muted);
+}
+body.theme-skin .token-select-trigger {
+  background: var(--tf-surface);
+  border: 1px solid var(--tf-border);
+  color: var(--tf-text);
+}
+body.theme-skin .token-select-trigger:hover,
+body.theme-skin .token-select-trigger.open {
+  border-color: var(--tf-border-strong);
+}
+body.theme-skin .token-select-arrow {
+  color: var(--tf-muted);
+}
+body.theme-skin .token-select-menu {
+  background: var(--tf-surface);
+  border: 1px solid var(--tf-border);
+  box-shadow: var(--tf-shadow);
+}
+body.theme-skin .token-select-option:hover {
+  background: var(--tf-surface-2);
+}
+body.theme-skin .token-select-option.selected {
+  background: color-mix(in srgb, var(--tf-accent) 14%, transparent);
+}
+body.theme-skin .token-select-option .token-select-sym {
+  color: var(--tf-text);
+}
+body.theme-skin .token-select-name {
+  color: var(--tf-muted);
+}
+body.theme-skin .send-batch-status {
+  background: color-mix(in srgb, var(--tf-accent) 12%, transparent);
+  border: 1px solid var(--tf-border-strong);
+  color: var(--tf-text);
+}
+body.theme-skin .send-batch-status strong {
+  color: var(--tf-accent);
+}
+
+/* --- Theme picker grid --------------------------------------------- */
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  margin: 1rem 0;
+}
+.theme-grid .fresh-theme-option {
+  margin: 0;
+}
+.theme-grid .fresh-theme-swatch span {
+  width: 18px;
+  height: 36px;
+}
+
+/* --- UI feedback survey link --------------------------------------- */
+.theme-survey-link {
+  margin: 1rem 0 0;
+  font-size: 0.9rem;
+}
+.theme-survey-link a {
+  color: #c084fc;
+  font-weight: 700;
+  text-decoration: underline;
+}
+.theme-survey-link a:hover {
+  color: #e6007a;
+}
+body.theme-fresh .theme-survey-link a {
+  color: #c41969;
+}
+body.theme-fresh .theme-survey-link a:hover {
+  color: #ff37c7;
+}
+body.theme-skin .theme-survey-link a {
+  color: var(--tf-accent);
+}
+body.theme-skin .theme-survey-link a:hover {
+  color: var(--tf-accent-hover);
 }

@@ -4,7 +4,6 @@
 
 import { ethers } from "ethers";
 
-const MOONBEAM_TESTNET_RPC = "wss://moonbase-alpha.public.blastapi.io";
 const SHIELD_CONTRACT_ADDRESS = "0x..."; // Replace with actual shield contract address
 
 // ABI for the shield contract's withdraw function
@@ -28,32 +27,7 @@ export async function unshieldTokens(
   evmAddress: string,
   secret: string,
 ): Promise<ethers.TransactionResponse> {
-  try {
-    // Connect to Moonbeam testnet
-    const provider = new ethers.WebSocketProvider(MOONBEAM_TESTNET_RPC);
-
-    // Get the signer from the connected wallet
-    const signer = await provider.getSigner();
-
-    // Create contract instance
-    const shieldContract = new ethers.Contract(
-      SHIELD_CONTRACT_ADDRESS,
-      SHIELD_CONTRACT_ABI,
-      signer,
-    );
-
-    // Call the withdraw function
-    const tx = await shieldContract.withdraw(secret, {
-      from: evmAddress,
-    });
-
-    // Wait for the transaction to be mined
-    await tx.wait();
-
-    return tx;
-  } catch (error) {
-    throw new Error(
-      `Unshield transaction failed: ${error instanceof Error ? error.message : "Unknown error"}`,
-    );
-  }
+  throw new Error(
+    "unshieldTokens is deprecated (Moonbeam network support has been removed)",
+  );
 }

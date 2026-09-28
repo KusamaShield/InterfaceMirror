@@ -48,9 +48,9 @@ export default function NetworkSelect({ selectedNetwork, onNetworkChange }: Netw
           className={`selected-network ${isOpen ? 'open' : ''}`}
           onClick={() => setIsOpen(!isOpen)}
         >
-           {selectedNetwork && (selectedNetwork === 'paseo_assethub' || selectedNetwork === 'polkadot') ? (
+           {selectedNetwork && (selectedNetwork === 'paseo_assethub' || selectedNetwork === 'polkadot' || selectedNetwork === 'kusama') ? (
               <>
-                <img src={selectedNetwork.includes('paseo') ? "/paseo-icon.png" : "/favicon-dark.svg"} alt="Network" className="network-logo" />
+                <img src={selectedNetwork.includes('paseo') ? "/paseo-icon.png" : selectedNetwork === 'kusama' ? "/kusama-icon.png" : "/favicon-dark.svg"} alt="Network" className="network-logo" />
                 <span>{getNetworkLabel(selectedNetwork)}</span>
               </>
             ) : selectedNetwork ? (
@@ -85,7 +85,8 @@ export default function NetworkSelect({ selectedNetwork, onNetworkChange }: Netw
                   className={`network-option ${selectedNetwork === 'kusama' ? 'selected' : ''}`}
                   onClick={() => handleSelect('kusama')}
                 >
-                  🐦 Kusama Assethub
+                  <img src="/kusama-icon.png" alt="Kusama" className="network-logo" />
+                  Kusama Assethub
                 </div>
                 <div
                   className={`network-option ${selectedNetwork === 'polkadot' ? 'selected' : ''}`}

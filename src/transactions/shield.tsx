@@ -5,7 +5,6 @@
 import { ethers } from 'ethers'
 import { toast } from 'react-toastify'
 
-const MOONBEAM_TESTNET_RPC = 'wss://moonbase-alpha.public.blastapi.io'
 const SHIELD_CONTRACT_ADDRESS = '0xDEB209D0a993A4ce495FB668698c08Eb5ca1F33d' // Replace with actual shield contract address
 const fakeerc20asset = '0x2a9173fbad551e719ff442b22d7064cbb4fef7a7';//'0x74f65B42E6BcE24285A557cd3f19a84dF132eAC1'
 
@@ -45,8 +44,6 @@ export async function fakeshield(
   secret: string,
 ): Promise<boolean> {
   try {
-    // Connect to Moonbeam testnet
-//    const provider = new ethers.WebSocketProvider(MOONBEAM_TESTNET_RPC)
     const linko =   "";
 
  
@@ -75,36 +72,7 @@ export async function shieldTokens(
   amount: string,
   secret: string,
 ): Promise<ethers.TransactionResponse> {
-  try {
-    // Connect to Moonbeam testnet
-    const provider = new ethers.WebSocketProvider(MOONBEAM_TESTNET_RPC)
-
-    // Get the signer from the connected wallet
-    const signer = await provider.getSigner()
-
-    // Create contract instance
-    const shieldContract = new ethers.Contract(
-      SHIELD_CONTRACT_ADDRESS,
-      shielderAbi,
-      signer,
-    )
-
-    // Convert amount to wei
-    const amountInWei = ethers.parseEther(amount)
-
-
-    // Call the deposit function
-    const tx = await shieldContract.deposit(amountInWei, secret, {
-      from: evmAddress,
-    })
-
-    // Wait for the transaction to be mined
-    await tx.wait()
-
-    return tx
-  } catch (error) {
-    throw new Error(
-      `Shield transaction failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-    )
-  }
+  throw new Error(
+    "shieldTokens is deprecated (Moonbeam network support has been removed)",
+  );
 }
