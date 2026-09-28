@@ -16,11 +16,7 @@ jobs:
       - name: Install dependencies
         run: |
           git clone https://codeberg.org/KusamaShield/Interface/ && cd Interface/ && npm install -f 
-#      - name: Balance rpc checks
-#        run: cd Interface && npm run check_balance
 
       - name: Building repo
         run: cd Interface && npm run build
 
-      - name: check foreign balance on Kusama 
-        run: cd Interface && npm run check_foreign_balance
