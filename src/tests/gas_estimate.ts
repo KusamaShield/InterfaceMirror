@@ -16,7 +16,6 @@ const DEFAULT_GAS_UNITS: Record<string, { shield: bigint; unshield: bigint }> =
 
 // Mirror of NETWORKS rpcEndpoints from App.tsx
 const NETWORK_RPCS: Record<string, string> = {
-  moonbase: "https://moonbase.public.curie.radiumblock.co/http",
   westend_assethub: "https://westend-asset-hub-eth-rpc.polkadot.io",
   paseo_assethub: "https://kusama-rpc.laissez-faire.trade/",
   polkadot: "https://eth-rpc.polkadot.io/",
@@ -25,7 +24,6 @@ const NETWORK_RPCS: Record<string, string> = {
 };
 
 const NETWORK_ASSETS: Record<string, string> = {
-  moonbase: "DEV",
   westend_assethub: "WND",
   paseo_assethub: "PAS",
   polkadot: "DOT",
@@ -89,7 +87,6 @@ async function main() {
     "westend_assethub",
     "polkadot",
     "kusama",
-    "moonbase",
   ];
   const testTabs: ("shield" | "unshield")[] = ["shield", "unshield"];
 

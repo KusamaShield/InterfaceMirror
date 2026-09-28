@@ -40,8 +40,17 @@ import {
   parseDotAmount,
   deriveV7Commitment,
   ss58ToEth,
+  getCachedMetadata,
+  cacheApiMetadata,
+  prefetchMetadata,
+  whenMetadataCacheReady,
 } from "./transactions/revivePolkadot";
-import { generateEcdsaWallet, computeFallbackSS58, submitDeposit, sweepBalance } from "./transactions/forwarder";
+import {
+  generateEcdsaWallet,
+  computeFallbackSS58,
+  submitDeposit,
+  sweepBalance,
+} from "./transactions/forwarder";
 import { poseidon1, poseidon2, poseidon3 } from "poseidon-lite";
 import {
   westend_pool,
@@ -62,6 +71,9 @@ import QRCode from "qrcode";
 import SwapStatusTracker from "./components/SwapStatusTracker";
 import NetworkSelect from "./components/NetworkSelect";
 import OfframpWidget from "./components/OfframpWidget";
+import TokenFlow from "./components/TokenFlow";
+import FloatingCoins from "./components/FloatingCoins";
+import SendTab from "./components/SendTab";
 //import init, { generate_commitment, test_console, test_proofo, generate_proof_data } from '../pkg/generate_zk_wasm'; // adjust path as needed
 import { Buffer } from "buffer";
 
@@ -83,6 +95,19 @@ import RainAnimation from "./components/RainAnimation";
 import FlameAnimation from "./components/FlameAnimation";
 import PonyAnimation from "./components/PonyAnimation";
 import { useAccount, useSwitchChain, useWalletClient } from "wagmi";
+import {
+  enableTor,
+  enableNym,
+  disablePrivacy,
+  installFetchInterceptor,
+  isNymActive,
+  rpcTimeoutMs,
+  getPrivacyState,
+  onPrivacyChange,
+  type PrivacyMode,
+  type PrivacyStatus,
+} from "./services/privacyProxy";
+import { isPolkadotUsingShim } from "./services/wsShim";
 
 // input token amounts
 const amountOptions = [0.5, 1, 5, 10, 100, 500, 1000, 10000];
@@ -91,16 +116,6 @@ const amountOptions = [0.5, 1, 5, 10, 100, 500, 1000, 10000];
 
 // Networks: name, endpoint, native asset
 const NETWORKS = {
-  moonbase: {
-    name: "Moonbase Testnet",
-    wsEndpoint: "wss://moonbase-alpha.public.blastapi.io",
-    rpcEndpoint: "https://moonbase.public.curie.radiumblock.co/http",
-    asset: "DEV",
-    faucet: "https://faucet.moonbeam.network/",
-    chain_id: 1287,
-    block_explorer: "https://moonbase.moonscan.io",
-    docs: "https://kusamashield.codeberg.page/networks/moonbase.html",
-  },
   shibuya: {
     name: "Shibuya (parachain testnet)",
     rpcEndpoint: "https://evm.shibuya.astar.network",
@@ -208,20 +223,17 @@ const NETWORKS = {
     docs: "https://kusamashield.codeberg.page/",
   },
 
-kusama: {
+  kusama: {
     name: "Kusama Assethub",
     type: "mainnet",
     asset: "KSM",
     logo: "/favicon-dark.svg",
     chain_id: 420420418,
     rpcEndpoint: "https://kusama-rpc.laissez-faire.trade",
-    rpcEndpoints: [
-      "https://kusama-rpc.laissez-faire.trade",
-    ],
+    rpcEndpoints: ["https://kusama-rpc.laissez-faire.trade"],
     wsEndpoint: "wss://asset-hub-kusama-rpc.n.dwellir.com",
     wsEndpoints: [
       "wss://asset-hub-kusama-rpc.n.dwellir.com",
-      "wss://api-asset-hub-kusama.n.dwellir.com/64987a87-5544-491a-8ded-b9a015b82f03",
       "wss://kusama-asset-hub-rpc.polkadot.io",
     ],
     faucet: "",
@@ -331,6 +343,79 @@ function generateDot2KsmInput(dotAmount: any, ksmAmount: any) {
   };
 }
 
+export type ThemeDef = {
+  id: string;
+  label: string;
+  sub: string;
+  mode: "light" | "dark";
+  swatch: string[];
+  decorative?: boolean;
+  backgrounds?: string[];
+};
+
+export const THEMES: ThemeDef[] = [
+  {
+    id: "kusama",
+    label: "Kusama",
+    sub: "Neon pink on deep space — the default",
+    mode: "dark",
+    swatch: ["#09002B", "#E6007A", "#00FF85", "#FFFFFF"],
+  },
+  {
+    id: "fresh",
+    label: "Fresh",
+    sub: "Light, intuitive and clean",
+    mode: "light",
+    swatch: ["#FFFFFF", "#F9F9F9", "#FF37C7", "#4C82FB"],
+    decorative: true,
+  },
+  {
+    id: "ghost",
+    label: "Ghost",
+    sub: "CRT cyan on navy-black",
+    mode: "dark",
+    swatch: ["#060A14", "#0C1A33", "#2ED3D7", "#E5432B"],
+    backgrounds: [
+      "/ghost-backgrounds/gis0.png",
+      "/ghost-backgrounds/gis1.png",
+      "/ghost-backgrounds/gs2.png",
+      "/ghost-backgrounds/gis3.png",
+      "/ghost-backgrounds/gis4.png",
+      "/ghost-backgrounds/gis5.png",
+    ],
+  },
+  {
+    id: "radiant",
+    label: "Radiant",
+    sub: "Glassy navy with cyan & violet",
+    mode: "dark",
+    swatch: ["#0B1022", "#161E32", "#22D1F8", "#8C6EEF"],
+  },
+  {
+    id: "strawberry",
+    label: "Strawberry",
+    sub: "Blush pink & lavender",
+    mode: "light",
+    swatch: ["#FFDBE4", "#FFFAFA", "#E93D65", "#47ADD6"],
+  },
+  {
+    id: "paul",
+    label: "Paul",
+    sub: "Chocolate purple DEX",
+    mode: "dark",
+    swatch: ["#08060B", "#27262C", "#1FC7D4", "#A881FC"],
+  },
+  {
+    id: "cyber",
+    label: "Cyber Mountain",
+    sub: "Neon pinks over the Kusama ridgeline",
+    mode: "dark",
+    swatch: ["#0A0620", "#14102E", "#EC4899", "#22D3EE"],
+  },
+];
+
+export const THEME_BODY_CLASSES = THEMES.map((t) => `theme-${t.id}`);
+
 export function App() {
   const [isWalletConnected, setIsWalletConnected] = useState(false);
   const [selectedWallet, setSelectedWallet] = useState<any>(null); // Consider using proper type instead of any
@@ -338,7 +423,7 @@ export function App() {
   const [evmAddress, setEvmAddress] = useState<string | null>(null);
   const [polkadotAddress, setPolkadotAddress] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<
-    "shield" | "unshield" | "bridge" | "offramp"
+    "shield" | "unshield" | "bridge" | "offramp" | "send"
   >("shield");
   const [secret, setSecret] = useState("");
   const [amount, setAmount] = useState("");
@@ -355,7 +440,7 @@ export function App() {
   >([]);
   const [isLoadingAssets, setIsLoadingAssets] = useState(false);
   const [selectedNetwork, setSelectedNetwork] =
-    useState<keyof typeof NETWORKS>("moonbase");
+    useState<keyof typeof NETWORKS>("kusama");
   const [isNetworkDropdownOpen, setIsNetworkDropdownOpen] = useState(false);
   const [fromNetwork, setfromNetwork] = useState<any>(null);
   const [toNetwork, settoNetwork] = useState<any>(null);
@@ -370,12 +455,22 @@ export function App() {
   const [genLoading, setGenLoading] = useState(false);
   const [userEmail, setUserEmail] = useState("");
   const [confirmationToken, setConfirmationToken] = useState("");
-  const [nameGenStep, setNameGenStep] = useState<"generate" | "confirm" | "done">("generate");
+  const [nameGenStep, setNameGenStep] = useState<
+    "generate" | "confirm" | "done"
+  >("generate");
   const [nameGenResult, setNameGenResult] = useState("");
   const [firstNames, setFirstNames] = useState<string[]>([]);
   const [lastNames, setLastNames] = useState<string[]>([]);
   const [namesLoaded, setNamesLoaded] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
+
+  // Privacy proxy (Tor / Nym) state
+  const [privacyMode, setPrivacyMode] = useState<PrivacyMode>("off");
+  const [privacyStatus, setPrivacyStatus] =
+    useState<PrivacyStatus>("disconnected");
+  const [privacyMessage, setPrivacyMessage] = useState("");
+  const privacyToastIdRef = useRef<any>(null);
+  const nymNoticeToastIdRef = useRef<any>(null);
 
   // Proxy withdraw state (for Paseo network)
   const [useProxyWithdraw, setUseProxyWithdraw] = useState<boolean>(false);
@@ -393,15 +488,162 @@ export function App() {
     currentAsset: "",
   });
 
-  // Background color customization
-  const [backgroundColor, setBackgroundColor] = useState("#09002b");
-  const [gradientColor, setGradientColor] = useState("#000000");
+  // Theme registry — a named preset applied as a `theme-<id>` body class.
+  // Migrates the legacy boolean `freshTheme` flag to the "fresh" preset.
+  const [theme, setTheme] = useState<string>(() => {
+    try {
+      const stored = localStorage.getItem("theme");
+      if (stored && THEMES.some((t) => t.id === stored)) return stored;
+      if (localStorage.getItem("freshTheme") === "1") return "fresh";
+    } catch {
+      /* ignore */
+    }
+    return "fresh";
+  });
 
-  // Update CSS variables when colors change
   useEffect(() => {
-    document.documentElement.style.setProperty("--bg-primary", backgroundColor);
-    document.documentElement.style.setProperty("--bg-gradient", gradientColor);
-  }, [backgroundColor, gradientColor]);
+    document.body.classList.remove(...THEME_BODY_CLASSES);
+    document.body.classList.add(`theme-${theme}`);
+    document.body.classList.toggle(
+      "theme-skin",
+      theme !== "kusama" && theme !== "fresh",
+    );
+    const def = THEMES.find((t) => t.id === theme);
+    if (def?.backgrounds?.length) {
+      const pick =
+        def.backgrounds[Math.floor(Math.random() * def.backgrounds.length)];
+      document.body.style.setProperty("--tf-bg-image", `url('${pick}')`);
+    } else {
+      document.body.style.removeProperty("--tf-bg-image");
+    }
+    try {
+      localStorage.setItem("theme", theme);
+      localStorage.setItem("freshTheme", theme === "fresh" ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }, [theme]);
+
+  const activeTheme = THEMES.find((t) => t.id === theme) ?? THEMES[0];
+  const isLightTheme = activeTheme.mode === "light";
+
+  // Install the global fetch interceptor once and subscribe to proxy state.
+  // While a privacy mode is active, all EVM JSON-RPC fetches are routed
+  // through Tor or Nym (see src/services/privacyProxy.ts).
+  useEffect(() => {
+    installFetchInterceptor();
+    const handlePrivacyState = (s: any) => {
+      setPrivacyMode(s.mode);
+      setPrivacyStatus(s.status);
+      setPrivacyMessage(s.message);
+
+      // Persistent notice while the Nym mixnet is active.
+      const nymOn = s.mode === "nym" && s.status === "connected";
+      if (nymOn) {
+        if (!nymNoticeToastIdRef.current) {
+          nymNoticeToastIdRef.current = toast.loading(
+            "All transactions are sent via the Nym Mixnet",
+            {
+              position: "top-right",
+              theme: "dark",
+              autoClose: false,
+              closeOnClick: false,
+              draggable: false,
+            },
+          );
+        }
+      } else if (nymNoticeToastIdRef.current) {
+        toast.dismiss(nymNoticeToastIdRef.current);
+        nymNoticeToastIdRef.current = null;
+      }
+
+      if (s.status === "connecting") {
+        if (privacyToastIdRef.current) {
+          toast.update(privacyToastIdRef.current, {
+            render: s.message || "Establishing private connection...",
+            isLoading: true,
+          });
+        } else {
+          privacyToastIdRef.current = toast.loading(
+            s.message || "Establishing private connection...",
+            { position: "top-right", theme: "dark" },
+          );
+        }
+      } else if (s.status === "connected") {
+        if (privacyToastIdRef.current) {
+          toast.update(privacyToastIdRef.current, {
+            render: s.message || "Private connection established",
+            type: "success",
+            isLoading: false,
+            autoClose: 5000,
+          });
+          privacyToastIdRef.current = null;
+        }
+      } else if (s.status === "error") {
+        if (privacyToastIdRef.current) {
+          toast.update(privacyToastIdRef.current, {
+            render: s.message || "Private connection failed",
+            type: "error",
+            isLoading: false,
+            autoClose: 6000,
+          });
+          privacyToastIdRef.current = null;
+        }
+      } else if (s.status === "disconnected") {
+        if (privacyToastIdRef.current) {
+          toast.dismiss(privacyToastIdRef.current);
+          privacyToastIdRef.current = null;
+        }
+      }
+    };
+    const unsub = onPrivacyChange(handlePrivacyState);
+    // Sync with any state that was already active before this effect ran.
+    handlePrivacyState(getPrivacyState());
+    return () => {
+      unsub();
+      if (nymNoticeToastIdRef.current) {
+        toast.dismiss(nymNoticeToastIdRef.current);
+        nymNoticeToastIdRef.current = null;
+      }
+    };
+  }, []);
+
+  const handleTorToggle = async () => {
+    try {
+      if (privacyMode === "tor" && privacyStatus === "connected") {
+        await disablePrivacy();
+      } else {
+        await enableTor();
+      }
+    } catch (err) {
+      console.error("Tor connection error:", err);
+    }
+  };
+
+  const handleNymToggle = async () => {
+    try {
+      if (privacyMode === "nym" && privacyStatus === "connected") {
+        await disablePrivacy();
+      } else {
+        await enableNym();
+        const captured = await isPolkadotUsingShim();
+        if (!captured) {
+          console.warn(
+            "[privacy] @polkadot/x-ws did not capture the Nym WebSocket shim; " +
+              "Polkadot WSS will not be tunnelled (reconnect Polkadot after enabling Nym).",
+          );
+        }
+        // Warm the runtime-metadata cache in the background so the first
+        // Substrate operation doesn't pay the ~1.3 MB mixnet metadata fetch.
+        const pc = NETWORKS[selectedNetwork] as any;
+        const metaEndpoints: string[] =
+          pc?.wsEndpoints || [pc?.wsEndpoint].filter(Boolean);
+        void prefetchMetadata(metaEndpoints);
+      }
+    } catch (err) {
+      console.error("Nym connection error:", err);
+    }
+  };
 
   // Theme mode states
   const [rainMode, setRainMode] = useState(false);
@@ -839,6 +1081,9 @@ export function App() {
 
   // Ref to prevent balance polling from killing the connection during a Nova tx
   const isSubstrateTxRef = useRef<boolean>(false);
+  // Guards the one-time WASM load against React StrictMode's double-invoked
+  // effects (which otherwise fire setNetwork()/its toast twice).
+  const wasmLoadStartedRef = useRef<boolean>(false);
 
   useEffect(() => {
     evmAddressRef.current = evmAddress;
@@ -905,7 +1150,8 @@ export function App() {
     return balance.toFixed(4);
   };
 
-  const pickRandom = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)];
+  const pickRandom = (arr: string[]) =>
+    arr[Math.floor(Math.random() * arr.length)];
 
   const generateName = (fns?: string[], lns?: string[]) => {
     const fnList = fns ?? firstNames;
@@ -913,8 +1159,12 @@ export function App() {
     if (fnList.length === 0 || lnList.length === 0) return;
     const fn = pickRandom(fnList);
     const ln = pickRandom(lnList);
-    setGeneratedFirstName(fn.charAt(0).toUpperCase() + fn.slice(1).toLowerCase());
-    setGeneratedLastName(ln.charAt(0).toUpperCase() + ln.slice(1).toLowerCase());
+    setGeneratedFirstName(
+      fn.charAt(0).toUpperCase() + fn.slice(1).toLowerCase(),
+    );
+    setGeneratedLastName(
+      ln.charAt(0).toUpperCase() + ln.slice(1).toLowerCase(),
+    );
     setNameGenResult("");
   };
 
@@ -927,8 +1177,14 @@ export function App() {
       ]);
       const fnText = await fnRes.text();
       const lnText = await lnRes.text();
-      const fns = fnText.split("\n").map((s) => s.trim()).filter(Boolean);
-      const lns = lnText.split("\n").map((s) => s.trim()).filter(Boolean);
+      const fns = fnText
+        .split("\n")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const lns = lnText
+        .split("\n")
+        .map((s) => s.trim())
+        .filter(Boolean);
       setFirstNames(fns);
       setLastNames(lns);
       setNamesLoaded(true);
@@ -941,10 +1197,16 @@ export function App() {
   const subscribeForwarder = async () => {
     if (!generatedFirstName || !generatedLastName || !userEmail) return;
     const handle = `${generatedFirstName.toLowerCase()}.${generatedLastName.toLowerCase()}`;
-    const params = new URLSearchParams({ name: handle, domain: "metasploit.io", to: userEmail });
+    const params = new URLSearchParams({
+      name: handle,
+      domain: "metasploit.io",
+      to: userEmail,
+    });
     try {
       setNameGenResult("Sending confirmation email...");
-      const res = await fetch(`/api/mail-proxy/api/forward/subscribe?${params}`);
+      const res = await fetch(
+        `/api/mail-proxy/api/forward/subscribe?${params}`,
+      );
       const data = await res.json();
       if (data.ok) {
         setNameGenResult("");
@@ -985,7 +1247,9 @@ export function App() {
 
     // Increment request ID and capture it for this call
     const requestId = ++queryRequestIdRef.current;
-    console.log(`queryUserAssets: request ${requestId} for network ${networkKey}`);
+    console.log(
+      `queryUserAssets: request ${requestId} for network ${networkKey}`,
+    );
 
     // Only query for networks that support Asset Hub EVM (paseo, polkadot, kusama)
     if (
@@ -1001,7 +1265,9 @@ export function App() {
     try {
       // Check if this request is still valid (not superseded by a newer one)
       if (requestId !== queryRequestIdRef.current) {
-        console.log(`queryUserAssets: request ${requestId} cancelled (superseded by ${queryRequestIdRef.current})`);
+        console.log(
+          `queryUserAssets: request ${requestId} cancelled (superseded by ${queryRequestIdRef.current})`,
+        );
         return;
       }
 
@@ -1021,27 +1287,43 @@ export function App() {
           [NETWORKS[networkKey]?.wsEndpoint].filter(Boolean);
 
         let api: any = null;
+        await whenMetadataCacheReady();
         for (const wsUrl of wsEndpoints) {
           try {
             const wsProvider = new WsProvider(wsUrl);
-            api = new ApiPromise({ provider: wsProvider, noInitWarn: true });
+            api = new ApiPromise({
+              provider: wsProvider,
+              noInitWarn: true,
+              metadata: getCachedMetadata(),
+            } as any);
             await Promise.race([
               api.isReady,
               new Promise<never>((_, reject) =>
-                setTimeout(() => reject(new Error(`WS timeout`)), 15000),
+                setTimeout(
+                  () => reject(new Error(`WS timeout`)),
+                  rpcTimeoutMs(15000),
+                ),
               ),
             ]);
+            cacheApiMetadata(api);
             break;
           } catch (e) {
-            console.warn(`queryUserAssets WS ${wsUrl} failed:`, (e as any)?.message || e);
-            try { await api?.disconnect(); } catch (_) {}
+            console.warn(
+              `queryUserAssets WS ${wsUrl} failed:`,
+              (e as any)?.message || e,
+            );
+            try {
+              await api?.disconnect();
+            } catch (_) {}
             api = null;
           }
         }
 
         if (api) {
           try {
-            const nativeBalance = (await api.query.system.account(address)) as any;
+            const nativeBalance = (await api.query.system.account(
+              address,
+            )) as any;
             const nativeFree = nativeBalance.data.free.toString();
             const decimals = api.registry.chainDecimals[0] || 10;
             assets.push({
@@ -1052,7 +1334,9 @@ export function App() {
               decimals,
               precompile: "native",
             });
-            console.log(`${nativeSymbol} Substrate Balance for ${address}: ${nativeFree}`);
+            console.log(
+              `${nativeSymbol} Substrate Balance for ${address}: ${nativeFree}`,
+            );
           } finally {
             await api.disconnect().catch(() => {});
           }
@@ -1061,7 +1345,9 @@ export function App() {
         // EVM address: derive H160 (or use as-is) and query eth_getBalance.
         const h160 = isEvmAddress ? address : ss58ToEth(address);
 
-        const rpcEndpoints = (networkConfig as any).rpcEndpoints || [networkConfig.rpcEndpoint];
+        const rpcEndpoints = (networkConfig as any).rpcEndpoints || [
+          networkConfig.rpcEndpoint,
+        ];
         let provider: any = null;
         for (const rpcUrl of rpcEndpoints) {
           try {
@@ -1082,7 +1368,9 @@ export function App() {
             decimals: 18,
             precompile: "native",
           });
-          console.log(`${nativeSymbol} Balance for ${h160}: ${ethersLib.formatEther(evmBalance)}`);
+          console.log(
+            `${nativeSymbol} Balance for ${h160}: ${ethersLib.formatEther(evmBalance)}`,
+          );
         }
 
         // Pallet assets require WS (no EVM precompile covers all assets).
@@ -1097,20 +1385,34 @@ export function App() {
               [NETWORKS[networkKey]?.wsEndpoint].filter(Boolean);
 
             let api: any = null;
+            await whenMetadataCacheReady();
             for (const wsUrl of wsEndpoints) {
               try {
                 const wsProvider = new WsProvider(wsUrl);
-                api = new ApiPromise({ provider: wsProvider, noInitWarn: true });
+                api = new ApiPromise({
+                  provider: wsProvider,
+                  noInitWarn: true,
+                  metadata: getCachedMetadata(),
+                } as any);
                 await Promise.race([
                   api.isReady,
                   new Promise<never>((_, reject) =>
-                    setTimeout(() => reject(new Error(`WS timeout`)), 10000),
+                    setTimeout(
+                      () => reject(new Error(`WS timeout`)),
+                      rpcTimeoutMs(10000),
+                    ),
                   ),
                 ]);
+                cacheApiMetadata(api);
                 break;
               } catch (e) {
-                console.warn(`queryUserAssets pallet WS ${wsUrl} failed:`, (e as any)?.message || e);
-                try { await api?.disconnect(); } catch (_) {}
+                console.warn(
+                  `queryUserAssets pallet WS ${wsUrl} failed:`,
+                  (e as any)?.message || e,
+                );
+                try {
+                  await api?.disconnect();
+                } catch (_) {}
                 api = null;
               }
             }
@@ -1122,7 +1424,8 @@ export function App() {
                   .map((b) => b.toString(16).padStart(2, "0"))
                   .join("");
 
-              const allAccounts = (await api.query.assets.account.entries()) as any;
+              const allAccounts =
+                (await api.query.assets.account.entries()) as any;
               const myAccounts = allAccounts.filter(([key]: [any, any]) => {
                 const accountId = key.args[1].toHex();
                 return accountId.toLowerCase() === substrateHex.toLowerCase();
@@ -1132,26 +1435,46 @@ export function App() {
                 key.args[0].toNumber(),
               );
               if (assetIds.length > 0) {
-                const metadataResults = await api.query.assets.metadata.multi(assetIds);
+                const metadataResults =
+                  await api.query.assets.metadata.multi(assetIds);
                 for (let i = 0; i < myAccounts.length; i++) {
                   const [key, accountInfo] = myAccounts[i];
                   const assetId = key.args[0].toNumber();
-                  const balance = (accountInfo as any).unwrap().balance.toString();
+                  const balance = (accountInfo as any)
+                    .unwrap()
+                    .balance.toString();
                   if (balance === "0") continue;
                   const meta = metadataResults[i].toJSON() as any;
-                  let decimals = 0, name = "Unknown", symbol = "???";
+                  let decimals = 0,
+                    name = "Unknown",
+                    symbol = "???";
                   if (meta && meta.name) {
                     decimals = meta.decimals;
-                    name = Buffer.from(meta.name.slice(2), "hex").toString("utf8") || "Unknown";
-                    symbol = Buffer.from(meta.symbol.slice(2), "hex").toString("utf8") || "???";
+                    name =
+                      Buffer.from(meta.name.slice(2), "hex").toString("utf8") ||
+                      "Unknown";
+                    symbol =
+                      Buffer.from(meta.symbol.slice(2), "hex").toString(
+                        "utf8",
+                      ) || "???";
                   }
-                  assets.push({ symbol, name, assetId, balance, decimals, precompile: `0x${assetId.toString(16).padStart(8, "0")}00000000000000000000000001200000` });
+                  assets.push({
+                    symbol,
+                    name,
+                    assetId,
+                    balance,
+                    decimals,
+                    precompile: `0x${assetId.toString(16).padStart(8, "0")}00000000000000000000000001200000`,
+                  });
                 }
               }
               await api.disconnect();
             }
           } catch (e) {
-            console.warn("queryUserAssets pallet assets skipped (WS unreachable):", (e as any)?.message || e);
+            console.warn(
+              "queryUserAssets pallet assets skipped (WS unreachable):",
+              (e as any)?.message || e,
+            );
           }
         }
       }
@@ -1308,7 +1631,6 @@ export function App() {
       KSM: "Kusama",
       PAS: "Paseo Testnet",
       WND: "Westend Testnet",
-      DEV: "Moonbeam Testnet",
     };
 
     return currencyNetworkMap[currency] || "Unknown Network";
@@ -1438,7 +1760,8 @@ export function App() {
   };
 
   useEffect(() => {
-    if (!isWasmLoaded) {
+    if (!isWasmLoaded && !wasmLoadStartedRef.current) {
+      wasmLoadStartedRef.current = true;
       const loadWasm = async () => {
         try {
           //    console.log(`loading wasmm`);
@@ -1450,7 +1773,7 @@ export function App() {
           //   console.log(`set worker!`);
           // Store the worker functions in state or ref for later use
           setProofWorker(wasmPackage);
-          setNetwork("polkadot");
+          setNetwork("kusama");
           setIsWasmLoaded(true);
         } catch (err) {
           setError("Failed to load WASM module");
@@ -1466,7 +1789,9 @@ export function App() {
     try {
       console.log(`handle wallet selected called`);
       console.log(`gotten wal: `, wallet);
-      console.log(`wallet extensionName: "${wallet?.extensionName}", title: "${wallet?.title}"`);
+      console.log(
+        `wallet extensionName: "${wallet?.extensionName}", title: "${wallet?.title}"`,
+      );
       //await wallet.enable("KUSAMA SHIELD");
       setSelectedWallet(wallet);
       await wallet.enable(DAPP_NAME);
@@ -1544,16 +1869,20 @@ export function App() {
   };
 
   // Shield via revive.call — for polkadot.js browser extension wallets on Polkadot AH.
-  const handleShieldReviveCall = async () => {
+  const handleShieldReviveCall = async (amountOverride?: string) => {
+    const spendAmount = amountOverride ?? amount;
     setIsLoading(true);
     setError("");
     setIsGeneratingSecret(true);
     let api: any = null;
     const assetLabel = selectedNetwork === "kusama" ? "KSM" : "DOT";
-    const loadingToast = toast.loading(`Shielding ${amount} ${assetLabel}...`, {
-      position: "top-right",
-      theme: "dark",
-    });
+    const loadingToast = toast.loading(
+      `Shielding ${spendAmount} ${assetLabel}...`,
+      {
+        position: "top-right",
+        theme: "dark",
+      },
+    );
     try {
       const ss58 = await getExtensionWalletAccount();
       if (!ss58) throw new Error("No account found in wallet");
@@ -1561,9 +1890,14 @@ export function App() {
       const signer = selectedWallet?.signer;
       if (!signer) throw new Error("Wallet signer not available");
       const walletSource = selectedWallet?.extensionName;
-      console.log(`[shield] network=${selectedNetwork}, walletSource=${walletSource}, ws=${(NETWORKS[selectedNetwork] as any)?.wsEndpoints?.[0]}`);
+      console.log(
+        `[shield] network=${selectedNetwork}, walletSource=${walletSource}, ws=${(NETWORKS[selectedNetwork] as any)?.wsEndpoints?.[0]}`,
+      );
 
-      const { amountPlanck, amountWei } = parseDotAmount(amount, selectedNetwork);
+      const { amountPlanck, amountWei } = parseDotAmount(
+        spendAmount,
+        selectedNetwork,
+      );
       const secretVal = generateRandomSecret();
       const { commitmentHex } = deriveV7Commitment(amountWei, secretVal);
 
@@ -1571,16 +1905,21 @@ export function App() {
 
       // On Kusama, check if account is mapped. If not, map it first, then use revive.call.
       if (selectedNetwork === "kusama") {
-        api = await connectSubstrate((NETWORKS[selectedNetwork] as any)?.wsEndpoints);
+        api = await connectSubstrate(
+          (NETWORKS[selectedNetwork] as any)?.wsEndpoints,
+        );
         const alreadyMapped: any = await api.query.revive.accountInfoOf(h160);
         if (alreadyMapped.isEmpty) {
-          console.log("[shield] Kusama account unmapped — mapping account first...");
+          console.log(
+            "[shield] Kusama account unmapped — mapping account first...",
+          );
           toast.update(loadingToast, {
             render: `1/2: Mapping account for revive...`,
           });
           let extSigner = signer;
           try {
-            const { web3Enable, web3FromSource } = await import("@polkadot/extension-dapp");
+            const { web3Enable, web3FromSource } =
+              await import("@polkadot/extension-dapp");
             await web3Enable("Kusama Shield");
             const injected = await web3FromSource(walletSource);
             if (injected?.signer) extSigner = injected.signer;
@@ -1589,16 +1928,22 @@ export function App() {
           await new Promise<void>((resolve, reject) => {
             api.tx.revive
               .mapAccount()
-              .signAndSend(ss58, { signer: extSigner }, ({ status, dispatchError }: any) => {
-                if (dispatchError) {
-                  if (dispatchError.isModule) {
-                    const { index, error } = api.registry.findMetaError(dispatchError.asModule);
-                    if (error === "AccountAlreadyMapped") resolve();
-                    else reject(new Error(`mapAccount: ${index}.${error}`));
-                  } else reject(new Error(dispatchError.toString()));
-                }
-                if (status.isInBlock || status.isFinalized) resolve();
-              })
+              .signAndSend(
+                ss58,
+                { signer: extSigner },
+                ({ status, dispatchError }: any) => {
+                  if (dispatchError) {
+                    if (dispatchError.isModule) {
+                      const { index, error } = api.registry.findMetaError(
+                        dispatchError.asModule,
+                      );
+                      if (error === "AccountAlreadyMapped") resolve();
+                      else reject(new Error(`mapAccount: ${index}.${error}`));
+                    } else reject(new Error(dispatchError.toString()));
+                  }
+                  if (status.isInBlock || status.isFinalized) resolve();
+                },
+              )
               .catch(reject);
           });
           console.log("[shield] Kusama account mapped!");
@@ -1610,7 +1955,10 @@ export function App() {
       }
 
       // Normal revive.call path (polkadot or mapped Kusama).
-      if (!api) api = await connectSubstrate((NETWORKS[selectedNetwork] as any)?.wsEndpoints);
+      if (!api)
+        api = await connectSubstrate(
+          (NETWORKS[selectedNetwork] as any)?.wsEndpoints,
+        );
 
       // Skip ensureAccountMapped for Kusama if we already handled it above
       if (!alreadyMappedKusama) {
@@ -1621,7 +1969,7 @@ export function App() {
       }
 
       toast.update(loadingToast, {
-        render: `2/2: Sending deposit of ${amount} ${assetLabel}...`,
+        render: `2/2: Sending deposit of ${spendAmount} ${assetLabel}...`,
       });
       const { txHash, block } = await submitReviveDeposit(
         api,
@@ -1639,7 +1987,7 @@ export function App() {
         );
         existing.push({
           commitment: commitmentHex,
-          amount,
+          spendAmount,
           amountWei: amountWei.toString(),
           secret: secretVal,
           ss58,
@@ -1665,6 +2013,7 @@ export function App() {
         autoClose: 10000,
         theme: "dark",
       });
+      return secretVal;
     } catch (err) {
       const msg = err instanceof Error ? err.message : "An error occurred";
       setError(msg);
@@ -1686,7 +2035,8 @@ export function App() {
   };
 
   // Shield via Polkadot.js on Kusama — transfer KSM to ECDSA temp wallet, then deposit.
-  const handleShieldKusamaPolkadotJs = async () => {
+  const handleShieldKusamaPolkadotJs = async (amountOverride?: string) => {
+    const spendAmount = amountOverride ?? amount;
     if (!polkadotAddress || !selectedWallet) return;
     isSubstrateTxRef.current = true;
     setIsGeneratingSecret(true);
@@ -1694,7 +2044,7 @@ export function App() {
     setIsLoading(true);
     setError("");
 
-    const shieldToastId = toast.loading(`Shielding ${amount} KSM...`, {
+    const shieldToastId = toast.loading(`Shielding ${spendAmount} KSM...`, {
       position: "top-right",
       theme: "dark",
     });
@@ -1706,19 +2056,26 @@ export function App() {
       const contractAddress = networkConfig.shield_address;
       const evmRpc = networkConfig.rpcEndpoint;
 
-      const { amountPlanck, amountWei } = parseDotAmount(amount, "kusama");
+      const { amountPlanck, amountWei } = parseDotAmount(spendAmount, "kusama");
       const { commitmentHex } = deriveV7Commitment(amountWei, generatedSecret);
 
       // Generate temp ECDSA wallet
-      const { generateEcdsaWallet, computeFallbackSS58 } = await import("./transactions/forwarder");
+      const { generateEcdsaWallet, computeFallbackSS58 } =
+        await import("./transactions/forwarder");
       const { wallet, ethAddress, fallbackSS58 } = generateEcdsaWallet();
-      console.log("Temp ETH wallet:", ethAddress, "Fallback SS58:", fallbackSS58);
+      console.log(
+        "Temp ETH wallet:",
+        ethAddress,
+        "Fallback SS58:",
+        fallbackSS58,
+      );
 
       // Get the API and signer
       api = await connectSubstrate(networkConfig.wsEndpoints);
       let extSigner = selectedWallet?.signer;
       try {
-        const { web3Enable, web3FromSource } = await import("@polkadot/extension-dapp");
+        const { web3Enable, web3FromSource } =
+          await import("@polkadot/extension-dapp");
         await web3Enable("Kusama Shield");
         const injected = await web3FromSource(selectedWallet?.extensionName);
         if (injected?.signer) extSigner = injected.signer;
@@ -1728,20 +2085,29 @@ export function App() {
       // Without the gas buffer the temp wallet can't pay for the EVM deposit tx.
       const gasBufferKsm = 0.05;
       const fundPlanck = amountPlanck + BigInt(Math.floor(gasBufferKsm * 1e12));
-      toast.update(shieldToastId, { render: "Confirm KSM transfer to temp wallet..." });
+      toast.update(shieldToastId, {
+        render: "Confirm KSM transfer to temp wallet...",
+      });
 
       const transferTx = await new Promise<string>((resolve, reject) => {
         api.tx.balances
           .transferKeepAlive(fallbackSS58, fundPlanck)
-          .signAndSend(polkadotAddress, { signer: extSigner }, ({ status, txHash, dispatchError }: any) => {
-            if (dispatchError) {
-              if (dispatchError.isModule) {
-                const { index, error } = api.registry.findMetaError(dispatchError.asModule);
-                reject(new Error(`transfer: ${index}.${error}`));
-              } else reject(new Error(dispatchError.toString()));
-            }
-            if (status.isInBlock || status.isFinalized) resolve(txHash.toHex());
-          })
+          .signAndSend(
+            polkadotAddress,
+            { signer: extSigner },
+            ({ status, txHash, dispatchError }: any) => {
+              if (dispatchError) {
+                if (dispatchError.isModule) {
+                  const { index, error } = api.registry.findMetaError(
+                    dispatchError.asModule,
+                  );
+                  reject(new Error(`transfer: ${index}.${error}`));
+                } else reject(new Error(dispatchError.toString()));
+              }
+              if (status.isInBlock || status.isFinalized)
+                resolve(txHash.toHex());
+            },
+          )
           .catch(reject);
       });
       console.log("KSM transfer tx:", transferTx);
@@ -1757,37 +2123,46 @@ export function App() {
       const provider = new ethers.JsonRpcProvider(evmRpc);
       const walletWithProvider = wallet.connect(provider);
 
-      const depositAmount = ethers.parseEther(amount);
+      const depositAmount = ethers.parseEther(spendAmount);
       const { receipt, gasPrice: usedGasPrice } = await submitDeposit(
         walletWithProvider,
         [evmRpc],
         networkConfig.chain_id,
         contractAddress,
         commitmentHex,
-        depositAmount
+        depositAmount,
       );
       console.log("Deposit tx:", receipt.hash);
 
       // Sweep leftover gas back to the user's H160
       const userH160 = ss58ToEth(polkadotAddress);
-      await sweepBalance(wallet, [evmRpc], networkConfig.chain_id, userH160, usedGasPrice)
-        .catch((e: any) => console.warn("Sweep failed:", e));
+      await sweepBalance(
+        wallet,
+        [evmRpc],
+        networkConfig.chain_id,
+        userH160,
+        usedGasPrice,
+      ).catch((e: any) => console.warn("Sweep failed:", e));
 
       toast.update(shieldToastId, {
-        render: `Shielded ${amount} KSM! Tx: ${receipt.hash.slice(0, 10)}...`,
+        render: `Shielded ${spendAmount} KSM! Tx: ${receipt.hash.slice(0, 10)}...`,
         type: "success",
         isLoading: false,
         autoClose: 10000,
       });
 
-      toast.info(`🔑 Save your secret for later withdrawal: ${generatedSecret}`, {
-        position: "top-right",
-        autoClose: 10000,
-        theme: "dark",
-      });
+      toast.info(
+        `🔑 Save your secret for later withdrawal: ${generatedSecret}`,
+        {
+          position: "top-right",
+          autoClose: 10000,
+          theme: "dark",
+        },
+      );
 
       setSecret(generatedSecret);
       setAmount("");
+      return generatedSecret;
     } catch (err) {
       const msg = err instanceof Error ? err.message : "An error occurred";
       setError(msg);
@@ -1802,13 +2177,16 @@ export function App() {
       setIsGeneratingSecret(false);
       isSubstrateTxRef.current = false;
       if (api) {
-        try { await api.disconnect(); } catch (_) {}
+        try {
+          await api.disconnect();
+        } catch (_) {}
       }
     }
   };
 
   // Shield via Nova/WalletConnect — Substrate signing (ECDSA temp wallet + Nova-signed funding).
-  const handleShieldSubstrate = async () => {
+  const handleShieldSubstrate = async (amountOverride?: string) => {
+    const spendAmount = amountOverride ?? amount;
     if (!polkadotAddress) return;
     isSubstrateTxRef.current = true;
     setIsGeneratingSecret(true);
@@ -1833,7 +2211,7 @@ export function App() {
         networkConfig.wsEndpoint ?? "wss://polkadot-asset-hub-rpc.polkadot.io",
       ];
 
-      const depositAmount = ethers.parseEther(amount);
+      const depositAmount = ethers.parseEther(spendAmount);
       const {
         generateEcdsaWallet,
         computeCommitment,
@@ -1844,7 +2222,11 @@ export function App() {
         ss58ToEth,
       } = await import("./transactions/forwarder");
 
-      const seedCommitment = computeCommitment(depositAmount, 0n, generatedSecret);
+      const seedCommitment = computeCommitment(
+        depositAmount,
+        0n,
+        generatedSecret,
+      );
       const userH160 = ss58ToEth(polkadotAddress);
 
       // Step 1: Generate temporary ECDSA wallet
@@ -1852,23 +2234,45 @@ export function App() {
       console.log("Temporary wallet:", ethAddress);
 
       // Step 2: Fund the temp wallet via a Nova-signed Substrate transfer
-      const fundDot = Number(amount) + 0.05;
+      const fundDot = Number(spendAmount) + 0.05;
       const fundPlanck = BigInt(Math.floor(fundDot * 1e10));
 
-      toast.update(shieldToastId, { render: "Confirm the funding transfer in Nova..." });
-      const fundTxHash = await fundViaSubstrateTransfer(polkadotAddress, fallbackSS58, fundPlanck, wsEndpoints);
+      toast.update(shieldToastId, {
+        render: "Confirm the funding transfer in Nova...",
+      });
+      const fundTxHash = await fundViaSubstrateTransfer(
+        polkadotAddress,
+        fallbackSS58,
+        fundPlanck,
+        wsEndpoints,
+      );
       console.log("Funding transfer:", fundTxHash);
 
-      toast.update(shieldToastId, { render: "Funding confirmed! Waiting for balance..." });
+      toast.update(shieldToastId, {
+        render: "Funding confirmed! Waiting for balance...",
+      });
       await waitForEthBalance(evmRpcs, ethAddress);
 
       // Step 3: Submit deposit
       toast.update(shieldToastId, { render: "Submitting deposit..." });
-      const { receipt, gasPrice: usedGasPrice } = await submitDeposit(wallet, evmRpcs, chainId, contractAddress, seedCommitment.commitmentHex, depositAmount);
+      const { receipt, gasPrice: usedGasPrice } = await submitDeposit(
+        wallet,
+        evmRpcs,
+        chainId,
+        contractAddress,
+        seedCommitment.commitmentHex,
+        depositAmount,
+      );
       console.log("Deposit tx:", receipt.hash);
 
       // Step 4: Sweep leftover gas to user's H160
-      await sweepBalance(wallet, evmRpcs, chainId, userH160, usedGasPrice).catch((e: any) => console.warn("Sweep failed:", e));
+      await sweepBalance(
+        wallet,
+        evmRpcs,
+        chainId,
+        userH160,
+        usedGasPrice,
+      ).catch((e: any) => console.warn("Sweep failed:", e));
 
       toast.update(shieldToastId, {
         render: `Shielded! Deposit tx: ${receipt.hash.slice(0, 10)}...`,
@@ -1884,6 +2288,7 @@ export function App() {
         autoClose: 10000,
         theme: "dark",
       });
+      return generatedSecret;
     } catch (err: any) {
       console.error("Shield substrate error:", err);
       const msg = err instanceof Error ? err.message : "Shield failed";
@@ -1917,7 +2322,8 @@ export function App() {
       console.log("=== Substrate Unshield: ECDSA + Self-Funding ===");
       const networkConfig = NETWORKS[selectedNetwork] as any;
       const contractAddress = networkConfig.shield_address;
-      const evmRpc = networkConfig.rpcEndpoints?.[0] || networkConfig.rpcEndpoint;
+      const evmRpc =
+        networkConfig.rpcEndpoints?.[0] || networkConfig.rpcEndpoint;
       const chainId = networkConfig.chain_id;
       const deploymentBlock = networkConfig.deploymentBlock || 0;
 
@@ -1928,20 +2334,32 @@ export function App() {
       const provider = new ethers.JsonRpcProvider(evmRpc, chainId, {
         staticNetwork: ethers.Network.from(chainId),
       });
-      const checkContract = new ethers.Contract(contractAddress, networkConfig.abi, provider);
+      const checkContract = new ethers.Contract(
+        contractAddress,
+        networkConfig.abi,
+        provider,
+      );
 
       const secretBN = BigInt(secret);
       const nullifier = poseidon2([secretBN, 1n]);
       const nullifierHash = poseidon1([nullifier]);
-      const nullifierHashBytes32 = ethers.zeroPadValue(ethers.toBeArray(nullifierHash), 32);
-      const isNullifierSpent = await checkContract.isNullifierSpent(nullifierHashBytes32);
+      const nullifierHashBytes32 = ethers.zeroPadValue(
+        ethers.toBeArray(nullifierHash),
+        32,
+      );
+      const isNullifierSpent =
+        await checkContract.isNullifierSpent(nullifierHashBytes32);
       if (isNullifierSpent) {
         throw new Error("Already withdrawn. This nullifier has been spent.");
       }
-      const escrowBalance = await checkContract.getEscrowBalance(ethers.ZeroAddress);
+      const escrowBalance = await checkContract.getEscrowBalance(
+        ethers.ZeroAddress,
+      );
       console.log("Escrow balance:", ethers.formatEther(escrowBalance));
 
-      toast.update(unshieldToastId, { render: "Loading Merkle tree from proxy..." });
+      toast.update(unshieldToastId, {
+        render: "Loading Merkle tree from proxy...",
+      });
       // Use the Flask proxy's pre-computed leaf cache (authoritative, includes
       // revive.call deposits that eth_getLogs misses). Building from contract
       // events via eth_getLogs produces a desynced tree whose root doesn't
@@ -1961,7 +2379,10 @@ export function App() {
         merkleTree.insert(commitment);
       }
       const leafIdx = merkleTree.findLeafIndex(commitment);
-      if (leafIdx === -1) throw new Error("Commitment not found in Merkle tree. Verify your secret.");
+      if (leafIdx === -1)
+        throw new Error(
+          "Commitment not found in Merkle tree. Verify your secret.",
+        );
 
       const merkleProof = merkleTree.getProof(leafIdx);
       const currentRoot = await checkContract.currentRoot();
@@ -1971,18 +2392,26 @@ export function App() {
         );
       }
 
-      toast.update(unshieldToastId, { render: "Generating ZK proof locally..." });
+      toast.update(unshieldToastId, {
+        render: "Generating ZK proof locally...",
+      });
 
       const SNARK_SCALAR_FIELD =
         21888242871839275222246405745257275088548364400416034343698204186575808495617n;
       const contextHash = ethers.keccak256(
-        ethers.solidityPacked(["address", "address"], [userH160, ethers.ZeroAddress]),
+        ethers.solidityPacked(
+          ["address", "address"],
+          [userH160, ethers.ZeroAddress],
+        ),
       );
       const context = (BigInt(contextHash) % SNARK_SCALAR_FIELD).toString();
 
       const newSecretRaw = ethers.randomBytes(31);
       const newSecret =
-        "0x" + Array.from(newSecretRaw).map((b) => b.toString(16).padStart(2, "0")).join("");
+        "0x" +
+        Array.from(newSecretRaw)
+          .map((b) => b.toString(16).padStart(2, "0"))
+          .join("");
       const newSecretBN = BigInt(newSecret);
       const newNullifier = poseidon2([newSecretBN, 1n]).toString();
 
@@ -2005,28 +2434,41 @@ export function App() {
         "/withdraw_phase2_fixed_v7_0001.zkey",
       );
 
-      toast.update(unshieldToastId, { render: "Submitting withdrawal via proxy..." });
-      const proofA = [proof.pi_a[0], proof.pi_a[1]].map((x: string) => "0x" + BigInt(x).toString(16));
+      toast.update(unshieldToastId, {
+        render: "Submitting withdrawal via proxy...",
+      });
+      const proofA = [proof.pi_a[0], proof.pi_a[1]].map(
+        (x: string) => "0x" + BigInt(x).toString(16),
+      );
       const proofB = [
         [proof.pi_b[0][1], proof.pi_b[0][0]],
         [proof.pi_b[1][1], proof.pi_b[1][0]],
-      ].map((row: string[]) => row.map((x: string) => "0x" + BigInt(x).toString(16)));
-      const proofC = [proof.pi_c[0], proof.pi_c[1]].map((x: string) => "0x" + BigInt(x).toString(16));
-      const pubSignalsHex = publicSignals.map((s: string) => "0x" + BigInt(s).toString(16));
+      ].map((row: string[]) =>
+        row.map((x: string) => "0x" + BigInt(x).toString(16)),
+      );
+      const proofC = [proof.pi_c[0], proof.pi_c[1]].map(
+        (x: string) => "0x" + BigInt(x).toString(16),
+      );
+      const pubSignalsHex = publicSignals.map(
+        (s: string) => "0x" + BigInt(s).toString(16),
+      );
 
-      const proxyRes = await fetch("/api/rpc-proxy/withdraw-with-proof-to-eth-ac", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          proof_a: proofA,
-          proof_b: proofB,
-          proof_c: proofC,
-          pub_signals: pubSignalsHex,
-          recipient: userH160,
-          amount_wei: withdrawAmount.toString(),
-          network: selectedNetwork,
-        }),
-      });
+      const proxyRes = await fetch(
+        "/api/rpc-proxy/withdraw-with-proof-to-eth-ac",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            proof_a: proofA,
+            proof_b: proofB,
+            proof_c: proofC,
+            pub_signals: pubSignalsHex,
+            recipient: userH160,
+            amount_wei: withdrawAmount.toString(),
+            network: selectedNetwork,
+          }),
+        },
+      );
       const proxyData = await proxyRes.json();
       if (proxyData.error) throw new Error(proxyData.error);
 
@@ -2055,13 +2497,17 @@ export function App() {
   };
 
   // Unshield via revive.call — for polkadot.js browser extension wallets on Polkadot AH.
-  const handleUnshieldReviveCall = async () => {    setIsLoading(true);
+  const handleUnshieldReviveCall = async () => {
+    setIsLoading(true);
     setError("");
     let api: any = null;
-    const loadingToast = toast.loading(`Unshielding ${amount} ${NETWORKS[selectedNetwork]?.asset || "DOT"}...`, {
-      position: "top-right",
-      theme: "dark",
-    });
+    const loadingToast = toast.loading(
+      `Unshielding ${amount} ${NETWORKS[selectedNetwork]?.asset || "DOT"}...`,
+      {
+        position: "top-right",
+        theme: "dark",
+      },
+    );
     try {
       if (!secret) throw new Error("Enter your secret to unshield");
       const ss58 = await getExtensionWalletAccount();
@@ -2101,13 +2547,18 @@ export function App() {
           return;
         }
       } catch (e) {
-        console.warn("isNullifierSpent pre-check failed, continuing:", (e as any)?.message || e);
+        console.warn(
+          "isNullifierSpent pre-check failed, continuing:",
+          (e as any)?.message || e,
+        );
       }
 
       // Connect to Substrate WS only for non-kusama (kusama unshields via proxy,
       // no mapAccount or revive.call needed — avoids flaky Dwellir WS timeouts).
       if (selectedNetwork !== "kusama") {
-        api = await connectSubstrate((NETWORKS[selectedNetwork] as any)?.wsEndpoints);
+        api = await connectSubstrate(
+          (NETWORKS[selectedNetwork] as any)?.wsEndpoints,
+        );
         toast.update(loadingToast, {
           render: `1/2: Mapping account for revive...`,
         });
@@ -2147,7 +2598,7 @@ export function App() {
       });
 
       let txHash: string;
-      
+
       // For Kusama, use the proxy forwarder (same as Polkadot works)
       if (selectedNetwork === "kusama") {
         toast.update(loadingToast, {
@@ -2157,7 +2608,7 @@ export function App() {
           secret,
           selectedNetwork,
           amountWei.toString(),
-          ss58,  // SS58 recipient - proxy will forward via Account 1
+          ss58, // SS58 recipient - proxy will forward via Account 1
         );
       } else {
         toast.update(loadingToast, {
@@ -2202,10 +2653,14 @@ export function App() {
     }
   };
 
-  const handleShield = async () => {
+  const handleShield = async (opts?: { amount?: string; token?: string }) => {
+    // Allow callers (e.g. the Send tab) to deposit without touching the
+    // Shield tab's form state.
+    const spendAmount = opts?.amount ?? amount;
+    const spendToken = opts?.token ?? selectedToken;
     // Check for either Polkadot wallet (selectedWallet) or EVM wallet (selectedWalletEVM)
     const hasWallet = selectedWallet || selectedWalletEVM;
-    if (!isWalletConnected || !amount || !selectedToken || !hasWallet) {
+    if (!isWalletConnected || !spendAmount || !spendToken || !hasWallet) {
       toast(`❌ ERROR: Connect wallet and select token`, {
         position: "top-right",
         autoClose: 6000,
@@ -2227,14 +2682,12 @@ export function App() {
       !selectedWalletEVM &&
       polkadotAddress
     ) {
-      await handleShieldReviveCall();
-      return;
+      return await handleShieldReviveCall(opts?.amount);
     }
 
     // For Kusama with polkadot.js, use direct transfer to ECDSA wallet (no Nova/WalletConnect needed)
     if (selectedNetwork === "kusama" && selectedWallet && polkadotAddress) {
-      await handleShieldKusamaPolkadotJs();
-      return;
+      return await handleShieldKusamaPolkadotJs(opts?.amount);
     }
 
     // Nova/WalletConnect with polkadot namespace → Substrate signing (ECDSA
@@ -2242,8 +2695,7 @@ export function App() {
     const isPolkadotNetwork =
       (NETWORKS[selectedNetwork]?.chain_id || 0) >= 420420417;
     if (polkadotAddress && isPolkadotNetwork) {
-      await handleShieldSubstrate();
-      return;
+      return await handleShieldSubstrate(opts?.amount);
     }
 
     // Check if connected to the correct chain for EVM wallets
@@ -2289,12 +2741,13 @@ export function App() {
       console.log(`handleshield 1`);
       console.log(
         isWalletConnected,
-        amount,
-        selectedToken,
+        spendAmount,
+        spendToken,
         generatedSecret,
         selectedWallet || selectedWalletEVM,
       );
-      if (!isWalletConnected || !amount || !selectedToken || !hasWallet) return;
+      if (!isWalletConnected || !spendAmount || !spendToken || !hasWallet)
+        return;
 
       console.log(`sign sign`);
 
@@ -2309,20 +2762,13 @@ export function App() {
       }
       console.log(`account: `, accountAddress);
       const secret = generatedSecret;
-      //      const txdata = await gen_tx_no_sig(Number(amount), fakeerc20asset, account.address);
+      //      const txdata = await gen_tx_no_sig(Number(spendAmount), fakeerc20asset, account.address);
       //      console.log(`got tx data: `, txdata);
 
       console.log(`signed tx`);
       //  console.log(`westend pool:`, westend_pool);
       var shieldedContract;
-      if (selectedNetwork == "moonbase") {
-        console.log(`moonbase`);
-        shieldedContract = new ethers.Contract(
-          SHIELD_CONTRACT_ADDRESS.SHIELD_CONTRACT_ADDRESS, // Using the fake ERC-20 address from your constants
-          SHIELD_CONTRACT_ADDRESS.shielderAbi,
-          ETHsigner,
-        );
-      } else if (selectedNetwork == "kusama") {
+      if (selectedNetwork == "kusama") {
         shieldedContract = new ethers.Contract(
           NETWORKS[selectedNetwork].shield_address,
           NETWORKS[selectedNetwork].abi, //["function deposit(address,uint256,bytes32) payable"],
@@ -2357,13 +2803,11 @@ export function App() {
           ETHsigner,
         );
       } else {
-        throw new Error(
-          "Only Moonbase and Westend Assethub is currently supported",
-        );
+        throw new Error("Unsupported network");
       }
 
       // move to seperate functions
-      if (NETWORKS[selectedNetwork].asset == selectedToken) {
+      if (NETWORKS[selectedNetwork].asset == spendToken) {
         console.log(`native token!`);
       } else {
         // console.log(`token set to: `, )
@@ -2389,7 +2833,7 @@ export function App() {
 
         const txResponse = await tokenContract.approve(
           SHIELD_CONTRACT_ADDRESS.SHIELD_CONTRACT_ADDRESS,
-          ethers.parseEther(amount), // should get the decimals, but for m1 should be okay
+          ethers.parseEther(spendAmount), // should get the decimals, but for m1 should be okay
         );
 
         // const txResponse = await ETHsigner.sendTransaction(transaction66);
@@ -2462,10 +2906,10 @@ export function App() {
       if (selectedNetwork == "westend_assethub") {
         x = ProofWorker.generate_commitment(secret); //await generateCommitment(secret);
       } else if (selectedNetwork == "paseo_assethub_v2") {
-        // FixedIlopPhase2Paseo_v3: commitment = Poseidon3(secret, asset, amount)
+        // FixedIlopPhase2Paseo_v3: commitment = Poseidon3(secret, asset, spendAmount)
         // nullifier = Poseidon2(secret, 1) - domain separator
         const assetNumeric = 0n; // native token = 0
-        const amountWei = BigInt(ethers.parseEther(amount));
+        const amountWei = BigInt(ethers.parseEther(spendAmount));
         secretVal = BigInt(secret);
         nullifierVal = poseidon2([secretVal, 1n]);
         const commitmentBigInt = poseidon3([
@@ -2482,7 +2926,7 @@ export function App() {
         // v7 pool: commitment = Poseidon2(Poseidon2(amountWei, asset), Poseidon2(nullifier, secret))
         // nullifier = Poseidon2(secret, 1)
         const assetNumeric = 0n; // native DOT
-        const amountWei = BigInt(ethers.parseEther(amount));
+        const amountWei = BigInt(ethers.parseEther(spendAmount));
         const secretVal = BigInt(secret);
         const nullifierVal = poseidon2([secretVal, 1n]);
         const precommitment = poseidon2([nullifierVal, secretVal]);
@@ -2497,12 +2941,10 @@ export function App() {
         x = commitment;
       } else if (selectedNetwork == "paseo_assethub") {
         // FixedIlop v3 deposit: uses CommitmentHasher circuit logic
-        const selectedAsset = userAssets.find(
-          (a) => a.symbol === selectedToken,
-        );
+        const selectedAsset = userAssets.find((a) => a.symbol === spendToken);
         const assetNumeric = selectedAsset ? BigInt(selectedAsset.assetId) : 0n;
         const decimals = selectedAsset ? selectedAsset.decimals : 18;
-        const depositAmount = BigInt(ethers.parseUnits(amount, decimals));
+        const depositAmount = BigInt(ethers.parseUnits(spendAmount, decimals));
         // Derive nullifier and secret from user secret
         const nullifierVal = BigInt(
           ethers.keccak256(ethers.toUtf8Bytes(secret + "_nullifier")),
@@ -2510,7 +2952,7 @@ export function App() {
         const secretVal = BigInt(
           ethers.keccak256(ethers.toUtf8Bytes(secret + "_secret")),
         );
-        // Compute commitment: Poseidon( Poseidon(amount, asset), Poseidon(nullifier, secret) )
+        // Compute commitment: Poseidon( Poseidon(spendAmount, asset), Poseidon(nullifier, secret) )
         const precommitment = poseidon2([nullifierVal, secretVal]);
         const valueAssetHash = poseidon2([depositAmount, assetNumeric]);
         const commitmentBigInt = poseidon2([valueAssetHash, precommitment]);
@@ -2529,13 +2971,13 @@ export function App() {
           secretVal.toString(),
         );
         console.log(`Asset numeric:`, assetNumeric.toString());
-        console.log(`Deposit amount (wei):`, depositAmount.toString());
+        console.log(`Deposit spendAmount (wei):`, depositAmount.toString());
         console.log(
           `Precommitment (poseidon2(nullifier, secret)):`,
           precommitment.toString(),
         );
         console.log(
-          `ValueAssetHash (poseidon2(amount, asset)):`,
+          `ValueAssetHash (poseidon2(spendAmount, asset)):`,
           valueAssetHash.toString(),
         );
         console.log(`Commitment BigInt:`, commitmentBigInt.toString());
@@ -2553,7 +2995,7 @@ export function App() {
           BigInt(ethers.keccak256(ethers.toUtf8Bytes(secret + "_secret"))) %
           2n ** 250n;
         const assetNumeric = 0n; // native token = ZeroAddress = 0
-        const amountWei = BigInt(ethers.parseEther(amount));
+        const amountWei = BigInt(ethers.parseEther(spendAmount));
         const innerHash = poseidon2([nullifierVal, secretVal]);
         const commitmentBigInt = poseidon3([
           amountWei,
@@ -2578,16 +3020,16 @@ export function App() {
       //  const x = "0x"+ generate_commitment("12345");
       console.log(`making tx with commitment: `, x);
       var txResponse2;
-      if (NETWORKS[selectedNetwork].asset == selectedToken) {
+      if (NETWORKS[selectedNetwork].asset == spendToken) {
         var sendamount;
         if (selectedNetwork == "westend_assethub") {
-          sendamount = ethers.parseUnits(amount, 18);
+          sendamount = ethers.parseUnits(spendAmount, 18);
           console.log(`westend assethub`);
         } else if (selectedNetwork == "paseo_assethub") {
-          console.log(`paseo assethub amount`);
-          sendamount = ethers.parseUnits(amount, 18);
+          console.log(`paseo assethub spendAmount`);
+          sendamount = ethers.parseUnits(spendAmount, 18);
         } else {
-          sendamount = ethers.parseEther(amount);
+          sendamount = ethers.parseEther(spendAmount);
         }
         /*
         try {
@@ -2605,7 +3047,7 @@ export function App() {
 */
         /*
         console.log(`ZeroAddress: `, ethers.ZeroAddress);
-        console.log(`send amount: `, sendamount);
+        console.log(`send spendAmount: `, sendamount);
         console.log(`x: `, x);
 
         const talismanEth = (window as any).talismanEth;
@@ -2618,10 +3060,10 @@ export function App() {
         if (selectedNetwork == "polkadot") {
           // v7 pool: depositNative(bytes32 commitment) single-arg
           const commitmentBytes = ethers.toBeArray(BigInt(x));
-          const depositAmount = ethers.parseEther(amount);
+          const depositAmount = ethers.parseEther(spendAmount);
           console.log(`Sending v7 depositNative on polkadot with:`, {
             commitment: x,
-            amount: depositAmount.toString(),
+            spendAmount: depositAmount.toString(),
           });
           var gasEstimate;
           try {
@@ -2640,13 +3082,13 @@ export function App() {
         } else if (selectedNetwork == "paseo_assethub") {
           const commitmentBytes = ethers.toBeArray(BigInt(x));
           const nullifierBytes = ethers.toBeArray(BigInt(nullifierHash));
-          const depositAmount = ethers.parseEther(amount);
+          const depositAmount = ethers.parseEther(spendAmount);
           console.log(
             `Sending v3 depositNative on ${selectedNetwork} with params:`,
             {
               commitment: x,
               nullifierHash: nullifierHash,
-              amount: depositAmount.toString(),
+              spendAmount: depositAmount.toString(),
             },
           );
           var gasEstimate;
@@ -2672,11 +3114,11 @@ export function App() {
           // FixedIlopPhase2Paseo_v3: depositNative(bytes32 commitment, bytes32 nullifierHash)
           const commitmentBytes = ethers.toBeArray(BigInt(x));
           const nullifierBytes = ethers.toBeArray(BigInt(nullifierHash));
-          const depositAmount = ethers.parseEther(amount);
+          const depositAmount = ethers.parseEther(spendAmount);
           console.log("Sending paseo v2 depositNative with params:", {
             commitment: x,
             nullifierHash: nullifierHash,
-            amount: depositAmount.toString(),
+            spendAmount: depositAmount.toString(),
           });
 
           var gasEstimate;
@@ -2700,12 +3142,12 @@ export function App() {
             },
           );
         } else if (selectedNetwork == "paseo_assethub") {
-          // FixedIlop: deposit(address asset, uint256 amount, uint256 commitment)
+          // FixedIlop: deposit(address asset, uint256 spendAmount, uint256 commitment)
           const commitmentUint256 = BigInt(x);
-          const depositAmount = ethers.parseEther(amount);
+          const depositAmount = ethers.parseEther(spendAmount);
           console.log("Sending FixedIlop deposit with params:", {
             token: ethers.ZeroAddress,
-            amount: depositAmount.toString(),
+            spendAmount: depositAmount.toString(),
             commitment: commitmentUint256.toString(),
           });
 
@@ -2756,22 +3198,22 @@ export function App() {
           const payloaden = zkpService.generateDepositPayload(
             secret,
             ethers.ZeroAddress,
-            BigInt(ethers.parseEther(amount).toString()),
+            BigInt(ethers.parseEther(spendAmount).toString()),
           );
 
           /*
           const { commitment, nullifier } = await zkDeposit(
             secret,
             ethers.ZeroAddress,
-            ethers.parseEther(amount).toString(),
+            ethers.parseEther(spendAmount).toString(),
           );
 */
           const gasEstimate = await contractpase.deposit3.estimateGas(
             ethers.ZeroAddress,
-            ethers.parseEther(amount),
+            ethers.parseEther(spendAmount),
             payloaden.commitment,
             {
-              value: ethers.parseEther(amount),
+              value: ethers.parseEther(spendAmount),
             },
           );
           console.log(`gas estimate is: `, gasEstimate);
@@ -2780,10 +3222,10 @@ export function App() {
           console.log(
             `full input: `,
             ethers.ZeroAddress,
-            ethers.parseEther(amount),
+            ethers.parseEther(spendAmount),
             payloaden.commitment,
             {
-              value: ethers.parseEther(amount),
+              value: ethers.parseEther(spendAmount),
               //       maxFeePerGas: gasEstimate,
               //       gasPrice: ethers.parseUnits("1000", "wei"),
               //      type: 0,
@@ -2792,10 +3234,10 @@ export function App() {
           console.log(`paseo v2 txresp`);
           txResponse2 = await contractpase.deposit3(
             ethers.ZeroAddress,
-            ethers.parseEther(amount),
+            ethers.parseEther(spendAmount),
             payloaden.commitment,
             {
-              value: ethers.parseEther(amount),
+              value: ethers.parseEther(spendAmount),
               //     maxFeePerGas: gasEstimate,
               //     gasPrice: ethers.parseUnits("1000", "wei"),
               //    type: 0,
@@ -2810,30 +3252,25 @@ export function App() {
         selectedNetwork == "polkadot"
       ) {
         // Pallet asset deposit for Paseo v3/v2 and Polkadot
-        const selectedAsset = userAssets.find(
-          (a) => a.symbol === selectedToken,
-        );
+        const selectedAsset = userAssets.find((a) => a.symbol === spendToken);
         if (!selectedAsset) {
           throw new Error(
-            `Asset ${selectedToken} not found. Please connect wallet on ${NETWORKS[selectedNetwork].name} and ensure you hold the asset.`,
+            `Asset ${spendToken} not found. Please connect wallet on ${NETWORKS[selectedNetwork].name} and ensure you hold the asset.`,
           );
         }
 
         const assetId = selectedAsset.assetId;
         const decimals = selectedAsset.decimals;
-        const depositAmount = ethers.parseUnits(amount, decimals);
+        const depositAmount = ethers.parseUnits(spendAmount, decimals);
         const commitmentBytes = ethers.toBeArray(BigInt(x));
         const nullifierBytes = ethers.toBeArray(BigInt(nullifierHash));
 
-        console.log(
-          `Sending ${selectedNetwork} depositAsset:`,
-          {
-            assetId,
-            amount: depositAmount.toString(),
-            decimals,
-            commitment: x,
-          },
-        );
+        console.log(`Sending ${selectedNetwork} depositAsset:`, {
+          assetId,
+          spendAmount: depositAmount.toString(),
+          decimals,
+          commitment: x,
+        });
 
         // Get precompile address
         const assetIdHex = assetId.toString(16).padStart(8, "0");
@@ -2847,7 +3284,7 @@ export function App() {
           ETHsigner,
         );
 
-        toast(`Approving ${selectedToken}...`, {
+        toast(`Approving ${spendToken}...`, {
           position: "top-right",
           autoClose: 3000,
           theme: "dark",
@@ -2858,20 +3295,20 @@ export function App() {
           { gasLimit: 500000 },
         );
         await approveTx.wait();
-        console.log(`✅ ${selectedToken} approved`);
+        console.log(`✅ ${spendToken} approved`);
 
         // Deposit
         var gasEstimate;
         try {
           if (selectedNetwork === "polkadot") {
-            // v7: depositAsset(uint256 assetId, uint256 amount, bytes32 commitment)
+            // v7: depositAsset(uint256 assetId, uint256 spendAmount, bytes32 commitment)
             gasEstimate = await shieldedContract.depositAsset.estimateGas(
               assetId,
               depositAmount,
               commitmentBytes,
             );
           } else {
-            // v5/v6: depositAsset(assetId, amount, commitment, nullifierHash)
+            // v5/v6: depositAsset(assetId, spendAmount, commitment, nullifierHash)
             gasEstimate = await shieldedContract.depositAsset.estimateGas(
               assetId,
               depositAmount,
@@ -2905,7 +3342,7 @@ export function App() {
         console.log(`merp merp`);
         txResponse2 = await shieldedContract.deposit(
           SHIELD_CONTRACT_ADDRESS.fakeerc20asset,
-          ethers.parseEther(amount),
+          ethers.parseEther(spendAmount),
           x,
         );
       }
@@ -2952,7 +3389,7 @@ export function App() {
         theme: "dark",
       });
 
-      //    await fakeshield(amount, selectedToken, secret);
+      //    await fakeshield(spendAmount, spendToken, secret);
       setAmount("");
       setSecret("");
       toast("🐦 Tokens shielded!", {
@@ -2977,6 +3414,7 @@ export function App() {
         progress: undefined,
         theme: "dark",
       });
+      return secret;
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
@@ -2985,12 +3423,28 @@ export function App() {
     }
   };
 
+  // Shield deposit driven by the Send tab. Runs the same wallet-routed deposit
+  // as the Shield tab but with explicit amount/token and returns the generated
+  // secret so Send can queue the private withdrawal immediately.
+  const handleShieldForSend = async (
+    amountStr: string,
+    token: string,
+  ): Promise<string> => {
+    const secret = await handleShield({ amount: amountStr, token });
+    if (!secret) {
+      throw new Error("Shield deposit did not complete");
+    }
+    return secret;
+  };
+
   const setNetwork = async (networkKey: keyof typeof NETWORKS) => {
     console.log(`setNetwork called, input:`, networkKey);
 
     // Increment request ID to cancel any in-flight queries
     const requestIdAtSwitch = ++queryRequestIdRef.current;
-    console.log(`setNetwork: incrementing request ID to ${requestIdAtSwitch} to cancel stale queries`);
+    console.log(
+      `setNetwork: incrementing request ID to ${requestIdAtSwitch} to cancel stale queries`,
+    );
 
     // Disconnect any existing Substrate API before switching
     if (substrateApiRef.current || substrateProviderRef.current) {
@@ -3306,21 +3760,21 @@ export function App() {
               ],
               ETHsigner,
             );
-      } else if (
-        selectedNetwork == "paseo_assethub" ||
-        selectedNetwork == "polkadot"
-      ) {
-        console.log(
-          `paseo assethub v3/polkadot (Phase 2 ZK - 6 signals): `,
-          NETWORKS[selectedNetwork].shield_address,
-        );
-        shieldedContract = new ethers.Contract(
-          NETWORKS[selectedNetwork].shield_address,
-          NETWORKS[selectedNetwork].abi,
-          ETHsigner,
-        );
-        console.log(`paseo v3/polkadot contract initialized`);
-      } else if (selectedNetwork == "paseo_assethub_v2") {
+          } else if (
+            selectedNetwork == "paseo_assethub" ||
+            selectedNetwork == "polkadot"
+          ) {
+            console.log(
+              `paseo assethub v3/polkadot (Phase 2 ZK - 6 signals): `,
+              NETWORKS[selectedNetwork].shield_address,
+            );
+            shieldedContract = new ethers.Contract(
+              NETWORKS[selectedNetwork].shield_address,
+              NETWORKS[selectedNetwork].abi,
+              ETHsigner,
+            );
+            console.log(`paseo v3/polkadot contract initialized`);
+          } else if (selectedNetwork == "paseo_assethub_v2") {
             console.log(`paseo v2 (Phase 2 ZK) withdraw`);
             shieldedContract = new ethers.Contract(
               NETWORKS["paseo_assethub_v2"].shield_address,
@@ -3436,12 +3890,13 @@ export function App() {
               ethers.toBeArray(nullifier),
               32,
             );
-            const spent = await checkContract.isNullifierSpent(
-              nullifierHashBytes32,
-            );
+            const spent =
+              await checkContract.isNullifierSpent(nullifierHashBytes32);
             if (spent) {
               toast(`Already withdrawn! This deposit has been spent.`, {
-                position: "top-right", autoClose: 5000, theme: "dark",
+                position: "top-right",
+                autoClose: 5000,
+                theme: "dark",
               });
               throw new Error("Deposit already spent");
             }
@@ -3450,14 +3905,18 @@ export function App() {
             );
             if (escrowBalance < amountWei) {
               toast(`Insufficient pool balance for withdrawal`, {
-                position: "top-right", autoClose: 5000, theme: "dark",
+                position: "top-right",
+                autoClose: 5000,
+                theme: "dark",
               });
               throw new Error("Insufficient escrow balance");
             }
 
             // Remote tree fetch from proxy
             toast(`Loading Merkle tree from proxy...`, {
-              position: "top-right", autoClose: 4000, theme: "dark",
+              position: "top-right",
+              autoClose: 4000,
+              theme: "dark",
             });
             const { tree } = await fetchProxyTree("polkadot");
             if (tree.findLeafIndex(commitment) === -1) {
@@ -3472,7 +3931,9 @@ export function App() {
 
             // ZK proof
             toast(`Generating ZK proof...`, {
-              position: "top-right", autoClose: false, theme: "dark",
+              position: "top-right",
+              autoClose: false,
+              theme: "dark",
             });
             const { proof, publicSignals } = await generateWithdrawProof({
               h160: recipient,
@@ -3488,9 +3949,14 @@ export function App() {
             const formatted = formatProof(proof);
             const pub = publicSignals.map((s) => BigInt(s));
 
-            toast(`Unshielding ${amount} ${NETWORKS[selectedNetwork]?.asset || "DOT"}...`, {
-              position: "top-right", autoClose: 5000, theme: "dark",
-            });
+            toast(
+              `Unshielding ${amount} ${NETWORKS[selectedNetwork]?.asset || "DOT"}...`,
+              {
+                position: "top-right",
+                autoClose: 5000,
+                theme: "dark",
+              },
+            );
 
             txResponse = await shieldedContract.withdraw(
               formatted[0],
@@ -4059,11 +4525,14 @@ export function App() {
               pubSignals,
               withdrawAmount,
             );
-          } else if (selectedNetwork === "paseo_assethub" ||
+          } else if (
+            selectedNetwork === "paseo_assethub" ||
             selectedNetwork === "polkadot"
           ) {
             // FixedIlopPhase2Paseo_v4 withdraw: UTXO model with 6 public signals
-            const netConf = (NETWORKS as any)[selectedNetwork] as typeof NETWORKS.paseo_assethub;
+            const netConf = (NETWORKS as any)[
+              selectedNetwork
+            ] as typeof NETWORKS.paseo_assethub;
             const recipient = evmAddress;
             if (!recipient) throw new Error("No wallet address connected");
 
@@ -4071,9 +4540,7 @@ export function App() {
             const selectedAsset = userAssets.find(
               (a) => a.symbol === selectedToken,
             );
-            const isNative =
-              !selectedAsset ||
-              selectedToken === netConf.asset;
+            const isNative = !selectedAsset || selectedToken === netConf.asset;
             const assetNumeric = isNative ? 0n : BigInt(selectedAsset.assetId);
             const decimals = isNative ? 18 : selectedAsset.decimals;
             const withdrawAmount = ethers.parseUnits(amount, decimals);
@@ -5593,9 +6060,12 @@ export function App() {
       if (polkadotAddress) {
         queryUserAssets(polkadotAddress, selectedNetwork, true);
 
+        // Nym re-fetches ~1.3MB of metadata per connect (can take up to ~180s),
+        // so poll well beyond the max connect time to avoid overlapping queries.
+        const balancePollMs = isNymActive() ? 240000 : 20000;
         const balanceInterval = setInterval(() => {
           queryUserAssets(polkadotAddress, selectedNetwork, true);
-        }, 20000);
+        }, balancePollMs);
 
         return () => clearInterval(balanceInterval);
       } else if (evmAddress) {
@@ -5690,7 +6160,9 @@ export function App() {
     setLoadingProgress({ processed: 0, total: 0, found: 0, currentAsset: "" });
     try {
       const networkConfig = NETWORKS[selectedNetwork] as any;
-      const rpcEndpoints = networkConfig?.rpcEndpoints || [networkConfig?.rpcEndpoint];
+      const rpcEndpoints = networkConfig?.rpcEndpoints || [
+        networkConfig?.rpcEndpoint,
+      ];
       const shieldAddr = networkConfig?.shield_address;
       const wsEndpoint = networkConfig?.wsEndpoint;
       if (!shieldAddr || !rpcEndpoints?.length) {
@@ -6103,7 +6575,9 @@ export function App() {
           // providers (WalletConnect, WagmiEthersProvider) don't support
           // eth_estimateGas. The wallet signer is only needed for actual sends.
           let provider: ethers.Provider | null = null;
-          const rpcs = (networkConfig as any).rpcEndpoints || [networkConfig.rpcEndpoint];
+          const rpcs = (networkConfig as any).rpcEndpoints || [
+            networkConfig.rpcEndpoint,
+          ];
           if (rpcs.length > 0) {
             for (const rpc of rpcs) {
               try {
@@ -6244,18 +6718,8 @@ export function App() {
 
   return (
     <div className="App">
-      <ToastContainer />
-      <a
-        className="referendum-marquee"
-        href="https://kusama.subsquare.io/referenda/658"
-        target="_blank"
-        rel="noopener noreferrer"
-      >
-        <div className="marquee-track">
-          <span>⚠️ Kusama Shield needs your support — Vote AYE in favour of our audit on Referendum 658&nbsp;&nbsp;•&nbsp;&nbsp;Vote here: https://kusama.subsquare.io/referenda/658&nbsp;&nbsp;•&nbsp;&nbsp;</span>
-          <span>⚠️ Kusama Shield needs your support — Vote AYE in favour of our audit on Referendum 658&nbsp;&nbsp;•&nbsp;&nbsp;Vote here: https://kusama.subsquare.io/referenda/658&nbsp;&nbsp;•&nbsp;&nbsp;</span>
-        </div>
-      </a>
+      {activeTheme.decorative && <FloatingCoins />}
+      <ToastContainer theme={isLightTheme ? "light" : "dark"} />
       <div className="header">
         <script src="/snarkjs.min.js"></script>
         <div className="header-controls">
@@ -6272,7 +6736,12 @@ export function App() {
             polkadotAddress={polkadotAddress}
             selectedNetwork={selectedNetwork}
             onAccountSelected={(account) => {
-              console.log("Selected account:", account.address, "type:", account.type);
+              console.log(
+                "Selected account:",
+                account.address,
+                "type:",
+                account.type,
+              );
               // Distinguish EVM (0x) vs Substrate (SS58) accounts.
               // Substrate wallets should NOT create a Talisman EVM provider,
               // and their balance must come from the SS58 Substrate balance.
@@ -6302,11 +6771,34 @@ export function App() {
 
       <div className="swap-container">
         <div
-          className={`swap-box ${activeTab === "bridge" || activeTab === "offramp" ? "no-shield-shape" : ""}`}
+          className={`swap-box ${
+            activeTab === "bridge" ||
+            activeTab === "offramp" ||
+            (activeTab === "send" && theme === "kusama")
+              ? "no-shield-shape"
+              : ""
+          }`}
         >
           <div className="tabs">
             {selectedNetwork !== "base" && (
               <>
+                <button
+                  className={`tab ${activeTab === "send" ? "active" : ""}`}
+                  onClick={() => setActiveTab("send")}
+                  disabled={isTestnet(selectedNetwork)}
+                  title={
+                    isTestnet(selectedNetwork)
+                      ? "Send not available on testnet"
+                      : undefined
+                  }
+                  style={
+                    isTestnet(selectedNetwork)
+                      ? { opacity: 0.6, cursor: "not-allowed" }
+                      : undefined
+                  }
+                >
+                  Send
+                </button>
                 <button
                   className={`tab ${activeTab === "shield" ? "active" : ""}`}
                   onClick={() => setActiveTab("shield")}
@@ -6318,23 +6810,6 @@ export function App() {
                   onClick={() => setActiveTab("unshield")}
                 >
                   Unshield
-                </button>
-                <button
-                  className={`tab ${activeTab === "bridge" ? "active" : ""}`}
-                  onClick={() => setActiveTab("bridge")}
-                  disabled={isTestnet(selectedNetwork)}
-                  title={
-                    isTestnet(selectedNetwork)
-                      ? "Bridge not available on testnet"
-                      : undefined
-                  }
-                  style={
-                    isTestnet(selectedNetwork)
-                      ? { opacity: 0.6, cursor: "not-allowed" }
-                      : undefined
-                  }
-                >
-                  {getBridgeTitle(selectedNetwork)}
                 </button>
               </>
             )}
@@ -6356,8 +6831,30 @@ export function App() {
               Offramp
             </button>
           </div>
+          {activeTheme.decorative && <TokenFlow />}
           {/* Tab content */}
-          {activeTab === "offramp" ? (
+          {activeTab === "send" ? (
+            <SendTab
+              selectedNetwork={selectedNetwork}
+              isMainnet={isMainnet(selectedNetwork)}
+              evmAddress={evmAddress}
+              polkadotAddress={polkadotAddress}
+              currencies={availableCurrencies}
+              rpcEndpoint={
+                (NETWORKS[selectedNetwork] as any)?.rpcEndpoint || ""
+              }
+              onShieldForSend={handleShieldForSend}
+              onConnectRequest={() => {
+                toast.info(
+                  "Use the Connect Wallet button to connect a wallet",
+                  {
+                    position: "top-right",
+                    theme: isLightTheme ? "light" : "dark",
+                  },
+                );
+              }}
+            />
+          ) : activeTab === "offramp" ? (
             viemWalletClient ? (
               <OfframpWidget
                 walletClient={viemWalletClient}
@@ -7159,7 +7656,7 @@ export function App() {
                   className={`swap-button ${isLoading ? "loading" : ""}`}
                   onClick={
                     activeTab === "shield"
-                      ? handleShield
+                      ? () => handleShield()
                       : activeTab === "unshield"
                         ? handleUnshield
                         : activeTab === "bridge"
@@ -7232,19 +7729,90 @@ export function App() {
           <img src="/toolbox.png" alt="Settings" className="settings-icon" />
           Customize Theme
         </button>
-        <div style={{ display: "flex", justifyContent: "center", gap: "8px", marginTop: "8px" }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "center",
+            gap: "8px",
+            marginTop: "8px",
+          }}
+        >
           <a
             href="https://kusamashield.codeberg.page/deploy.html"
             title="run Kusama Shield locally"
           >
             <img src="/run_locally.gif" alt="run with ipfs" />
           </a>
+          {/* Privacy proxy buttons — route EVM RPC through Tor or Nym */}
+          <div className="privacy-proxy-row">
+            <button
+              className={`privacy-proxy-button ${
+                privacyMode === "tor" && privacyStatus === "connecting"
+                  ? "privacy-pulsating"
+                  : ""
+              } ${
+                privacyMode === "tor" && privacyStatus === "connected"
+                  ? "privacy-connected"
+                  : ""
+              }`}
+              onClick={handleTorToggle}
+              disabled={privacyStatus === "connecting"}
+              title={
+                privacyMode === "tor" && privacyStatus === "connected"
+                  ? `Connected to Tor — click to disconnect`
+                  : privacyMode === "tor" && privacyStatus === "connecting"
+                    ? "Establishing Tor circuit..."
+                    : "Route EVM RPC requests through Tor"
+              }
+            >
+              <img
+                src="/tor_button.jpg"
+                alt="Tor"
+                className="privacy-proxy-img"
+              />
+            </button>
+            <button
+              className={`privacy-proxy-button ${
+                privacyMode === "nym" && privacyStatus === "connecting"
+                  ? "privacy-pulsating"
+                  : ""
+              } ${
+                privacyMode === "nym" && privacyStatus === "connected"
+                  ? "privacy-connected"
+                  : ""
+              }`}
+              onClick={handleNymToggle}
+              disabled={privacyStatus === "connecting"}
+              title={
+                privacyMode === "nym" && privacyStatus === "connected"
+                  ? `Connected to Nym — click to disconnect`
+                  : privacyMode === "nym" && privacyStatus === "connecting"
+                    ? "Establishing Nym tunnel..."
+                    : "Route EVM RPC requests through the Nym mixnet"
+              }
+            >
+              <img
+                src="/nym_button.png"
+                alt="Nym"
+                className="privacy-proxy-img"
+              />
+            </button>
+          </div>
           <button
             onClick={() => setShowNameGen(true)}
             title="Fake name generator and email forwarder"
-            style={{ background: "none", border: "none", cursor: "pointer", padding: "0 4px" }}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              padding: "0 4px",
+            }}
           >
-            <img src="/mustach_smile.png" alt="mustach" style={{ width: "90%", height: "90%" }} />
+            <img
+              src="/mustach_smile.png"
+              alt="mustach"
+              style={{ width: "90%", height: "90%" }}
+            />
           </button>
         </div>
         <div
@@ -7260,72 +7828,213 @@ export function App() {
             title="Kusama Network"
             className="terms-button"
           >
-            🐦 Funded by Kusama Network 🐦
+            🐦 Running autonomously on the resilient network of Kusama 🐦
           </a>
         </div>
         {showHelp && (
-          <div className="help-modal">
-            <div className="help-modal-content">
-              <h2>General information</h2>
-              <div className="help-section">
-                <h3>Need more information?</h3>
-                <p>Check out the public documentation: </p>
-                <p>
-                  <a
-                    href="https://kusamashield.codeberg.page/intro.html"
-                    title="Kusama Shield Public documentation"
-                    target="_blank"
-                  >
-                    https://kusamashield.codeberg.page/intro.html
-                  </a>
-                </p>
-              </div>
-              <div className="help-section">
-                <h3>Found a bug?</h3>
-                <p>1. Document the bug(take screenshots)</p>
-                <p>
-                  2.{" "}
-                  <a
-                    href="https://codeberg.org/KusamaShield/Interface/issues/new"
-                    title="Kusama Shield Code Repository"
-                    target="_blank"
-                  >
-                    File an issue on the public repo
-                  </a>
-                </p>
-              </div>
-              <h2>How to use Kusama Shield</h2>
-              <div className="help-section">
-                <h3>Shielding Tokens</h3>
-                <p>1. Connect your wallet using the button above</p>
-                <p>2. Select the network you want to use</p>
-                <p>3. Enter the amount you want to shield</p>
-                <p>4. Click "Shield" to start the process</p>
-                <p>
-                  5. Save your secret key - you'll need it to unshield later!
-                </p>
-              </div>
-              <div className="help-section">
-                <h3>Unshielding Tokens</h3>
-                <p>
-                  1. Make sure you have your secret key from when you shielded
-                </p>
-                <p>2. Enter the amount you want to unshield</p>
-                <p>3. Enter your secret key</p>
-                <p>4. Click "Unshield" to retrieve your tokens</p>
-              </div>
-              <div className="help-section">
-                <h3>Important Notes</h3>
-                <p>
-                  • Always keep your secret key safe - if you lose it, you won't
-                  be able to unshield your tokens
-                </p>
-                <p>
-                  • Make sure you're on the correct network before
-                  shielding/unshielding
-                </p>
-                <p>• You can get test tokens from the faucet link provided</p>
-              </div>
+          <div
+            className={`help-modal${theme === "fresh" ? " help-modal-terminal" : ""}`}
+          >
+            <div
+              className={`help-modal-content${theme === "fresh" ? " help-terminal" : ""}`}
+            >
+              {theme === "fresh" ? (
+                <div className="terminal-window">
+                  <div className="terminal-titlebar">
+                    <span className="terminal-title">
+                      user@kusama-shield: ~ — man kusama-shield
+                    </span>
+                    <span
+                      className="terminal-dot terminal-red"
+                      onClick={() => setShowHelp(false)}
+                    />
+                    <span
+                      className="terminal-dot terminal-yellow"
+                      onClick={() => setShowHelp(false)}
+                    />
+                    <span
+                      className="terminal-dot terminal-green"
+                      onClick={() => setShowHelp(false)}
+                    />
+                  </div>
+                  <div className="terminal-body">
+                    <pre className="manpage">{`KUSAMA-SHIELD(1)              User Commands              KUSAMA-SHIELD(1)
+
+NAME
+       kusama-shield - private token shielding for Kusama and Polkadot
+       AssetHub
+
+SYNOPSIS
+       kusama-shield [--network kusama|polkadot] [--token TOKEN]
+                     [--amount N] <shield|unshield|send>
+
+DESCRIPTION
+       Kusama Shield is a zero-knowledge privacy interface. It breaks the
+       on-chain link between the address that funds a transfer and the
+       address that receives it, using Groth16 proofs and a shielded pool.
+
+COMMANDS
+       shield     Deposit a token into the shielded pool and print a secret.
+                  SAVE THE SECRET - it is the only way to withdraw later.
+
+       unshield   Withdraw a token using the secret from a previous shield.
+
+       send       Privately transfer to another address. The deposit is
+                  shielded automatically, then queued in a privacy batch.
+
+OPTIONS
+       --network  kusama (default) | polkadot
+       --token    KSM, DOT, USDT, USDC, ...
+       --amount   Amount to shield / send
+       --privacy  off (default) | tor | nym - route RPC through a privacy
+                  network (see PRIVACY below)
+
+PRIVACY
+       Traffic can be routed through a privacy network via the shield icon
+       in the header.
+
+       tor        Routes JSON-RPC over Tor using the Snowflake bridge.
+                  Works for HTTP(S) RPC only. Polkadot uses raw WebSockets,
+                  which Tor cannot tunnel, so WSS RPC and balance
+                  subscriptions stay direct or fail over to a public
+                  endpoint.
+
+       nym        Routes HTTP JSON-RPC and Polkadot WebSockets through the
+                  Nym mixnet (smolmix WASM running in a Web Worker). This
+                  hides your IP for on-chain RPC, including shield,
+                  unshield, send and balance queries. It adds noticeable
+                  latency.
+
+       Enabling Nym installs a WebSocket shim at startup; connect (or
+       reconnect) your wallet afterwards so @polkadot/x-ws picks the shim
+       up. The first Substrate connect downloads ~1.3 MB of runtime
+       metadata and can take up to a minute over the mixnet. It is cached
+       in memory and in IndexedDB, and pre-fetched in the background once
+       Nym connects, so later connects take only a few seconds. If a
+       mixnet gateway is busy the connection may time out - just retry.
+
+EXAMPLES
+       Shield 0.5 KSM:
+           1. Connect your wallet with the Connect Wallet button
+           2. Select Kusama AssetHub as the network
+           3. Enter the amount and click Shield
+           4. Save the secret key shown on screen
+
+       Unshield:
+           1. Enter the amount and your saved secret
+           2. Click Unshield to retrieve your tokens
+
+FILES
+       ~/.kusama-shield/secret   your withdrawal secret - back it up!
+
+NOTES
+       - Losing your secret means losing access to the shielded funds.
+       - Always confirm you are on the correct network before shielding.
+       - Test tokens are available from the faucet link in the app.
+       - Tor/Nym hide your network address only; amounts, timing and the
+         on-chain transfer graph remain public.
+       - If a transaction looks stuck while Nym is on, disable it or retry;
+         mixnet gateways are occasionally busy.
+
+SEE ALSO
+       https://kusamashield.codeberg.page/intro.html
+
+BUGS
+       Document the bug (screenshots), then file an issue:
+       https://codeberg.org/KusamaShield/Interface/issues/new
+`}</pre>
+                    <div className="terminal-links">
+                      <a
+                        href="https://kusamashield.codeberg.page/intro.html"
+                        title="Kusama Shield Public documentation"
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        → https://kusamashield.codeberg.page/intro.html
+                      </a>
+                      <a
+                        href="https://codeberg.org/KusamaShield/Interface/issues/new"
+                        title="Kusama Shield Code Repository"
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        → https://codeberg.org/KusamaShield/Interface/issues/new
+                      </a>
+                    </div>
+                    <div className="terminal-prompt">
+                      user@kusama-shield:~${" "}
+                      <span className="terminal-cursor">█</span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <h2>General information</h2>
+                  <div className="help-section">
+                    <h3>Need more information?</h3>
+                    <p>Check out the public documentation: </p>
+                    <p>
+                      <a
+                        href="https://kusamashield.codeberg.page/intro.html"
+                        title="Kusama Shield Public documentation"
+                        target="_blank"
+                      >
+                        https://kusamashield.codeberg.page/intro.html
+                      </a>
+                    </p>
+                  </div>
+                  <div className="help-section">
+                    <h3>Found a bug?</h3>
+                    <p>1. Document the bug(take screenshots)</p>
+                    <p>
+                      2.{" "}
+                      <a
+                        href="https://codeberg.org/KusamaShield/Interface/issues/new"
+                        title="Kusama Shield Code Repository"
+                        target="_blank"
+                      >
+                        File an issue on the public repo
+                      </a>
+                    </p>
+                  </div>
+                  <h2>How to use Kusama Shield</h2>
+                  <div className="help-section">
+                    <h3>Shielding Tokens</h3>
+                    <p>1. Connect your wallet using the button above</p>
+                    <p>2. Select the network you want to use</p>
+                    <p>3. Enter the amount you want to shield</p>
+                    <p>4. Click "Shield" to start the process</p>
+                    <p>
+                      5. Save your secret key - you'll need it to unshield
+                      later!
+                    </p>
+                  </div>
+                  <div className="help-section">
+                    <h3>Unshielding Tokens</h3>
+                    <p>
+                      1. Make sure you have your secret key from when you
+                      shielded
+                    </p>
+                    <p>2. Enter the amount you want to unshield</p>
+                    <p>3. Enter your secret key</p>
+                    <p>4. Click "Unshield" to retrieve your tokens</p>
+                  </div>
+                  <div className="help-section">
+                    <h3>Important Notes</h3>
+                    <p>
+                      • Always keep your secret key safe - if you lose it, you
+                      won't be able to unshield your tokens
+                    </p>
+                    <p>
+                      • Make sure you're on the correct network before
+                      shielding/unshielding
+                    </p>
+                    <p>
+                      • You can get test tokens from the faucet link provided
+                    </p>
+                  </div>
+                </>
+              )}
               <button
                 className="close-help-button"
                 onClick={() => setShowHelp(false)}
@@ -7868,183 +8577,50 @@ export function App() {
         )}
         {showSettings && (
           <div className="help-modal">
-            <div className="help-modal-content" style={{ maxWidth: "800px" }}>
+            <div
+              className="help-modal-content"
+              style={{ maxWidth: "1200px", width: "95%" }}
+            >
               <h2>Customize Theme</h2>
 
               <div className="help-section">
-                <h3>Background Color (Center)</h3>
-                <div style={{ margin: "1.5rem 0" }}>
-                  <div style={{ marginBottom: "1rem" }}>
-                    <label
-                      style={{
-                        display: "block",
-                        marginBottom: "0.5rem",
-                        color: "#ccc",
-                        fontWeight: "bold",
-                      }}
-                    >
-                      Primary Color
-                    </label>
+                <h3>Theme Preset</h3>
+                <p>
+                  Pick a full visual theme. Your choice is saved in this
+                  browser.
+                </p>
+                <div className="theme-grid">
+                  {THEMES.map((t) => (
                     <div
-                      style={{
-                        display: "flex",
-                        gap: "10px",
-                        alignItems: "center",
-                      }}
+                      key={t.id}
+                      className={`fresh-theme-option ${theme === t.id ? "active" : ""}`}
+                      onClick={() => setTheme(t.id)}
                     >
-                      <input
-                        type="color"
-                        value={backgroundColor}
-                        onChange={(e) => setBackgroundColor(e.target.value)}
-                        style={{
-                          width: "60px",
-                          height: "60px",
-                          borderRadius: "8px",
-                          border: "2px solid #333",
-                          cursor: "pointer",
-                        }}
-                      />
-                      <div style={{ flex: 1 }}>
-                        <div
-                          style={{
-                            background: backgroundColor,
-                            height: "30px",
-                            borderRadius: "6px",
-                            border: "1px solid #444",
-                            marginBottom: "0.25rem",
-                          }}
-                        />
-                        <code style={{ color: "#888", fontSize: "0.8rem" }}>
-                          {backgroundColor}
-                        </code>
+                      <div className="fresh-theme-swatch">
+                        {t.swatch.map((c) => (
+                          <span key={c} style={{ background: c }} />
+                        ))}
+                      </div>
+                      <div className="fresh-theme-copy">
+                        <div className="fresh-theme-title">
+                          {t.label}
+                          {theme === t.id ? " — Active" : ""}
+                        </div>
+                        <div className="fresh-theme-sub">{t.sub}</div>
                       </div>
                     </div>
-                  </div>
-                  <div style={{ marginBottom: "1rem" }}>
-                    <label
-                      style={{
-                        display: "block",
-                        marginBottom: "0.5rem",
-                        color: "#ccc",
-                        fontWeight: "bold",
-                      }}
-                    >
-                      Gradient Color (Edges)
-                    </label>
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: "10px",
-                        alignItems: "center",
-                      }}
-                    >
-                      <input
-                        type="color"
-                        value={gradientColor}
-                        onChange={(e) => setGradientColor(e.target.value)}
-                        style={{
-                          width: "60px",
-                          height: "60px",
-                          borderRadius: "8px",
-                          border: "2px solid #333",
-                          cursor: "pointer",
-                        }}
-                      />
-                      <div style={{ flex: 1 }}>
-                        <div
-                          style={{
-                            background: gradientColor,
-                            height: "30px",
-                            borderRadius: "6px",
-                            border: "1px solid #444",
-                            marginBottom: "0.25rem",
-                          }}
-                        />
-                        <code style={{ color: "#888", fontSize: "0.8rem" }}>
-                          {gradientColor}
-                        </code>
-                      </div>
-                    </div>
-                  </div>
-                  <div
-                    style={{
-                      background: `radial-gradient(circle at center, ${backgroundColor} 0%, ${gradientColor} 100%)`,
-                      height: "80px",
-                      borderRadius: "12px",
-                      border: "1px solid #444",
-                      marginTop: "1rem",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      color: "white",
-                      fontWeight: "bold",
-                      textShadow: "0 1px 3px rgba(0,0,0,0.5)",
-                    }}
-                  >
-                    Preview
-                  </div>
+                  ))}
                 </div>
-                <div
-                  style={{
-                    marginTop: "1.5rem",
-                    paddingTop: "1rem",
-                    borderTop: "1px solid #333",
-                  }}
-                >
-                  <button
-                    onClick={() => {
-                      setBackgroundColor("#09002b");
-                      setGradientColor("#000000");
-                    }}
-                    style={{
-                      background: "linear-gradient(135deg, #9333ea, #e91e63)",
-                      color: "white",
-                      border: "none",
-                      borderRadius: "8px",
-                      padding: "10px 20px",
-                      cursor: "pointer",
-                      fontWeight: "bold",
-                      marginRight: "10px",
-                    }}
+                <p className="theme-survey-link">
+                  Have feedback on the interface?{" "}
+                  <a
+                    href="https://forms.bettercollected.com/fsworkspace1/forms/cargo"
+                    target="_blank"
+                    rel="noopener noreferrer"
                   >
-                    Reset to Default
-                  </button>
-                  <button
-                    onClick={() => {
-                      setBackgroundColor("#1a1a2e");
-                      setGradientColor("#16213e");
-                    }}
-                    style={{
-                      background: "linear-gradient(135deg, #1a1a2e, #16213e)",
-                      color: "white",
-                      border: "none",
-                      borderRadius: "8px",
-                      padding: "10px 20px",
-                      cursor: "pointer",
-                      fontWeight: "bold",
-                      marginRight: "10px",
-                    }}
-                  >
-                    Dark Blue Theme
-                  </button>
-                  <button
-                    onClick={() => {
-                      setBackgroundColor("#0f172a");
-                      setGradientColor("#1e293b");
-                    }}
-                    style={{
-                      background: "linear-gradient(135deg, #0f172a, #1e293b)",
-                      color: "white",
-                      border: "none",
-                      borderRadius: "8px",
-                      padding: "10px 20px",
-                      cursor: "pointer",
-                      fontWeight: "bold",
-                    }}
-                  >
-                    Slate Theme
-                  </button>
-                </div>
+                    Take the UI survey →
+                  </a>
+                </p>
               </div>
 
               <div className="help-section">
@@ -8054,7 +8630,8 @@ export function App() {
                   <div
                     style={{
                       display: "grid",
-                      gridTemplateColumns: "1fr 1fr 1fr 1fr",
+                      gridTemplateColumns:
+                        "repeat(auto-fit, minmax(150px, 1fr))",
                       gap: "1rem",
                       marginBottom: "2rem",
                     }}
@@ -8362,24 +8939,56 @@ export function App() {
         )}
         {showNameGen && (
           <div className="help-modal" onClick={() => setShowNameGen(false)}>
-            <div className="help-modal-content" onClick={(e) => e.stopPropagation()}>
-              <h2><img src="/haltman.png" alt="haltman" style={{ width: "32px", height: "32px", verticalAlign: "middle", marginRight: "8px" }} />Fake name generator</h2>
+            <div
+              className="help-modal-content"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2>
+                <img
+                  src="/haltman.png"
+                  alt="haltman"
+                  style={{
+                    width: "32px",
+                    height: "32px",
+                    verticalAlign: "middle",
+                    marginRight: "8px",
+                  }}
+                />
+                Fake name generator
+              </h2>
               <div className="help-section">
                 <div style={{ textAlign: "center", marginBottom: "1.5rem" }}>
                   {generatedFirstName ? (
                     <>
-                      <div style={{ fontSize: "1.5rem", fontWeight: "bold", color: "#9d4edd", marginBottom: "0.5rem" }}>
+                      <div
+                        style={{
+                          fontSize: "1.5rem",
+                          fontWeight: "bold",
+                          color: "#9d4edd",
+                          marginBottom: "0.5rem",
+                        }}
+                      >
                         {generatedFirstName} {generatedLastName}
                       </div>
                       <div style={{ fontSize: "0.95rem", color: "#aaa" }}>
-                        📧 {generatedFirstName.toLowerCase()}.{generatedLastName.toLowerCase()}@metasploit.io
+                        📧 {generatedFirstName.toLowerCase()}.
+                        {generatedLastName.toLowerCase()}@metasploit.io
                       </div>
                     </>
                   ) : (
-                    <div style={{ color: "#888" }}>Click generate to create a fake identity</div>
+                    <div style={{ color: "#888" }}>
+                      Click generate to create a fake identity
+                    </div>
                   )}
                 </div>
-                <div style={{ display: "flex", gap: "0.5rem", justifyContent: "center", marginBottom: "1rem" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: "0.5rem",
+                    justifyContent: "center",
+                    marginBottom: "1rem",
+                  }}
+                >
                   <button
                     className="help-button"
                     onClick={async () => {
@@ -8409,7 +9018,14 @@ export function App() {
                 {nameGenStep === "confirm" && (
                   <div style={{ marginBottom: "1rem" }}>
                     <div style={{ marginBottom: "0.75rem" }}>
-                      <label style={{ display: "block", marginBottom: "0.3rem", color: "#aaa", fontSize: "0.85rem" }}>
+                      <label
+                        style={{
+                          display: "block",
+                          marginBottom: "0.3rem",
+                          color: "#aaa",
+                          fontSize: "0.85rem",
+                        }}
+                      >
                         Your email (where the confirmation will be sent)
                       </label>
                       <input
@@ -8433,29 +9049,72 @@ export function App() {
                       className="help-button"
                       onClick={subscribeForwarder}
                       disabled={!userEmail}
-                      style={{ padding: "0.5rem 1rem", width: "100%", opacity: userEmail ? 1 : 0.5 }}
+                      style={{
+                        padding: "0.5rem 1rem",
+                        width: "100%",
+                        opacity: userEmail ? 1 : 0.5,
+                      }}
                     >
                       Send Confirmation && Activate forwarder
                     </button>
                   </div>
                 )}
                 {nameGenStep === "done" && (
-                  <div style={{ textAlign: "center", padding: "1rem 0", marginBottom: "1rem" }}>
-                    <div style={{ fontSize: "1rem", color: "#4ade80", marginBottom: "0.5rem" }}>
+                  <div
+                    style={{
+                      textAlign: "center",
+                      padding: "1rem 0",
+                      marginBottom: "1rem",
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: "1rem",
+                        color: "#4ade80",
+                        marginBottom: "0.5rem",
+                      }}
+                    >
                       Confirmation link sent, ready for action!
                     </div>
                   </div>
                 )}
                 {nameGenResult && (
-                  <div style={{ textAlign: "center", fontSize: "0.85rem", color: nameGenResult.startsWith("✓") ? "#4ade80" : "#f87171" }}>
+                  <div
+                    style={{
+                      textAlign: "center",
+                      fontSize: "0.85rem",
+                      color: nameGenResult.startsWith("✓")
+                        ? "#4ade80"
+                        : "#f87171",
+                    }}
+                  >
                     {nameGenResult}
                   </div>
                 )}
               </div>
-              <div style={{ textAlign: "center", fontSize: "0.75rem", color: "#666" }}>
-                Emails powered by <a href="https://haltman.org/" target="_blank" title="Haltman.org" style={{ color: "rgb(222 186 255)" }}>Brazilian Hacking Group Haltman</a>
+              <div
+                style={{
+                  textAlign: "center",
+                  fontSize: "0.75rem",
+                  color: "#666",
+                }}
+              >
+                Emails powered by{" "}
+                <a
+                  href="https://haltman.org/"
+                  target="_blank"
+                  title="Haltman.org"
+                  style={{ color: "rgb(222 186 255)" }}
+                >
+                  Brazilian Hacking Group Haltman
+                </a>
               </div>
-              <button className="close-help-button" onClick={() => setShowNameGen(false)}>Close</button>
+              <button
+                className="close-help-button"
+                onClick={() => setShowNameGen(false)}
+              >
+                Close
+              </button>
             </div>
           </div>
         )}

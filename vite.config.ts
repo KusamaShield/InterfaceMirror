@@ -4,6 +4,7 @@
 
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
+import { fileURLToPath } from 'node:url'
 //import { NodeGlobalsPolyfillPlugin } from '@esbuild-plugins/node-globals-polyfill';
 
 
@@ -16,7 +17,14 @@ export default defineConfig({
   worker: {
     format: 'es',
   },
-  resolve: {},
+  resolve: {
+    alias: [
+      {
+        find: /^@phosphor-icons\/webcomponents\/.*/,
+        replacement: fileURLToPath(new URL('./src/phosphor-stub.ts', import.meta.url)),
+      },
+    ],
+  },
   // Note: COOP/COEP headers enable SharedArrayBuffer for multi-threaded WASM
   // But they can cause issues with some wallet SDKs (Coinbase, WalletConnect)
   // For production, consider using a reverse proxy or separate domains
@@ -27,8 +35,10 @@ export default defineConfig({
       // 'Cross-Origin-Embedder-Policy': 'require-corp',
     },
     proxy: {
+      // Local Flask proxy for testing. Switch back to
+      // https://proxyswap.laissez-faire.trade before deploying.
       '/api/rpc-proxy': {
-        target: 'https://proxyswap.laissez-faire.trade',
+        target: 'http://pi:5000',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/rpc-proxy/, ''),
         configure: (proxy, options) => {
@@ -40,7 +50,7 @@ export default defineConfig({
         }
       },
       '/api/swap': {
-        target: 'https://proxyswap.laissez-faire.trade',
+        target: 'http://pi:5000',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/swap/, ''),
       },

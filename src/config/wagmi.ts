@@ -70,14 +70,6 @@ export const paseoAssetHub = defineChain({
   testnet: true,
 });
 
-export const moonbaseAlpha = defineChain({
-  id: 1287, name: "Moonbase Alpha",
-  nativeCurrency: { name: "DEV", symbol: "DEV", decimals: 18 },
-  rpcUrls: { default: { http: ["https://moonbase.public.curie.radiumblock.co/http"] } },
-  blockExplorers: { default: { name: "Moonscan", url: "https://moonbase.moonscan.io" } },
-  testnet: true,
-});
-
 export const polkadotAssetHub = defineChain({
   id: 420420419, name: "Polkadot Asset Hub",
   nativeCurrency: { name: "Polkadot", symbol: "DOT", decimals: 18 },
@@ -92,12 +84,6 @@ export const base = defineChain({
   blockExplorers: { default: { name: "Basescan", url: "https://basescan.org" } },
 });
 
-export const moonbeam = defineChain({
-  id: 1284, name: "Moonbeam",
-  nativeCurrency: { name: "GLMR", symbol: "GLMR", decimals: 18 },
-  rpcUrls: { default: { http: ["https://rpc.api.moonbeam.network"] } },
-});
-
 export const moonriver = defineChain({
   id: 2023, name: "Moonriver",
   nativeCurrency: { name: "MOVR", symbol: "MOVR", decimals: 18 },
@@ -107,8 +93,8 @@ export const moonriver = defineChain({
 // EVM networks only (for wagmi)
 export const networks: Chain[] = [
   polkadotAssetHub, kusamaAssetHub, westendAssetHub,
-  paseoAssetHubV3, paseoAssetHub, moonbaseAlpha,
-  base, moonbeam, moonriver,
+  paseoAssetHubV3, paseoAssetHub,
+  base, moonriver,
 ];
 
 // All networks for AppKit - EVM + Substrate (polkadot namespace)

@@ -18,10 +18,12 @@ import { ethers } from "ethers";
 import { poseidon2 } from "poseidon-lite";
 import { LeanIMT } from "./merkle";
 import { ss58ToEth, computeCommitment } from "./forwarder";
+import { rpcTimeoutMs } from "../services/privacyProxy";
 import worker from "../workers/snarkjs-client";
 
 export const POLKADOT_V7_POOL = "0x0D694Da746e73D1e255c1894F90e38170db45809";
-export const POLKADOT_EVM_RPC = "https://polkadot-assethub-rpc.laissez-faire.trade";
+export const POLKADOT_EVM_RPC =
+  "https://polkadot-assethub-rpc.laissez-faire.trade";
 export const POLKADOT_WS_RPCS = [
   "wss://asset-hub-polkadot-rpc.n.dwellir.com",
   "wss://asset-hub-polkadot.gatotech.network",
@@ -46,7 +48,9 @@ export function networkNativeDecimals(network?: string): number {
 
 /** Per-network NativeToEthRatio (planck → wei inside the revive pallet). */
 export function networkNativeToEthRatio(network?: string): bigint {
-  return network === "kusama" ? KUSAMA_NATIVE_TO_ETH_RATIO : NATIVE_TO_ETH_RATIO;
+  return network === "kusama"
+    ? KUSAMA_NATIVE_TO_ETH_RATIO
+    : NATIVE_TO_ETH_RATIO;
 }
 
 const SNARK_FIELD =
@@ -73,24 +77,186 @@ export function parseDotAmount(
   return { amountPlanck, amountWei };
 }
 
+/**
+ * In-memory runtime-metadata cache, keyed `${genesisHash}-${specVersion}`.
+ *
+ * `ApiPromise` accepts a `metadata` map (ApiOptions) and, when the current
+ * chain key is present, builds its registry from it instead of downloading
+ * `state_getMetadata` / `Metadata_metadata_at_version`. That response is ~1.3 MB
+ * and dominates connect time over the Nym mixnet, so caching it makes repeat
+ * connects (shield, unshield, balance polls) dramatically faster.
+ */
+const runtimeMetadataCache: Record<string, string> = {};
+
+// ---------------------------------------------------------------------------
+// IndexedDB persistence (survives page reloads; IDB has no localStorage quota
+// problem for the ~600 KB hex blobs).
+// ---------------------------------------------------------------------------
+const METADATA_DB_NAME = "kusama-shield";
+const METADATA_STORE = "runtime-metadata";
+const METADATA_DB_KEY = "cache";
+
+function idbOpen(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    if (typeof indexedDB === "undefined") {
+      reject(new Error("indexedDB unavailable"));
+      return;
+    }
+    const req = indexedDB.open(METADATA_DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      if (!req.result.objectStoreNames.contains(METADATA_STORE)) {
+        req.result.createObjectStore(METADATA_STORE);
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function idbRequest<T>(req: IDBRequest<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function loadMetadataFromIdb(): Promise<void> {
+  try {
+    const db = await idbOpen();
+    const tx = db.transaction(METADATA_STORE, "readonly");
+    const stored = await idbRequest(
+      tx.objectStore(METADATA_STORE).get(METADATA_DB_KEY),
+    );
+    db.close();
+    if (stored && typeof stored === "object") {
+      Object.assign(runtimeMetadataCache, stored);
+      const n = Object.keys(stored).length;
+      if (n > 0)
+        console.log(
+          `[revive] loaded ${n} cached runtime metadata entry(ies) from IndexedDB`,
+        );
+    }
+  } catch {
+    /* non-fatal: cache just starts empty */
+  }
+}
+
+async function persistMetadataToIdb(): Promise<void> {
+  try {
+    const db = await idbOpen();
+    await new Promise<void>((resolve) => {
+      const tx = db.transaction(METADATA_STORE, "readwrite");
+      tx.objectStore(METADATA_STORE).put(
+        { ...runtimeMetadataCache },
+        METADATA_DB_KEY,
+      );
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+      tx.onabort = () => resolve();
+    });
+    db.close();
+  } catch {
+    /* non-fatal */
+  }
+}
+
+/** Resolves once the IndexedDB-backed cache has been loaded (or failed). */
+const metadataCacheReady: Promise<void> = loadMetadataFromIdb();
+
+/** Await before reading `getCachedMetadata()` outside `connectSubstrate`. */
+export function whenMetadataCacheReady(): Promise<void> {
+  return metadataCacheReady;
+}
+
+/** The metadata map to hand to `new ApiPromise({ metadata })`. */
+export function getCachedMetadata(): Record<string, string> {
+  return runtimeMetadataCache;
+}
+
+/** Store a ready API's metadata for reuse by later connects. */
+export function cacheApiMetadata(api: ApiPromise): void {
+  try {
+    const genesis = (api as any).genesisHash?.toHex?.();
+    const spec = (api as any).runtimeVersion?.specVersion?.toString?.();
+    const hex = (api as any).runtimeMetadata?.toHex?.();
+    if (!genesis || !spec || !hex) return;
+    const key = `${genesis}-${spec}`;
+    if (runtimeMetadataCache[key] !== hex) {
+      runtimeMetadataCache[key] = hex;
+      console.log(
+        `[revive] cached runtime metadata ${key} (${Math.round(hex.length / 2 / 1024)} KB)`,
+      );
+      void persistMetadataToIdb();
+    }
+  } catch (e) {
+    console.warn("[revive] metadata cache failed:", (e as any)?.message || e);
+  }
+}
+
+/** Endpoint sets whose metadata has already been prefetched (or is in flight). */
+const metadataPrefetched = new Set<string>();
+
+/**
+ * Background-warm the runtime-metadata cache for a network's WS endpoints.
+ *
+ * Called when Nym connects so the first shield/withdraw does not pay the
+ * ~1.3 MB mixnet metadata fetch. Metadata is cached by `connectSubstrate`
+ * itself; the socket is released once the cache is warm. Fire-and-forget.
+ */
+export async function prefetchMetadata(
+  wsEndpoints: string[] = POLKADOT_WS_RPCS,
+): Promise<void> {
+  if (!wsEndpoints.length) return;
+  const key = wsEndpoints.join(",");
+  if (metadataPrefetched.has(key)) return;
+  metadataPrefetched.add(key);
+  try {
+    console.log("[revive] prefetching runtime metadata for", wsEndpoints[0]);
+    const api = await connectSubstrate(wsEndpoints);
+    // Metadata is already cached inside connectSubstrate; drop the socket.
+    try {
+      await api.disconnect();
+    } catch {
+      /* ignore */
+    }
+    console.log("[revive] metadata prefetch complete");
+  } catch (e) {
+    // Allow a later retry (e.g. transient Nym/gateway failure).
+    metadataPrefetched.delete(key);
+    console.warn(
+      "[revive] metadata prefetch failed:",
+      (e as any)?.message || e,
+    );
+  }
+}
+
 /** Connect to the first reachable Substrate WS endpoint (failover + timeout). */
 export async function connectSubstrate(
   wsEndpoints: string[] = POLKADOT_WS_RPCS,
 ): Promise<ApiPromise> {
+  // Make sure the IndexedDB-backed metadata cache is loaded before building
+  // the API, so a warm cache is actually used on the first connect.
+  await metadataCacheReady;
   let lastErr: unknown;
   for (const wsUrl of wsEndpoints) {
     const ws = new WsProvider(wsUrl);
-    const api = new ApiPromise({ provider: ws, noInitWarn: true });
+    const api = new ApiPromise({
+      provider: ws,
+      noInitWarn: true,
+      metadata: runtimeMetadataCache,
+    } as any);
     try {
+      const timeoutMs = rpcTimeoutMs(WS_TIMEOUT_MS);
       await Promise.race([
         api.isReady,
         new Promise<never>((_, r) =>
           setTimeout(
-            () => r(new Error(`WS timeout after 15s`)),
-            WS_TIMEOUT_MS,
+            () => r(new Error(`WS timeout after ${timeoutMs / 1000}s`)),
+            timeoutMs,
           ),
         ),
       ]);
+      cacheApiMetadata(api);
       return api;
     } catch (e) {
       lastErr = e;
@@ -118,64 +284,89 @@ export async function ensureAccountMapped(
     return false;
   }
 
-  console.log("[revive] account NOT mapped, mapping via mapAccount(). walletSource:", walletSource || "(none)");
+  console.log(
+    "[revive] account NOT mapped, mapping via mapAccount(). walletSource:",
+    walletSource || "(none)",
+  );
 
   // Upgrade to the polkadot.js extension's proper signer when available.
   let extSigner = signer;
   try {
-    const { web3Enable, web3FromAddress, web3FromSource } = await import("@polkadot/extension-dapp");
+    const { web3Enable, web3FromAddress, web3FromSource } =
+      await import("@polkadot/extension-dapp");
     await web3Enable("Kusama Shield");
     if (walletSource) {
       const injected = await web3FromSource(walletSource);
-      if (injected?.signer) { extSigner = injected.signer; console.log("[revive] using web3FromSource signer:", walletSource); }
+      if (injected?.signer) {
+        extSigner = injected.signer;
+        console.log("[revive] using web3FromSource signer:", walletSource);
+      }
     } else {
       const injected = await web3FromAddress(ss58);
-      if (injected?.signer) { extSigner = injected.signer; console.log("[revive] using web3FromAddress signer"); }
+      if (injected?.signer) {
+        extSigner = injected.signer;
+        console.log("[revive] using web3FromAddress signer");
+      }
     }
   } catch (e) {
-    console.warn("[revive] signer upgrade failed, using wallet signer:", (e as any)?.message || e);
+    console.warn(
+      "[revive] signer upgrade failed, using wallet signer:",
+      (e as any)?.message || e,
+    );
   }
 
   await new Promise<void>((resolve, reject) => {
     let done = false;
     api.tx.revive
       .mapAccount()
-      .signAndSend(ss58, { signer: extSigner }, ({ status, txHash, dispatchError }: any) => {
-        if (done) {
-          if (dispatchError && dispatchError.isModule) {
-            const { index, name } = api.registry.findMetaError(dispatchError.asModule);
-            console.warn(`[revive] mapAccount belated dispatch error: ${index}.${name}`);
+      .signAndSend(
+        ss58,
+        { signer: extSigner },
+        ({ status, txHash, dispatchError }: any) => {
+          if (done) {
+            if (dispatchError && dispatchError.isModule) {
+              const { index, name } = api.registry.findMetaError(
+                dispatchError.asModule,
+              );
+              console.warn(
+                `[revive] mapAccount belated dispatch error: ${index}.${name}`,
+              );
+            }
+            return;
           }
-          return;
-        }
-        if (dispatchError) {
-          done = true;
-          if (dispatchError.isModule) {
-            const { index, name } = api.registry.findMetaError(dispatchError.asModule);
-            if (name === "AccountAlreadyMapped") resolve();
-            else reject(new Error(`mapAccount: ${index}.${name}`));
-          } else reject(new Error(dispatchError.toString()));
-          return;
-        }
-        if (txHash && (status.isInBlock || status.isFinalized)) {
-          done = true;
-          console.log("[revive] mapAccount in block, tx:", txHash.toHex());
-          resolve();
-        }
-      })
+          if (dispatchError) {
+            done = true;
+            if (dispatchError.isModule) {
+              const { index, name } = api.registry.findMetaError(
+                dispatchError.asModule,
+              );
+              if (name === "AccountAlreadyMapped") resolve();
+              else reject(new Error(`mapAccount: ${index}.${name}`));
+            } else reject(new Error(dispatchError.toString()));
+            return;
+          }
+          if (txHash && (status.isInBlock || status.isFinalized)) {
+            done = true;
+            console.log("[revive] mapAccount in block, tx:", txHash.toHex());
+            resolve();
+          }
+        },
+      )
       .catch(reject);
   });
 
-// Verify on-chain. On Kusama AH the originalAccount query can hang on
+  // Verify on-chain. On Kusama AH the originalAccount query can hang on
   // some WS endpoints — add a timeout so we don't block forever.
   // Also, block state may lag behind the isInBlock notification on stale WS
   // connections, so retry once after a delay.
   let queryErr = false;
   try {
-    const verifyMapped: any = await Promise.race([
+    const verifyMapped: any = (await Promise.race([
       api.query.revive.accountInfoOf(h160),
-      new Promise((_, r) => setTimeout(() => r(new Error("QUERY_TIMEOUT")), 8000)),
-    ]) as any;
+      new Promise((_, r) =>
+        setTimeout(() => r(new Error("QUERY_TIMEOUT")), 8000),
+      ),
+    ])) as any;
     if (verifyMapped && !verifyMapped.isEmpty) {
       console.log("[revive] account mapped successfully, verified on-chain");
       return true;
@@ -183,9 +374,14 @@ export async function ensureAccountMapped(
   } catch (e) {
     queryErr = true;
     if ((e as Error).message === "QUERY_TIMEOUT") {
-      console.warn("[revive] accountInfoOf query timed out, retrying after delay...");
+      console.warn(
+        "[revive] accountInfoOf query timed out, retrying after delay...",
+      );
     } else {
-      console.warn("[revive] accountInfoOf query error, retrying:", (e as Error).message);
+      console.warn(
+        "[revive] accountInfoOf query error, retrying:",
+        (e as Error).message,
+      );
     }
   }
 
@@ -193,17 +389,24 @@ export async function ensureAccountMapped(
   console.log("[revive] waiting 4s for WS to import block, then retrying...");
   await new Promise((r) => setTimeout(r, 4000));
   try {
-    const retry: any = await Promise.race([
+    const retry: any = (await Promise.race([
       api.query.revive.accountInfoOf(h160),
-      new Promise((_, r) => setTimeout(() => r(new Error("QUERY_TIMEOUT")), 8000)),
-    ]) as any;
+      new Promise((_, r) =>
+        setTimeout(() => r(new Error("QUERY_TIMEOUT")), 8000),
+      ),
+    ])) as any;
     if (retry && !retry.isEmpty) {
       console.log("[revive] account mapped (verified on retry)");
       return true;
     }
-    console.warn("[revive] account still unmapped after retry — query returned empty");
+    console.warn(
+      "[revive] account still unmapped after retry — query returned empty",
+    );
   } catch (e) {
-    console.warn("[revive] accountInfoOf retry also failed:", (e as Error).message);
+    console.warn(
+      "[revive] accountInfoOf retry also failed:",
+      (e as Error).message,
+    );
   }
   // Proceed anyway — if mapping truly failed, the deposit will fail with a clear error.
   console.warn("[revive] proceeding with deposit despite unverified mapping");
@@ -233,7 +436,12 @@ export async function getChainRoot(
  *  behind the latest block). */
 export async function fetchProxyTree(
   network = "polkadot",
-  options?: { maxRetries?: number; delayMs?: number; poolAddress?: string; evmRpc?: string },
+  options?: {
+    maxRetries?: number;
+    delayMs?: number;
+    poolAddress?: string;
+    evmRpc?: string;
+  },
 ): Promise<{ tree: LeanIMT; leaves: bigint[]; size: number }> {
   const maxRetries = options?.maxRetries ?? 3;
   const delayMs = options?.delayMs ?? 5000;
@@ -254,7 +462,9 @@ export async function fetchProxyTree(
     }
 
     const proxyRoot = data.root ? BigInt(data.root) : 0n;
-    console.log(`[fetchProxyTree] attempt ${attempt + 1}/${maxRetries}: proxy_size=${tree.size} proxy_root=${tree.root} chain_root=${chainRoot}`);
+    console.log(
+      `[fetchProxyTree] attempt ${attempt + 1}/${maxRetries}: proxy_size=${tree.size} proxy_root=${tree.root} chain_root=${chainRoot}`,
+    );
 
     if (tree.root === chainRoot) {
       console.log(`[fetchProxyTree] root match on attempt ${attempt + 1}`);
@@ -262,7 +472,9 @@ export async function fetchProxyTree(
     }
 
     if (attempt < maxRetries - 1) {
-      console.log(`[fetchProxyTree] root mismatch, retrying in ${delayMs / 1000}s...`);
+      console.log(
+        `[fetchProxyTree] root mismatch, retrying in ${delayMs / 1000}s...`,
+      );
       await new Promise((r) => setTimeout(r, delayMs));
     }
   }
@@ -276,7 +488,9 @@ export async function fetchProxyTree(
   for (const leaf of leaves) {
     if (leaf !== 0n) tree.insert(leaf);
   }
-  console.log(`[fetchProxyTree] returning stale tree: size=${tree.size} root=${tree.root} (chain has ${chainRoot})`);
+  console.log(
+    `[fetchProxyTree] returning stale tree: size=${tree.size} root=${tree.root} (chain has ${chainRoot})`,
+  );
   return { tree, leaves, size: tree.size };
 }
 
@@ -306,17 +520,27 @@ export async function submitReviveDeposit(
   // Use the polkadot.js extension's proper signer when available.
   let extSigner = signer;
   try {
-    const { web3Enable, web3FromAddress, web3FromSource } = await import("@polkadot/extension-dapp");
+    const { web3Enable, web3FromAddress, web3FromSource } =
+      await import("@polkadot/extension-dapp");
     await web3Enable("Kusama Shield");
     if (walletSource) {
       const injected = await web3FromSource(walletSource);
-      if (injected?.signer) { extSigner = injected.signer; console.log("[revive] using web3FromSource signer:", walletSource); }
+      if (injected?.signer) {
+        extSigner = injected.signer;
+        console.log("[revive] using web3FromSource signer:", walletSource);
+      }
     } else {
       const injected = await web3FromAddress(ss58);
-      if (injected?.signer) { extSigner = injected.signer; console.log("[revive] using web3FromAddress signer"); }
+      if (injected?.signer) {
+        extSigner = injected.signer;
+        console.log("[revive] using web3FromAddress signer");
+      }
     }
   } catch (e) {
-    console.warn("[revive] signer upgrade failed, using wallet signer:", (e as any)?.message || e);
+    console.warn(
+      "[revive] signer upgrade failed, using wallet signer:",
+      (e as any)?.message || e,
+    );
   }
 
   const txHash = await new Promise<string>((resolve, reject) => {
@@ -329,29 +553,37 @@ export async function submitReviveDeposit(
         DEPOSIT_STORAGE_DEPOSIT.toString(),
         callData,
       )
-      .signAndSend(ss58, { signer: extSigner }, ({ status, txHash, dispatchError }: any) => {
-        if (done) {
-          if (dispatchError && dispatchError.isModule) {
-            const { index, name } = api.registry.findMetaError(dispatchError.asModule);
-            console.warn(`[revive] deposit belated dispatch error: ${index}.${name}`);
+      .signAndSend(
+        ss58,
+        { signer: extSigner },
+        ({ status, txHash, dispatchError }: any) => {
+          if (done) {
+            if (dispatchError && dispatchError.isModule) {
+              const { index, name } = api.registry.findMetaError(
+                dispatchError.asModule,
+              );
+              console.warn(
+                `[revive] deposit belated dispatch error: ${index}.${name}`,
+              );
+            }
+            return;
           }
-          return;
-        }
-        if (dispatchError) {
-          done = true;
-          if (dispatchError.isModule) {
-            const { index, name } = api.registry.findMetaError(
-              dispatchError.asModule,
-            );
-            reject(new Error(`deposit: ${index}.${name}`));
-          } else reject(new Error(dispatchError.toString()));
-          return;
-        }
-        if (txHash && (status.isInBlock || status.isFinalized)) {
-          done = true;
-          resolve(txHash.toHex());
-        }
-      })
+          if (dispatchError) {
+            done = true;
+            if (dispatchError.isModule) {
+              const { index, name } = api.registry.findMetaError(
+                dispatchError.asModule,
+              );
+              reject(new Error(`deposit: ${index}.${name}`));
+            } else reject(new Error(dispatchError.toString()));
+            return;
+          }
+          if (txHash && (status.isInBlock || status.isFinalized)) {
+            done = true;
+            resolve(txHash.toHex());
+          }
+        },
+      )
       .catch(reject);
   });
 
@@ -366,10 +598,7 @@ export async function submitReviveDeposit(
         if (!r.phase.isApplyExtrinsic) continue;
         const ev: any = r.event;
         if (ev.section === "revive" && ev.method === "ContractEmitted") {
-if (
-            ev.data[0].toString().toLowerCase() !==
-            poolAddress.toLowerCase()
-          )
+          if (ev.data[0].toString().toLowerCase() !== poolAddress.toLowerCase())
             continue;
           const emitted = BigInt(
             ev.data[1].toHex ? ev.data[1].toHex() : ev.data[1].toString(),
@@ -484,17 +713,27 @@ export async function submitReviveWithdraw(
   // Use the polkadot.js extension's proper signer when available.
   let extSigner = signer;
   try {
-    const { web3Enable, web3FromAddress, web3FromSource } = await import("@polkadot/extension-dapp");
+    const { web3Enable, web3FromAddress, web3FromSource } =
+      await import("@polkadot/extension-dapp");
     await web3Enable("Kusama Shield");
     if (walletSource) {
       const injected = await web3FromSource(walletSource);
-      if (injected?.signer) { extSigner = injected.signer; console.log("[revive] using web3FromSource signer:", walletSource); }
+      if (injected?.signer) {
+        extSigner = injected.signer;
+        console.log("[revive] using web3FromSource signer:", walletSource);
+      }
     } else {
       const injected = await web3FromAddress(ss58);
-      if (injected?.signer) { extSigner = injected.signer; console.log("[revive] using web3FromAddress signer"); }
+      if (injected?.signer) {
+        extSigner = injected.signer;
+        console.log("[revive] using web3FromAddress signer");
+      }
     }
   } catch (e) {
-    console.warn("[revive] signer upgrade failed, using wallet signer:", (e as any)?.message || e);
+    console.warn(
+      "[revive] signer upgrade failed, using wallet signer:",
+      (e as any)?.message || e,
+    );
   }
 
   return new Promise<string>((resolve, reject) => {
@@ -506,17 +745,22 @@ export async function submitReviveWithdraw(
         WITHDRAW_STORAGE_DEPOSIT.toString(),
         wd,
       )
-      .signAndSend(ss58, { signer: extSigner }, ({ status, txHash, dispatchError }: any) => {
-        if (dispatchError) {
-          if (dispatchError.isModule) {
-            const { index, name } = api.registry.findMetaError(
-              dispatchError.asModule,
-            );
-            reject(new Error(`withdraw: ${index}.${name}`));
-          } else reject(new Error(dispatchError.toString()));
-        }
-        if (txHash && (status.isInBlock || status.isFinalized)) resolve(txHash.toHex());
-      })
+      .signAndSend(
+        ss58,
+        { signer: extSigner },
+        ({ status, txHash, dispatchError }: any) => {
+          if (dispatchError) {
+            if (dispatchError.isModule) {
+              const { index, name } = api.registry.findMetaError(
+                dispatchError.asModule,
+              );
+              reject(new Error(`withdraw: ${index}.${name}`));
+            } else reject(new Error(dispatchError.toString()));
+          }
+          if (txHash && (status.isInBlock || status.isFinalized))
+            resolve(txHash.toHex());
+        },
+      )
       .catch(reject);
   });
 }
@@ -533,8 +777,10 @@ export async function submitWithdrawViaProxy(
   recipient: string,
   proxyUrl: string = POLKADOT_PROXY_URL,
 ): Promise<string> {
-  console.log(`[proxy-withdraw] Calling proxy for ${network}, amount=${amountWei}, recipient=${recipient}`);
-  
+  console.log(
+    `[proxy-withdraw] Calling proxy for ${network}, amount=${amountWei}, recipient=${recipient}`,
+  );
+
   const response = await fetch(`${proxyUrl}/pool-withdraw`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -545,24 +791,28 @@ export async function submitWithdrawViaProxy(
       recipient,
     }),
   });
-  
+
   if (!response.ok) {
     const error = await response.json();
     throw new Error(error.error || `Proxy withdraw failed: ${response.status}`);
   }
-  
+
   const data = await response.json();
   console.log(`[proxy-withdraw] Received withdraw_id: ${data.withdraw_id}`);
-  
+
   // Poll for status
   let status = data.status;
   while (status === "pending" || status === "processing") {
     await new Promise((r) => setTimeout(r, 5000));
-    const statusResp = await fetch(`${proxyUrl}/pool-withdraw-status/${data.withdraw_id}`);
+    const statusResp = await fetch(
+      `${proxyUrl}/pool-withdraw-status/${data.withdraw_id}`,
+    );
     const statusData = await statusResp.json();
     status = statusData.status;
-    console.log(`[proxy-withdraw] Status: ${status} - ${statusData.message || ""}`);
-    
+    console.log(
+      `[proxy-withdraw] Status: ${status} - ${statusData.message || ""}`,
+    );
+
     if (status === "confirmed" || status === "forwarding") {
       return statusData.tx_hash || data.withdraw_id;
     }
@@ -570,7 +820,7 @@ export async function submitWithdrawViaProxy(
       throw new Error(statusData.message || "Withdraw failed");
     }
   }
-  
+
   return data.withdraw_id;
 }
 
