@@ -1,6 +1,5 @@
-# Interface
+# User Interface for Kusama Shield Protocol
 
-Kusama Shield User interface
 
 
 ## Note:
